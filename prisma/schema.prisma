@@ -1,0 +1,60 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model PaymentTransaction {
+  id         String   @id @default(cuid())
+  provider   String
+  kind       String
+  reference  String?
+  externalId String?
+  amount     Int?
+  currency   String?
+  status     String
+  request    String?
+  response   String?
+  error      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([provider, kind])
+  @@index([reference])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model NotificationLog {
+  id        String   @id @default(cuid())
+  provider  String
+  channel   String
+  recipient String
+  message   String
+  status    String
+  response  String?
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([provider, channel])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model AuthLog {
+  id        String   @id @default(cuid())
+  provider  String
+  mode      String
+  email     String?
+  status    String
+  response  String?
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([provider, mode])
+  @@index([status])
+  @@index([createdAt])
+}
