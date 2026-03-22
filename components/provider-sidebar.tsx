@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useTransition, useState } from "react"
 import { Home, Briefcase, MessageCircle, Wallet, User, ChevronDown, X, Menu, LogOut, Settings, ImageIcon, Bell, Calendar, Wrench, BarChart3, FileText, Users, Store, Gift, Award, ClipboardList } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -10,6 +10,7 @@ import { Logo } from "@/components/logo"
 export default function ProviderSidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const [expandedMenu, setExpandedMenu] = useState<string | null>(null)
+  const [, startTransition] = useTransition()
   const pathname = usePathname()
   const router = useRouter()
   const { logout, user } = useAuthContext()
@@ -49,6 +50,15 @@ export default function ProviderSidebar() {
     logout()
     router.push("/")
   }
+
+  const closeMobileMenu = useCallback(() => {
+    if (!isOpen) return
+    startTransition(() => setIsOpen(false))
+  }, [isOpen, startTransition])
+
+  const toggleProfileMenu = useCallback(() => {
+    startTransition(() => setExpandedMenu((prev) => (prev === "profile" ? null : "profile")))
+  }, [startTransition])
 
   const isItemActive = (item: typeof menuItems[0]) => {
     if (item.exact) return pathname === item.href
@@ -110,8 +120,8 @@ export default function ProviderSidebar() {
               return (
                 <div key={item.href}>
                   <button
-                    onClick={() => setExpandedMenu(expandedMenu === "profile" ? null : "profile")}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-all ${
+                    onClick={toggleProfileMenu}
+                    className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors ${
                       active
                         ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
                         : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
@@ -132,7 +142,7 @@ export default function ProviderSidebar() {
                         <Link
                           key={subitem.href}
                           href={subitem.href}
-                          onClick={() => setIsOpen(false)}
+                          onClick={closeMobileMenu}
                           className={`flex items-center justify-between text-sm py-2 px-3 rounded-lg transition-colors ${
                             pathname === subitem.href
                               ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium"
@@ -157,8 +167,8 @@ export default function ProviderSidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                onClick={() => setIsOpen(false)}
-                className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-all ${
+                onClick={closeMobileMenu}
+                className={`flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors ${
                   active
                     ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
                     : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
