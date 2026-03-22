@@ -1,4 +1,4 @@
 {
-  "installCommand": "pnpm install --no-frozen-lockfile",
+  "installCommand": "PRISMA_SKIP_POSTINSTALL_GENERATE=1 pnpm install --no-frozen-lockfile",
   "buildCommand": "pnpm run build"
 }

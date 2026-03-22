@@ -49,54 +49,54 @@ export default function SecretaryDashboard() {
     { id: "TXN-004", description: "System fees collection", amount: `${currency} 8,900`, status: "Completed", date: "Jan 12", method: "Automatic" },
   ]
 
+  const transactionTotals = useMemo(() => {
+    const completed = recentTransactions.filter((t) => t.status === "Completed").length
+    const processing = recentTransactions.filter((t) => t.status === "Processing").length
+    const totalAmount = recentTransactions.reduce((sum, t) => {
+      const amount = Number(String(t.amount).replace(/[^0-9.-]/g, ""))
+      return sum + (Number.isNaN(amount) ? 0 : amount)
+    }, 0)
+
+    return {
+      completed,
+      processing,
+      totalAmount,
+      monthlyEstimate: Math.round(totalAmount * 4),
+    }
+  }, [recentTransactions])
+
+  const stats = [
+    {
+      icon: CreditCard,
+      label: "Total Processed",
+      value: `${currency} ${transactionTotals.totalAmount.toLocaleString()}`,
+      color: "bg-blue-100 dark:bg-blue-900",
+      trend: `${totalUsers} users in system`,
+    },
+    {
+      icon: Clock,
+      label: "Pending",
+      value: String(pendingUsers || transactionTotals.processing),
+      color: "bg-yellow-100 dark:bg-yellow-900",
+      trend: "Live from users API",
+    },
+    {
+      icon: CheckCircle,
+      label: "Completed",
+      value: String(transactionTotals.completed),
+      color: "bg-green-100 dark:bg-green-900",
+      trend: "Live",
+    },
+    {
+      icon: TrendingUp,
+      label: "This Month",
+      value: `${currency} ${transactionTotals.monthlyEstimate.toLocaleString()}`,
+      color: "bg-purple-100 dark:bg-purple-900",
+      trend: "Estimated",
+    },
+  ]
+
   const reconciliationStatus = [
-      const transactionTotals = useMemo(() => {
-        const completed = recentTransactions.filter((t) => t.status === "Completed").length
-        const processing = recentTransactions.filter((t) => t.status === "Processing").length
-        const totalAmount = recentTransactions.reduce((sum, t) => {
-          const amount = Number(String(t.amount).replace(/[^0-9.-]/g, ""))
-          return sum + (Number.isNaN(amount) ? 0 : amount)
-        }, 0)
-
-        return {
-          completed,
-          processing,
-          totalAmount,
-          monthlyEstimate: Math.round(totalAmount * 4),
-        }
-      }, [recentTransactions])
-
-      const stats = [
-        {
-          icon: CreditCard,
-          label: "Total Processed",
-          value: `${currency} ${transactionTotals.totalAmount.toLocaleString()}`,
-          color: "bg-blue-100 dark:bg-blue-900",
-          trend: `${totalUsers} users in system`,
-        },
-        {
-          icon: Clock,
-          label: "Pending",
-          value: String(pendingUsers || transactionTotals.processing),
-          color: "bg-yellow-100 dark:bg-yellow-900",
-          trend: "Live from users API",
-        },
-        {
-          icon: CheckCircle,
-          label: "Completed",
-          value: String(transactionTotals.completed),
-          color: "bg-green-100 dark:bg-green-900",
-          trend: "Live",
-        },
-        {
-          icon: TrendingUp,
-          label: "This Month",
-          value: `${currency} ${transactionTotals.monthlyEstimate.toLocaleString()}`,
-          color: "bg-purple-100 dark:bg-purple-900",
-          trend: "Estimated",
-        },
-      ]
-
     { account: "Main Operating", balance: `${currency} 5,234,500`, lastReconciled: "Jan 15", status: "Reconciled" },
     { account: "Commission Pool", balance: `${currency} 892,300`, lastReconciled: "Jan 15", status: "Reconciled" },
     { account: "Escrow Fund", balance: `${currency} 1,234,000`, lastReconciled: "Jan 14", status: "Pending" },
