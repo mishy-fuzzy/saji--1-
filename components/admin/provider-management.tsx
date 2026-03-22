@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -8,38 +8,16 @@ import { Badge } from "@/components/ui/badge"
 import { Search, Filter, MoreVertical, Shield, Ban, TrendingUp } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
-const mockProviders = [
-  {
-    id: 1,
-    name: "John Electrical Services",
-    category: "skilled",
-    rating: 4.9,
-    jobs: 45,
-    revenue: 225000,
-    status: "verified",
-    joinDate: "2019-05-15",
-  },
-  {
-    id: 2,
-    name: "Pipe Master",
-    category: "semi-skilled",
-    rating: 4.8,
-    jobs: 32,
-    revenue: 64000,
-    status: "verified",
-    joinDate: "2020-08-22",
-  },
-  {
-    id: 3,
-    name: "Clean Sweep Team",
-    category: "non-skilled",
-    rating: 4.7,
-    jobs: 89,
-    revenue: 133500,
-    status: "verified",
-    joinDate: "2021-03-10",
-  },
-]
+type ProviderRow = {
+  id: string
+  name: string
+  category: string
+  rating: number
+  jobs: number
+  revenue: number
+  status: "verified" | "suspended" | "pending"
+  joinDate: string
+}
 
 const statusColors = {
   verified: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100",
@@ -49,7 +27,52 @@ const statusColors = {
 
 export function ProviderManagement() {
   const [searchQuery, setSearchQuery] = useState("")
-  const [providers, setProviders] = useState(mockProviders)
+  const [providers, setProviders] = useState<ProviderRow[]>([])
+
+  useEffect(() => {
+    const fetchProviders = async () => {
+      try {
+        const response = await fetch("/api/provider/users", {
+          cache: "no-store",
+          headers: {
+            "x-user-role": "admin",
+          },
+        })
+        const payload = await response.json()
+
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          return
+        }
+
+        const mapped = payload.data.map((u: any) => {
+          const normalizedStatus = String(u.status || "").toLowerCase()
+          const status: ProviderRow["status"] =
+            normalizedStatus === "suspended"
+              ? "suspended"
+              : normalizedStatus === "pending"
+                ? "pending"
+                : "verified"
+
+          return {
+            id: String(u.id),
+            name: String(u.name || "Unnamed Provider"),
+            category: String(u.role || "provider").toLowerCase(),
+            rating: 4.7,
+            jobs: Number(u.orders || 0),
+            revenue: Number(u.earnings || 0),
+            status,
+            joinDate: String(u.joined || "-"),
+          }
+        }) as ProviderRow[]
+
+        setProviders(mapped)
+      } catch {
+        // Keep UI available even if providers API is temporarily unavailable.
+      }
+    }
+
+    fetchProviders()
+  }, [])
 
   const filteredProviders = providers.filter(
     (p) =>

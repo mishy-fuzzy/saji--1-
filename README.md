@@ -177,9 +177,11 @@ Modern UI/UX design
 
 Backend
 
-PHP
+Next.js API Routes
 
-MySQL
+Prisma ORM
+
+PostgreSQL
 
 REST-style architecture
 

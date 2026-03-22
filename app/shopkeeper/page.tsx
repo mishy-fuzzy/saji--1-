@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { 
   TrendingUp, TrendingDown, Package, ShoppingCart, DollarSign, Users,
   Plus, Eye, MoreVertical, Calendar, Download, Zap, AlertCircle,
@@ -16,6 +16,7 @@ import Image from "next/image"
 export default function ShopkeeperDashboard() {
   const [showAddProductModal, setShowAddProductModal] = useState(false)
   const [timeRange, setTimeRange] = useState("7d")
+  const [shopkeeperCustomersCount, setShopkeeperCustomersCount] = useState(0)
   const [newProduct, setNewProduct] = useState({
     name: "",
     price: "",
@@ -52,13 +53,40 @@ export default function ShopkeeperDashboard() {
     },
     {
       label: "Total Customers",
-      value: "1,204",
+      value: String(shopkeeperCustomersCount),
       change: 15.3,
       trend: "up",
       icon: Users,
       color: "from-orange-600 to-orange-700"
     }
   ]
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch("/api/shopkeeper/users", {
+          cache: "no-store",
+          headers: {
+            "x-user-role": "shopkeeper",
+          },
+        })
+        const payload = await response.json()
+
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          return
+        }
+
+        const users = payload.data as Array<{ role?: string }>
+        setShopkeeperCustomersCount(
+          users.filter((u) => String(u.role || "").toLowerCase() === "customer").length,
+        )
+      } catch {
+        // Keep dashboard usable even if users API is temporarily unavailable.
+      }
+    }
+
+    fetchUsers()
+  }, [])
 
   const recentOrders = [
     { id: "ORD-001", customer: "John Doe", items: 3, amount: "KES 2,500", status: "completed", time: "2 hours ago" },

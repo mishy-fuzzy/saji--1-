@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useLocalization } from "@/lib/hooks/useLocalization"
 import { CreditCard, TrendingUp, Clock, CheckCircle, AlertCircle, Download, Filter, BarChart3 } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -9,15 +9,38 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function SecretaryDashboard() {
   const { currency } = useLocalization()
+  const [totalUsers, setTotalUsers] = useState(0)
+  const [pendingUsers, setPendingUsers] = useState(0)
   const [selectedPeriod, setSelectedPeriod] = useState("week")
   const [showProcessingOnly, setShowProcessingOnly] = useState(false)
 
-  const stats = [
-    { icon: CreditCard, label: "Total Processed", value: `${currency} 2,450,000`, color: "bg-blue-100 dark:bg-blue-900", trend: "+18%" },
-    { icon: Clock, label: "Pending", value: "24", color: "bg-yellow-100 dark:bg-yellow-900", trend: "-5" },
-    { icon: CheckCircle, label: "Completed", value: "892", color: "bg-green-100 dark:bg-green-900", trend: "+67" },
-    { icon: TrendingUp, label: "This Month", value: `${currency} 450,000`, color: "bg-purple-100 dark:bg-purple-900", trend: "+22%" },
-  ]
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch("/api/secretary/users", {
+          cache: "no-store",
+          headers: {
+            "x-user-role": "secretary",
+          },
+        })
+        const payload = await response.json()
+
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          return
+        }
+
+        const users = payload.data as Array<{ status?: string }>
+        setTotalUsers(users.length)
+        setPendingUsers(
+          users.filter((u) => String(u.status || "").toLowerCase() === "pending").length,
+        )
+      } catch {
+        // Keep dashboard usable even if users API is temporarily unavailable.
+      }
+    }
+
+    fetchUsers()
+  }, [])
 
   const recentTransactions = [
     { id: "TXN-001", description: "Commission payout - Agent AGT-001", amount: `${currency} 45,000`, status: "Completed", date: "Jan 15", method: "Bank Transfer" },
@@ -27,6 +50,53 @@ export default function SecretaryDashboard() {
   ]
 
   const reconciliationStatus = [
+      const transactionTotals = useMemo(() => {
+        const completed = recentTransactions.filter((t) => t.status === "Completed").length
+        const processing = recentTransactions.filter((t) => t.status === "Processing").length
+        const totalAmount = recentTransactions.reduce((sum, t) => {
+          const amount = Number(String(t.amount).replace(/[^0-9.-]/g, ""))
+          return sum + (Number.isNaN(amount) ? 0 : amount)
+        }, 0)
+
+        return {
+          completed,
+          processing,
+          totalAmount,
+          monthlyEstimate: Math.round(totalAmount * 4),
+        }
+      }, [recentTransactions])
+
+      const stats = [
+        {
+          icon: CreditCard,
+          label: "Total Processed",
+          value: `${currency} ${transactionTotals.totalAmount.toLocaleString()}`,
+          color: "bg-blue-100 dark:bg-blue-900",
+          trend: `${totalUsers} users in system`,
+        },
+        {
+          icon: Clock,
+          label: "Pending",
+          value: String(pendingUsers || transactionTotals.processing),
+          color: "bg-yellow-100 dark:bg-yellow-900",
+          trend: "Live from users API",
+        },
+        {
+          icon: CheckCircle,
+          label: "Completed",
+          value: String(transactionTotals.completed),
+          color: "bg-green-100 dark:bg-green-900",
+          trend: "Live",
+        },
+        {
+          icon: TrendingUp,
+          label: "This Month",
+          value: `${currency} ${transactionTotals.monthlyEstimate.toLocaleString()}`,
+          color: "bg-purple-100 dark:bg-purple-900",
+          trend: "Estimated",
+        },
+      ]
+
     { account: "Main Operating", balance: `${currency} 5,234,500`, lastReconciled: "Jan 15", status: "Reconciled" },
     { account: "Commission Pool", balance: `${currency} 892,300`, lastReconciled: "Jan 15", status: "Reconciled" },
     { account: "Escrow Fund", balance: `${currency} 1,234,000`, lastReconciled: "Jan 14", status: "Pending" },
@@ -42,10 +112,10 @@ export default function SecretaryDashboard() {
       exportDate: new Date().toISOString(),
       period: selectedPeriod,
       stats: {
-        totalProcessed: "2,450,000",
-        pending: 24,
-        completed: 892,
-        thisMonth: "450,000",
+        totalProcessed: transactionTotals.totalAmount,
+        pending: Number(stats[1].value),
+        completed: transactionTotals.completed,
+        thisMonth: transactionTotals.monthlyEstimate,
       },
       transactions: recentTransactions,
     }

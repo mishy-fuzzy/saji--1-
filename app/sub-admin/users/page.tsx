@@ -1,26 +1,87 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Search, Eye, AlertCircle, CheckCircle2, Clock, Users, Filter, ChevronDown } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-const initialUsers = [
-  { id: "USR-001", name: "Sarah K.", email: "sarah@email.com", phone: "+254 712 345 678", role: "Customer", status: "Active", joined: "Jan 15, 2026", orders: 12 },
-  { id: "USR-002", name: "Mark L.", email: "mark@email.com", phone: "+254 722 456 789", role: "Provider", status: "Pending", joined: "Jan 18, 2026", orders: 8 },
-  { id: "USR-003", name: "David N.", email: "david@email.com", phone: "+254 742 678 901", role: "Shopkeeper", status: "Active", joined: "Dec 28, 2025", orders: 5 },
-  { id: "USR-004", name: "Alice T.", email: "alice@email.com", phone: "+254 762 890 123", role: "Customer", status: "Suspended", joined: "Jan 22, 2026", orders: 7 },
-  { id: "USR-005", name: "John M.", email: "john@email.com", phone: "+254 752 789 012", role: "Provider", status: "Active", joined: "Jan 20, 2026", orders: 18 },
-  { id: "USR-006", name: "Grace N.", email: "grace@email.com", phone: "+254 772 901 234", role: "Shopkeeper", status: "Active", joined: "Feb 1, 2026", orders: 22 },
-]
+type SubAdminUser = {
+  id: string
+  name: string
+  email: string
+  phone: string
+  role: string
+  status: string
+  joined: string
+  orders: number
+}
 
 export default function SubAdminUsersPage() {
   const [search, setSearch] = useState("")
   const [filter, setFilter] = useState("All")
-  const [users, setUsers] = useState(initialUsers)
-  const [selected, setSelected] = useState<(typeof initialUsers)[0] | null>(null)
+  const [users, setUsers] = useState<SubAdminUser[]>([])
+  const [selected, setSelected] = useState<SubAdminUser | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchUsers = useCallback(async (showLoader = false) => {
+    if (showLoader) {
+      setIsLoading(true)
+      setError(null)
+    }
+
+    try {
+      const response = await fetch("/api/sub-admin/users", {
+        cache: "no-store",
+        headers: {
+          "x-user-role": "sub-admin",
+        },
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+        throw new Error(payload?.error || "Failed to load users")
+      }
+
+      const mapped = payload.data.map((u: any) => ({
+        id: String(u.id),
+        name: String(u.name || "Unnamed User"),
+        email: String(u.email || "-"),
+        phone: String(u.phone || "-"),
+        role: String(u.role || "Unknown"),
+        status: String(u.status || "Active"),
+        joined: String(u.joined || "-"),
+        orders: Number(u.orders || 0),
+      })) as SubAdminUser[]
+
+      setUsers(mapped)
+      setError(null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load users"
+      setError(message)
+      if (showLoader) {
+        setUsers([])
+      }
+    } finally {
+      if (showLoader) {
+        setIsLoading(false)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchUsers(true)
+
+    const intervalId = window.setInterval(() => {
+      fetchUsers(false)
+    }, 15000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [fetchUsers])
 
   const filters = ["All", "Active", "Pending", "Suspended"]
   const filtered = users.filter(u => {
@@ -44,7 +105,14 @@ export default function SubAdminUsersPage() {
       <div>
         <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">User Management</h1>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">View and manage platform users (limited permissions)</p>
+        <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Auto-refresh is enabled (every 15 seconds).</p>
       </div>
+
+      {error ? (
+        <Card className="p-3 border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30 text-red-700 dark:text-red-300 text-xs">
+          Failed to load users from database: {error}
+        </Card>
+      ) : null}
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Card className="p-3 border-0 shadow-sm"><p className="text-xs text-gray-500">Total</p><p className="text-xl font-bold text-gray-900 dark:text-white">{users.length}</p></Card>
@@ -78,7 +146,19 @@ export default function SubAdminUsersPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {filtered.map(u => (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    Loading users from database...
+                  </td>
+                </tr>
+              ) : filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No users found
+                  </td>
+                </tr>
+              ) : filtered.map(u => (
                 <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">

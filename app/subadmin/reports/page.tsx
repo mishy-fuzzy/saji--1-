@@ -1,18 +1,27 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Download, BarChart3, TrendingUp, RefreshCw, X } from "lucide-react"
 
+type ReportItem = {
+  id: string
+  name: string
+  createdBy: string
+  date: string
+  status: string
+  type: string
+  data?: unknown
+}
+
 export default function ReportsPage() {
-  const [reports, setReports] = useState([
-    { id: 1, name: "Q1 Performance Summary", createdBy: "Admin", date: "Jan 10", status: "Ready", type: "Performance" },
-    { id: 2, name: "Agent Productivity Analysis", createdBy: "Admin", date: "Jan 5", status: "Ready", type: "Productivity" },
-  ])
+  const [reports, setReports] = useState<ReportItem[]>([])
 
   const [showGenerateModal, setShowGenerateModal] = useState(false)
   const [generatingReport, setGeneratingReport] = useState(false)
+  const [loadingReports, setLoadingReports] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const reportTemplates = [
     { title: "Agent Performance Report", description: "Monthly performance metrics for all agents", icon: "📊", type: "performance" },
@@ -21,55 +30,73 @@ export default function ReportsPage() {
     { title: "Customer Satisfaction Report", description: "Customer feedback and satisfaction scores", icon: "😊", type: "satisfaction" },
   ]
 
-  const handleGenerateReport = (reportType: string) => {
-    console.log("[v0] Generating report type:", reportType)
-    setGeneratingReport(true)
-
-    // Simulate report generation
-    setTimeout(() => {
-      const newReport = {
-        id: reports.length + 1,
-        name: `${reportType} Report - ${new Date().toLocaleDateString()}`,
-        createdBy: "Admin",
-        date: new Date().toLocaleDateString(),
-        status: "Ready",
-        type: reportType,
-        data: { generatedAt: new Date().toISOString(), type: reportType }
+  const fetchReports = async () => {
+    try {
+      const response = await fetch("/api/reports?scope=subadmin", {
+        cache: "no-store",
+        headers: {
+          "x-user-role": "subadmin",
+        },
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+        throw new Error(payload?.error || "Failed to load reports")
       }
-      setReports([newReport, ...reports])
-      setGeneratingReport(false)
-      setShowGenerateModal(false)
-      console.log("[v0] Report generated successfully:", newReport)
-    }, 2000)
+
+      setReports(payload.data)
+      setError(null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load reports"
+      setError(message)
+    } finally {
+      setLoadingReports(false)
+    }
   }
 
-  const handleDownloadReport = (report: any) => {
-    console.log("[v0] Downloading report:", report.id)
+  useEffect(() => {
+    fetchReports()
+  }, [])
+
+  const handleGenerateReport = async (reportType: string) => {
+    setGeneratingReport(true)
+
+    try {
+      const response = await fetch("/api/reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": "subadmin",
+        },
+        body: JSON.stringify({
+          scope: "subadmin",
+          type: reportType,
+        }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        throw new Error(payload?.error || "Failed to generate report")
+      }
+
+      setReports((prev) => [payload.data, ...prev])
+      setError(null)
+      setShowGenerateModal(false)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to generate report"
+      setError(message)
+    } finally {
+      setGeneratingReport(false)
+    }
+  }
+
+  const handleDownloadReport = (report: ReportItem) => {
     const data = {
       reportName: report.name,
       type: report.type,
       createdBy: report.createdBy,
       date: report.date,
       generatedAt: new Date().toISOString(),
-      data: {
-        agentStats: {
-          totalAgents: 142,
-          activeAgents: 135,
-          averageRating: 4.7,
-          topPerformer: "Daniel K.",
-        },
-        financialData: {
-          totalCommissions: "KES 450,000",
-          totalPayouts: "KES 400,000",
-          pendingPayouts: "KES 50,000",
-        },
-        disputeStats: {
-          totalDisputes: 127,
-          resolvedDisputes: 119,
-          pendingDisputes: 8,
-          resolutionRate: "93.7%",
-        }
-      }
+      data: report.data || {},
     }
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
@@ -79,13 +106,29 @@ export default function ReportsPage() {
     a.download = `${report.name.replace(/\s+/g, '-')}-${new Date().toISOString().split('T')[0]}.json`
     a.click()
     window.URL.revokeObjectURL(url)
-    console.log("[v0] Report downloaded successfully")
   }
 
-  const handleDeleteReport = (reportId: number) => {
-    if (confirm("Are you sure you want to delete this report?")) {
-      setReports(reports.filter(r => r.id !== reportId))
-      console.log("[v0] Report deleted:", reportId)
+  const handleDeleteReport = async (reportId: string) => {
+    if (!confirm("Are you sure you want to delete this report?")) return
+
+    try {
+      const response = await fetch(`/api/reports?id=${encodeURIComponent(reportId)}`, {
+        method: "DELETE",
+        headers: {
+          "x-user-role": "subadmin",
+        },
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to delete report")
+      }
+
+      setReports((prev) => prev.filter((r) => r.id !== reportId))
+      setError(null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete report"
+      setError(message)
     }
   }
 
@@ -101,6 +144,12 @@ export default function ReportsPage() {
           Generate Report
         </Button>
       </div>
+
+      {error ? (
+        <Card className="p-3 border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30 text-red-700 dark:text-red-300 text-sm">
+          {error}
+        </Card>
+      ) : null}
 
       {/* Report Templates */}
       <div>
@@ -141,7 +190,9 @@ export default function ReportsPage() {
       {/* Generated Reports */}
       <Card className="p-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Generated Reports ({reports.length})</h2>
-        {reports.length === 0 ? (
+        {loadingReports ? (
+          <p className="text-gray-600 dark:text-gray-400 text-center py-8">Loading reports...</p>
+        ) : reports.length === 0 ? (
           <p className="text-gray-600 dark:text-gray-400 text-center py-8">No reports generated yet. Create one to get started.</p>
         ) : (
           <div className="space-y-3">

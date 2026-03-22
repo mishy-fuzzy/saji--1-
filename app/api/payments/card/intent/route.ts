@@ -11,6 +11,7 @@ export async function POST(request: Request) {
     const currency = String(body?.currency || "KES")
     const email = body?.email ? String(body.email) : undefined
     const reference = body?.reference ? String(body.reference) : "SAJI-BOOKING"
+    const bookingId = body?.bookingId ? String(body.bookingId) : null
 
     if (!Number.isFinite(amount) || amount <= 0) {
       return NextResponse.json({ error: "amount must be greater than 0" }, { status: 400 })
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
         status: String(intent.status || "CREATED").toUpperCase(),
         request: serializePayload(requestBody),
         response: serializePayload(intent),
+        bookingId,
       },
     })
 

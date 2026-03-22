@@ -14,6 +14,7 @@ export async function POST(request: Request) {
     const payerPhone = body?.payerPhone ? String(body.payerPhone) : undefined
     const payerEmail = body?.payerEmail ? String(body.payerEmail) : undefined
     const reference = String(body?.reference || "SAJI-BOOKING")
+    const bookingId = body?.bookingId ? String(body.bookingId) : null
 
     const result = await initiateBankTransfer({
       amount,
@@ -35,6 +36,7 @@ export async function POST(request: Request) {
         status: result.status,
         request: serializePayload(requestBody),
         response: serializePayload(result),
+        bookingId,
       },
     })
 

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/server/db"
+import { mkdir, writeFile } from "fs/promises"
+import path from "path"
 
 export async function POST(request: Request) {
   try {
@@ -8,25 +10,48 @@ export async function POST(request: Request) {
     const reference = formData.get("reference") as string
     const transactionId = formData.get("transactionId") as string
 
-    if (!file || !reference) {
-      return NextResponse.json({ error: "Missing file or reference" }, { status: 400 })
+    if (!file || (!reference && !transactionId)) {
+      return NextResponse.json({ error: "Missing file or transaction identifier" }, { status: 400 })
     }
 
-    // In a real production app, you would upload this to S3, Cloudinary, or Vercel Blob.
-    // For now, we simulate the upload and record the proof in the database.
-    const proofUrl = `uploads/proofs/${reference}-${Date.now()}-${file.name}`
+    const uploadsDir = path.join(process.cwd(), "public", "uploads", "proofs")
+    await mkdir(uploadsDir, { recursive: true })
+
+    const originalName = file.name.replace(/[^a-zA-Z0-9_.-]/g, "_")
+    const timestamp = Date.now()
+    const safeReference = String(reference || transactionId || "payment-proof").replace(/[^a-zA-Z0-9_.-]/g, "_")
+    const filename = `${safeReference}-${timestamp}-${originalName}`
+    const filePath = path.join(uploadsDir, filename)
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
+    await writeFile(filePath, fileBuffer)
+
+    const proofUrl = `/uploads/proofs/${filename}`
 
     // Update the transaction in the database
+    const existing = await db.paymentTransaction.findFirst({
+      where: {
+        OR: [
+          ...(transactionId ? [{ id: transactionId }] : []),
+          ...(reference ? [{ externalId: reference }, { reference }] : []),
+        ],
+      },
+      select: { id: true, response: true },
+      orderBy: { createdAt: "desc" },
+    })
+
+    if (!existing) {
+      return NextResponse.json({ error: "Payment transaction not found" }, { status: 404 })
+    }
+
     await db.paymentTransaction.update({
-      where: { externalId: reference },
+      where: { id: existing.id },
       data: {
         status: "VERIFYING",
-        // We store the proof URL in the response field since we don't have a dedicated column
-        response: JSON.stringify({ 
+        response: JSON.stringify({
           proofUrl, 
           uploadedAt: new Date().toISOString(),
           originalName: file.name
-        })
+        }),
       }
     })
 

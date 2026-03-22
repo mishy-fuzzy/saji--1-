@@ -74,33 +74,75 @@ function SignupContent() {
     e.preventDefault(); setError("")
     if (!validateStep2()) return
     setIsLoading(true)
-    setTimeout(() => {
-      const newUser = { id: Date.now().toString(), name: formData.name, email: formData.email, phone: formData.phone, role: formData.role, createdAt: new Date().toISOString() }
-      login(newUser)
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.name,
+          email: formData.email,
+          phone: formData.phone,
+          role: formData.role,
+          password: formData.password,
+        }),
+      })
+
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Signup failed")
+      }
+
+      login(payload.data)
       if (formData.role === "customer") router.push("/customer/home")
       else if (formData.role === "provider") router.push("/provider")
       else if (formData.role === "shopkeeper") router.push("/shopkeeper/register")
       else if (formData.role === "admin") router.push("/admin")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Signup failed"
+      setError(message)
+    } finally {
       setIsLoading(false)
-    }, 1500)
+    }
   }
 
   const handleGoogleSignup = () => { window.location.href = `/api/auth/google/start?mode=signup&role=${formData.role}` }
   const handleAppleSignup = () => { setOauthProvider("apple"); setShowOAuthModal(true) }
 
-  const handleSelectOAuthAccount = (account: any) => {
+  const handleSelectOAuthAccount = async (account: any) => {
     setSelectedOAuthAccount(account)
     setIsLoading(true)
-    setTimeout(() => {
-      const newUser = { id: "user_" + Date.now(), name: account.name, email: account.email, phone: "+254700000000", role: formData.role, createdAt: new Date().toISOString() }
+    try {
       setFormData((prev) => ({ ...prev, name: account.name, email: account.email }))
-      login(newUser)
+
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: account.name,
+          email: account.email,
+          phone: "+254700000000",
+          role: formData.role,
+          password: "oauth-signup",
+        }),
+      })
+
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "OAuth signup failed")
+      }
+
+      login(payload.data)
       if (formData.role === "customer") router.push("/customer/home")
       else if (formData.role === "provider") router.push("/provider")
       else if (formData.role === "shopkeeper") router.push("/shopkeeper/register")
       else router.push("/admin")
-      setIsLoading(false); setShowOAuthModal(false)
-    }, 1000)
+      setShowOAuthModal(false)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "OAuth signup failed"
+      setError(message)
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   // Password strength

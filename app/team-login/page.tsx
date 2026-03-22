@@ -23,32 +23,35 @@ export default function TeamLoginPage() {
     setLoading(true)
 
     try {
-      const storedCredentials = localStorage.getItem("team_credentials")
-      const credentials = storedCredentials ? JSON.parse(storedCredentials) : {}
-      const teamMember = credentials[email]
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      })
+      const payload = await response.json()
 
-      if (!teamMember || teamMember.password !== password) {
-        setError("Invalid email or password. Please check your credentials or contact your Admin for help.")
-        setLoading(false)
-        return
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        throw new Error(payload?.error || "Invalid email or password")
       }
 
-      const user = {
-        id: teamMember.id,
-        name: teamMember.name,
-        email: teamMember.email,
-        phone: "",
-        role: teamMember.teamRole as "sub-admin" | "secretary" | "agent",
-        createdAt: new Date().toISOString(),
+      const user = payload.data
+      const role = String(user.role || "").toLowerCase()
+
+      if (!["sub-admin", "subadmin", "secretary", "agent"].includes(role)) {
+        setError("This login is only for team roles (Sub-Admin, Secretary, Agent).")
+        return
       }
 
       login(user)
 
-      if (teamMember.teamRole === "sub-admin") router.push("/sub-admin")
-      else if (teamMember.teamRole === "secretary") router.push("/secretary")
-      else if (teamMember.teamRole === "agent") router.push("/agent")
-    } catch {
-      setError("An error occurred during login. Please try again.")
+      if (role === "sub-admin" || role === "subadmin") router.push("/sub-admin")
+      else if (role === "secretary") router.push("/secretary")
+      else if (role === "agent") router.push("/agent")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "An error occurred during login. Please try again."
+      setError(message)
     } finally {
       setLoading(false)
     }

@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input"
 import { useAuthContext } from "@/lib/auth-context"
 import { Mail, Lock, ArrowRight, Eye, EyeOff, Apple, Phone, CheckCircle2, Shield, Users, Zap } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
-import type { UserRole } from "@/lib/types"
 
 function LoginContent() {
   const router = useRouter()
@@ -27,6 +26,18 @@ function LoginContent() {
   const [captchaInput, setCaptchaInput] = useState("")
   const [captchaVerified, setCaptchaVerified] = useState(false)
 
+  const navigateByRole = (role: string) => {
+    const normalized = String(role || "customer").toLowerCase()
+    if (normalized === "customer") router.push("/customer/home")
+    else if (normalized === "provider") router.push("/provider")
+    else if (normalized === "shopkeeper") router.push("/shopkeeper")
+    else if (normalized === "admin") router.push("/admin")
+    else if (normalized === "secretary") router.push("/secretary")
+    else if (normalized === "sub-admin" || normalized === "subadmin") router.push("/sub-admin")
+    else if (normalized === "agent") router.push("/agent")
+    else router.push("/")
+  }
+
   React.useEffect(() => {
     const google = searchParams.get("google")
     const emailFromOAuth = searchParams.get("email")
@@ -42,7 +53,7 @@ function LoginContent() {
         createdAt: new Date().toISOString(),
       }
       login(user)
-      router.push("/customer/home")
+      navigateByRole(user.role)
     }
   }, [searchParams, login, router])
 
@@ -76,24 +87,32 @@ function LoginContent() {
     if (!captchaVerified) { setError("Please verify the CAPTCHA"); return }
     if (loginMethod === "email" ? !email || !password : !phone || !password) { setError("Please fill in all fields"); return }
     setIsLoading(true)
-    setTimeout(() => {
-      let role: UserRole = "customer"
-      const identifier = loginMethod === "email" ? email : phone
-      if (loginMethod === "email" && email === "admin@gmail.com" && password === "Admin@123") { role = "admin" }
-      else if (loginMethod === "email" && email === "secretary@gmail.com" && password === "Secretary@123") { role = "secretary" }
-      else if (loginMethod === "email" && email === "subadmin@gmail.com" && password === "SubAdmin@123") { role = "sub-admin" }
-      else if (identifier.includes("provider")) { role = "provider" }
-      else if (identifier.includes("shopkeeper")) { role = "shopkeeper" }
-      const user = { id: "user_" + Date.now(), name: loginMethod === "email" ? email.split("@")[0] : "User", email: email || "user@example.com", phone: phone || "+254700000000", role, createdAt: new Date().toISOString() }
-      login(user)
-      if (role === "customer") router.push("/customer/home")
-      else if (role === "provider") router.push("/provider")
-      else if (role === "shopkeeper") router.push("/shopkeeper")
-      else if (role === "admin") router.push("/admin")
-      else if (role === "secretary") router.push("/secretary")
-      else if (role === "sub-admin") router.push("/sub-admin")
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: loginMethod === "email" ? email : undefined,
+          phone: loginMethod === "phone" ? phone : undefined,
+          password,
+        }),
+      })
+
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        throw new Error(payload?.error || "Login failed")
+      }
+
+      login(payload.data)
+      navigateByRole(payload.data.role)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Login failed"
+      setError(message)
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
   }
 
   const handleGoogleLogin = () => {

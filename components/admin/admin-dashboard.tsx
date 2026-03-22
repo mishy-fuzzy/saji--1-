@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -18,44 +18,83 @@ interface AdminDashboardProps {
   }
 }
 
-const mockData = {
-  pendingVerifications: [
-    { id: 1, name: "John Electrical", category: "skilled", status: "pending", submittedAt: "2025-01-08" },
-    { id: 2, name: "Pipe Master", category: "semi-skilled", status: "pending", submittedAt: "2025-01-07" },
-  ],
-  disputes: [
-    {
-      id: 1,
-      customer: "Sarah M.",
-      provider: "John Electrical",
-      amount: 5000,
-      status: "open",
-      createdAt: "2025-01-06",
-    },
-  ],
-  recentTransactions: [
-    {
-      id: 1,
-      customer: "David K.",
-      provider: "Pipe Master",
-      amount: 2000,
-      status: "completed",
-      date: "2025-01-08",
-    },
-    {
-      id: 2,
-      customer: "Sarah M.",
-      provider: "Clean Sweep",
-      amount: 1500,
-      status: "completed",
-      date: "2025-01-07",
-    },
-  ],
+type DashboardUser = {
+  id: string
+  name: string
+  role: string
+  status: string
+  earnings: number
+  joined: string
 }
 
 export function AdminDashboard({ admin }: AdminDashboardProps) {
   const [activeTab, setActiveTab] = useState("overview")
   const [searchQuery, setSearchQuery] = useState("")
+  const [pendingVerifications, setPendingVerifications] = useState<Array<{ id: string; name: string; category: string; submittedAt: string }>>([])
+  const [recentTransactions, setRecentTransactions] = useState<Array<{ id: string; customer: string; provider: string; amount: number; status: string; date: string }>>([])
+  const [disputes, setDisputes] = useState<Array<{ id: string; customer: string; provider: string; amount: number; status: string; createdAt: string }>>([])
+
+  useEffect(() => {
+    const fetchAdminSummary = async () => {
+      try {
+        const response = await fetch("/api/admin/users", {
+          cache: "no-store",
+          headers: {
+            "x-user-role": "admin",
+          },
+        })
+        const payload = await response.json()
+
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          return
+        }
+
+        const users = payload.data as DashboardUser[]
+
+        const pending = users
+          .filter((u) => String(u.role || "").toLowerCase() === "provider" && String(u.status || "") === "Pending")
+          .slice(0, 5)
+          .map((u) => ({
+            id: u.id,
+            name: u.name,
+            category: "provider",
+            submittedAt: u.joined,
+          }))
+
+        const transactions = users
+          .filter((u) => Number(u.earnings || 0) > 0)
+          .slice(0, 6)
+          .map((u) => ({
+            id: u.id,
+            customer: "Platform",
+            provider: u.name,
+            amount: Number(u.earnings || 0),
+            status: "completed",
+            date: u.joined,
+          }))
+
+        const disputeRows = users
+          .filter((u) => String(u.status || "") === "Disputed")
+          .slice(0, 6)
+          .map((u) => ({
+            id: u.id,
+            customer: u.name,
+            provider: "Platform",
+            amount: Number(u.earnings || 0),
+            status: "open",
+            createdAt: u.joined,
+          }))
+
+        setPendingVerifications(pending)
+        setRecentTransactions(transactions)
+        setDisputes(disputeRows)
+      } catch {
+        // Keep dashboard UI stable if summary fetch fails.
+      }
+    }
+
+    fetchAdminSummary()
+  }, [])
 
   return (
     <div className="space-y-8">
@@ -86,12 +125,12 @@ export function AdminDashboard({ admin }: AdminDashboardProps) {
                   Pending Verifications
                 </h3>
                 <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100">
-                  {mockData.pendingVerifications.length}
+                  {pendingVerifications.length}
                 </Badge>
               </div>
 
               <div className="space-y-3">
-                {mockData.pendingVerifications.map((item) => (
+                {pendingVerifications.map((item) => (
                   <div
                     key={item.id}
                     className="p-4 border-2 border-border rounded-lg hover:border-primary/50 transition-colors"
@@ -131,7 +170,7 @@ export function AdminDashboard({ admin }: AdminDashboardProps) {
               </h3>
 
               <div className="space-y-3">
-                {mockData.recentTransactions.map((tx) => (
+                {recentTransactions.map((tx) => (
                   <div key={tx.id} className="flex items-center justify-between p-3 border-2 border-border rounded-lg">
                     <div className="flex-1">
                       <p className="text-sm font-semibold text-foreground">
@@ -163,12 +202,12 @@ export function AdminDashboard({ admin }: AdminDashboardProps) {
             <div className="flex items-center justify-between mb-6">
               <h3 className="font-semibold text-foreground text-lg">Active Disputes</h3>
               <Badge className="bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100">
-                {mockData.disputes.length}
+                {disputes.length}
               </Badge>
             </div>
 
             <div className="space-y-4">
-              {mockData.disputes.map((dispute) => (
+              {disputes.map((dispute) => (
                 <Card key={dispute.id} className="p-6 border-2 border-red-200 dark:border-red-900/50">
                   <div className="flex items-start justify-between mb-4">
                     <div>

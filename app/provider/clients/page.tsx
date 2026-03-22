@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Search, Phone, MessageCircle, Star, MapPin, Calendar, DollarSign, ChevronRight, Users, Heart, RefreshCw } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,6 +14,7 @@ type Client = {
 }
 
 export default function ClientsPage() {
+  const [providerCount, setProviderCount] = useState(0)
   const [clients, setClients] = useState<Client[]>([
     { id: 1, name: "Sarah Wanjiku", phone: "+254 712 345 678", location: "Westlands, Nairobi", avatar: "S", totalJobs: 8, totalSpent: 68000, avgRating: 4.9, lastJobDate: "2026-02-18", lastService: "Kitchen Plumbing", isFavorite: true, joinedDate: "2025-06-10", jobs: [
       { id: 1, service: "Kitchen Plumbing Repair", date: "2026-02-18", amount: 8500, rating: 5, status: "Completed" },
@@ -34,6 +35,30 @@ export default function ClientsPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [filterType, setFilterType] = useState("All")
   const [expandedClient, setExpandedClient] = useState<number | null>(null)
+
+  useEffect(() => {
+    const fetchProviders = async () => {
+      try {
+        const response = await fetch("/api/provider/users", {
+          cache: "no-store",
+          headers: {
+            "x-user-role": "provider",
+          },
+        })
+        const payload = await response.json()
+
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          return
+        }
+
+        setProviderCount(payload.data.length)
+      } catch {
+        // Keep page usable even when provider users endpoint is unavailable.
+      }
+    }
+
+    fetchProviders()
+  }, [])
 
   const filtered = clients
     .filter(c => filterType === "All" || (filterType === "Favorites" && c.isFavorite) || (filterType === "Repeat" && c.totalJobs >= 3))
@@ -60,8 +85,8 @@ export default function ClientsPage() {
         </Card>
         <Card className="p-3 border border-border rounded-xl text-center">
           <RefreshCw className="w-4 h-4 text-accent mx-auto mb-1" />
-          <p className="text-xl font-bold text-foreground">{clients.filter(c => c.totalJobs >= 3).length}</p>
-          <p className="text-[10px] text-muted-foreground">Repeat Clients</p>
+          <p className="text-xl font-bold text-foreground">{providerCount}</p>
+          <p className="text-[10px] text-muted-foreground">Service Providers</p>
         </Card>
         <Card className="p-3 border border-border rounded-xl text-center">
           <DollarSign className="w-4 h-4 text-emerald-500 mx-auto mb-1" />

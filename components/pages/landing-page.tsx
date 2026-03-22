@@ -26,15 +26,15 @@ export function LandingPage() {
       color: "from-cyan-500 to-blue-500"
     },
     {
-      icon: Zap,
-      title: "Instant Processing",
-      description: "Lightning-fast transaction processing and dispute resolution",
+      icon: Lock,
+      title: "Escrow Protection",
+      description: "Secure payments held in escrow until job completion is verified by both parties",
       color: "from-blue-600 to-indigo-600"
     },
     {
-      icon: Lock,
-      title: "Enterprise Security",
-      description: "Bank-level encryption and comprehensive security measures for peace of mind",
+      icon: Briefcase,
+      title: "Handpicked Pros",
+      description: "Access a marketplace of verified service providers with background checks",
       color: "from-indigo-500 to-purple-600"
     },
     {
@@ -53,22 +53,22 @@ export function LandingPage() {
 
   const platforms = [
     {
-      name: "Admin Portal",
-      role: "Leadership",
+      name: "Customers",
+      role: "User",
+      icon: "👤",
+      description: "Post jobs, chat with providers, make escrow payments, and verify job completion."
+    },
+    {
+      name: "Service Providers",
+      role: "Pro",
+      icon: "🛠️",
+      description: "Receive job requests, communicate with customers, complete jobs, and receive payments."
+    },
+    {
+      name: "Administrators",
+      role: "Full Control",
       icon: "👨‍💼",
-      description: "Full platform oversight, team management, and strategic analytics"
-    },
-    {
-      name: "Agent Portal",
-      role: "Operations",
-      icon: "🎯",
-      description: "Dispute resolution, performance tracking, and commission management"
-    },
-    {
-      name: "Secretary Portal",
-      role: "Finance",
-      icon: "📊",
-      description: "Invoice management, payment processing, and financial reconciliation"
+      description: "Manage users, jobs, payments, disputes, verifications, site content, and branding."
     }
   ]
 
@@ -165,23 +165,25 @@ export function LandingPage() {
               </div>
 
               <h1 className="text-5xl md:text-6xl font-bold text-foreground leading-tight mb-6">
-                Platform for
-                <span className="block bg-gradient-to-r from-primary via-blue-600 to-indigo-600 bg-clip-text text-transparent"> Enterprise Operations</span>
+                Connect with Trusted
+                <span className="block bg-gradient-to-r from-primary via-blue-600 to-indigo-600 bg-clip-text text-transparent"> Service Providers</span>
               </h1>
 
               <p className="text-lg text-muted-foreground mb-8 max-w-xl leading-relaxed">
-                Unified management system for administrators, agents, and finance teams. Streamline disputes, payments, and operations with advanced analytics and security.
+                The ultimate marketplace for service providers and customers. Secure escrow payments, real-time chat, and verified professionals at your fingertips.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4">
-                <Link href="/team-login">
+                <Link href="/auth/signup">
                   <Button size="lg" className="bg-gradient-to-r from-primary to-blue-600 hover:from-primary/90 hover:to-blue-700 text-white font-semibold gap-2 w-full sm:w-auto">
-                    Request Access <ArrowRight className="w-5 h-5" />
+                    Get Started Now <ArrowRight className="w-5 h-5" />
                   </Button>
                 </Link>
-                <Button size="lg" variant="outline" className="bg-transparent font-semibold w-full sm:w-auto">
-                  View Demo
-                </Button>
+                <Link href="/auth/login">
+                  <Button size="lg" variant="outline" className="bg-transparent font-semibold w-full sm:w-auto">
+                    Sign In
+                  </Button>
+                </Link>
               </div>
 
               {/* Trust Badge */}

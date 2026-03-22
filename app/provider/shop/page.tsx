@@ -117,7 +117,7 @@ export default function ShopPage() {
               <h2 className="text-lg font-bold text-foreground">Register Your Shop</h2>
               <div>
                 <label className="text-sm text-muted-foreground mb-1 block">Shop Name</label>
-                <Input value={shopDetails.name} onChange={(e) => setShopDetails(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Mike's Hardware & Supplies" className="rounded-lg bg-card border-border" />
+                <Input value={shopDetails.name} onChange={(e) => setShopDetails(p => ({ ...p, name: e.target.value }))} placeholder="e.g. Njeri's Hardware & Supplies" className="rounded-lg bg-card border-border" />
               </div>
               <div>
                 <label className="text-sm text-muted-foreground mb-1 block">Description</label>

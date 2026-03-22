@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useAuthContext } from "@/lib/auth-context"
 import { useLocalization } from "@/lib/hooks/useLocalization"
 import { Button } from "@/components/ui/button"
@@ -12,7 +12,7 @@ import {
 } from "lucide-react"
 
 interface Transaction {
-  id: number; type: "payment" | "refund" | "withdrawal" | "deposit"
+  id: string; type: "payment" | "refund" | "withdrawal" | "deposit"
   description: string; amount: number; date: string; status: "completed" | "pending"
 }
 
@@ -27,18 +27,18 @@ export function CustomerWalletPage() {
   const [showWithdraw, setShowWithdraw] = useState(false)
   const [addMoneyAmount, setAddMoneyAmount] = useState("")
   const [withdrawAmount, setWithdrawAmount] = useState("")
+  const [isLoadingWallet, setIsLoadingWallet] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [paymentForm, setPaymentForm] = useState({ mpesaPhone: "", cardNumber: "", cardName: "", expiryDate: "", cvv: "", paypalEmail: "" })
 
-  const [balance, setBalance] = useState(15450)
-  const totalSpent = 45230
+  const [balance, setBalance] = useState(0)
+  const [transactions, setTransactions] = useState<Transaction[]>([])
 
-  const [transactions, setTransactions] = useState<Transaction[]>([
-    { id: 1, type: "payment", description: "House Cleaning - Sarah M.", amount: -2500, date: "Today", status: "completed" },
-    { id: 2, type: "refund", description: "Refund - Cancelled Service", amount: 1500, date: "Yesterday", status: "completed" },
-    { id: 3, type: "payment", description: "Plumbing Repair - John P.", amount: -3500, date: "2 days ago", status: "completed" },
-    { id: 4, type: "withdrawal", description: "Withdrawal to M-Pesa", amount: -5000, date: "3 days ago", status: "completed" },
-    { id: 5, type: "deposit", description: "Added funds via M-Pesa", amount: 10000, date: "Last week", status: "completed" },
-  ])
+  const totalSpent = useMemo(() => {
+    return transactions
+      .filter((txn) => txn.amount < 0)
+      .reduce((sum, txn) => sum + Math.abs(txn.amount), 0)
+  }, [transactions])
 
   const paymentMethods = [
     { id: 1, type: "mpesa", name: "M-Pesa", number: "***5678", primary: true },
@@ -46,24 +46,100 @@ export function CustomerWalletPage() {
     { id: 3, type: "paypal", name: "PayPal", number: "***@gmail.com", primary: false },
   ]
 
-  const handleAddMoney = () => {
-    const amount = Number.parseFloat(addMoneyAmount)
-    if (amount > 0) {
-      setBalance(balance + amount)
-      setTransactions([{ id: transactions.length + 1, type: "deposit", description: `Added via ${newMethodType.toUpperCase() || "M-Pesa"}`, amount: amount, date: "Just now", status: "completed" }, ...transactions])
-      alert(`Successfully added ${currency} ${amount.toLocaleString()}!`)
-      setShowAddMoney(false); setAddMoneyAmount(""); setNewMethodType("")
+  const loadWallet = async () => {
+    setIsLoadingWallet(true)
+    try {
+      const response = await fetch("/api/wallet", { cache: "no-store" })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to load wallet")
+      }
+
+      const items = Array.isArray(payload?.data?.transactions)
+        ? payload.data.transactions.map((tx: any) => ({
+            id: String(tx.id),
+            type: tx.type,
+            description: String(tx.description || "Wallet transaction"),
+            amount: Number(tx.amount || 0),
+            date: String(tx.date || "Just now"),
+            status: tx.status === "completed" ? "completed" : "pending",
+          }))
+        : []
+
+      setBalance(Number(payload?.data?.balance || 0))
+      setTransactions(items)
+    } catch (error) {
+      console.error("Failed to load wallet", error)
+    } finally {
+      setIsLoadingWallet(false)
     }
   }
 
-  const handleWithdraw = () => {
+  useEffect(() => {
+    if (user?.id) {
+      loadWallet()
+    }
+  }, [user?.id])
+
+  const handleAddMoney = async () => {
+    const amount = Number.parseFloat(addMoneyAmount)
+    if (!(amount > 0)) return
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch("/api/wallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "deposit",
+          amount,
+          method: newMethodType || "mpesa",
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to add funds")
+      }
+
+      await loadWallet()
+      alert(`Successfully added ${currency} ${amount.toLocaleString()}!`)
+      setShowAddMoney(false)
+      setAddMoneyAmount("")
+      setNewMethodType("")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to add funds"
+      alert(message)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleWithdraw = async () => {
     const amount = Number.parseFloat(withdrawAmount)
-    if (amount > 0 && amount <= balance) {
-      setBalance(balance - amount)
-      setTransactions([{ id: transactions.length + 1, type: "withdrawal", description: "Withdrawal to M-Pesa", amount: -amount, date: "Just now", status: "pending" }, ...transactions])
-      alert(`Withdrawal of ${currency} ${amount.toLocaleString()} initiated!`)
-      setShowWithdraw(false); setWithdrawAmount("")
-    } else if (amount > balance) { alert("Insufficient balance") }
+    if (!(amount > 0)) return
+
+    setIsSubmitting(true)
+    try {
+      const response = await fetch("/api/wallet", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "withdraw", amount, method: "mpesa" }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to withdraw")
+      }
+
+      await loadWallet()
+      alert(`Withdrawal of ${currency} ${amount.toLocaleString()} completed!`)
+      setShowWithdraw(false)
+      setWithdrawAmount("")
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to withdraw"
+      alert(message)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleDownloadStatement = () => {
@@ -162,7 +238,11 @@ export function CustomerWalletPage() {
               <h3 className="font-semibold text-foreground text-sm">Recent Transactions</h3>
               <Button size="sm" variant="ghost" onClick={handleDownloadStatement} className="gap-1.5 text-xs h-8"><Download className="w-3.5 h-3.5" />Export</Button>
             </div>
-            {transactions.map((txn) => {
+            {isLoadingWallet ? (
+              <Card className="p-3.5 border-0 shadow-sm">Loading wallet transactions...</Card>
+            ) : transactions.length === 0 ? (
+              <Card className="p-3.5 border-0 shadow-sm">No transactions yet.</Card>
+            ) : transactions.map((txn) => {
               const config = txnConfig[txn.type]
               const Icon = config.icon
               return (
@@ -234,7 +314,7 @@ export function CustomerWalletPage() {
                 ))}
               </div>
               <div className="flex gap-2">
-                <Button className="flex-1 rounded-xl" onClick={handleAddMoney}>Add</Button>
+                <Button className="flex-1 rounded-xl" onClick={handleAddMoney} disabled={isSubmitting}>Add</Button>
                 <Button variant="outline" className="flex-1 rounded-xl bg-transparent" onClick={() => { setShowAddMoney(false); setAddMoneyAmount(""); setNewMethodType("") }}>Cancel</Button>
               </div>
             </div>
@@ -253,7 +333,7 @@ export function CustomerWalletPage() {
             </div>
             <p className="text-xs text-muted-foreground">Available: {currency} {balance.toLocaleString()}</p>
             <div className="flex gap-2">
-              <Button className="flex-1 rounded-xl" onClick={handleWithdraw}>Withdraw</Button>
+              <Button className="flex-1 rounded-xl" onClick={handleWithdraw} disabled={isSubmitting}>Withdraw</Button>
               <Button variant="outline" className="flex-1 rounded-xl bg-transparent" onClick={() => { setShowWithdraw(false); setWithdrawAmount("") }}>Cancel</Button>
             </div>
           </div>

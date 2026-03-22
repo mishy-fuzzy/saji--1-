@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, Suspense } from "react"
+import { useCallback, useEffect, useState, Suspense } from "react"
 import { useLocalization } from "@/lib/hooks/useLocalization"
 import { Search, Download, Trash2, Settings, Filter, ChevronUp, ChevronDown, Eye, MoreVertical, PhoneIncoming as Incoming, CheckCircle2, AlertCircle, Clock, TrendingUp, Mail, Phone, Edit } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -9,26 +9,80 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import jsPDF from "jspdf"
 import "jspdf-autotable"
 
-const initialUsers = [
-  { id: "JP-270349", name: "Sarah K.", email: "sarah@email.com", phone: "+254 712 345 678", role: "Customer", status: "Active", earnings: 812000, joined: "Jan 15, 2026", orders: 12, disputes: 0, type: "active" },
-  { id: "JP-270005", name: "Mark L.", email: "mark@email.com", phone: "+254 722 456 789", role: "Provider", status: "Pending", earnings: 456000, joined: "Jan 18, 2026", orders: 8, disputes: 1, type: "incoming" },
-  { id: "JP-270336", name: "Sarah S.", email: "sarah.s@email.com", phone: "+254 732 567 890", role: "Provider", status: "Active", earnings: 1034000, joined: "Jan 12, 2026", orders: 24, disputes: 0, type: "active" },
-  { id: "JP-270288", name: "David N.", email: "david@email.com", phone: "+254 742 678 901", role: "Customer", status: "Completed", earnings: 125500, joined: "Dec 28, 2025", orders: 5, disputes: 0, type: "completed" },
-  { id: "JP-270058", name: "John M.", email: "john@email.com", phone: "+254 752 789 012", role: "Provider", status: "Active", earnings: 682000, joined: "Jan 20, 2026", orders: 18, disputes: 0, type: "active" },
-  { id: "JP-270060", name: "Alice T.", email: "alice@email.com", phone: "+254 762 890 123", role: "Customer", status: "Disputed", earnings: 682000, joined: "Jan 22, 2026", orders: 7, disputes: 2, type: "disputed" },
-]
+type AdminUser = {
+  id: string
+  name: string
+  email: string
+  phone: string
+  role: string
+  status: string
+  earnings: number
+  joined: string
+  orders: number
+  disputes: number
+  type: "incoming" | "active" | "completed" | "disputed"
+}
 
 function UsersContent() {
   const { currency, convertPrice } = useLocalization()
   const [searchTerm, setSearchTerm] = useState("")
   const [activeFilter, setActiveFilter] = useState("All")
-  const [users, setUsers] = useState(initialUsers)
+  const [users, setUsers] = useState<AdminUser[]>([])
   const [sortBy, setSortBy] = useState("name")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc")
   const [selectedUsers, setSelectedUsers] = useState<string[]>([])
   const [showUserModal, setShowUserModal] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<any>(null)
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
   const [isEditingUser, setIsEditingUser] = useState(false)
+  const [isLoadingUsers, setIsLoadingUsers] = useState(true)
+  const [usersError, setUsersError] = useState<string | null>(null)
+
+  const fetchUsers = useCallback(async (showLoader = false) => {
+    if (showLoader) {
+      setIsLoadingUsers(true)
+      setUsersError(null)
+    }
+
+    try {
+      const response = await fetch("/api/admin/users", {
+        cache: "no-store",
+        headers: {
+          "x-user-role": "admin",
+        },
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+        throw new Error(payload?.error || "Failed to load users")
+      }
+
+      setUsers(payload.data as AdminUser[])
+      setUsersError(null)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load users"
+      setUsersError(message)
+
+      if (showLoader) {
+        setUsers([])
+      }
+    } finally {
+      if (showLoader) {
+        setIsLoadingUsers(false)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchUsers(true)
+
+    const intervalId = window.setInterval(() => {
+      fetchUsers(false)
+    }, 15000)
+
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [fetchUsers])
 
   const filters = [
     { label: "All", type: "All", count: users.length },
@@ -131,15 +185,94 @@ function UsersContent() {
   }
 
   const handleDeleteUser = (userId: string) => {
-    setUsers(users.filter(u => u.id !== userId))
+    const removeUser = async () => {
+      try {
+        const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+          method: "DELETE",
+          headers: {
+            "x-user-role": "admin",
+          },
+        })
+
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || "Failed to delete user")
+        }
+
+        setUsers((prev) => prev.filter((u) => u.id !== userId))
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to delete user"
+        setUsersError(message)
+      }
+    }
+
+    removeUser()
   }
 
   const handleSuspendUser = (userId: string) => {
-    setUsers(users.map(u => 
-      u.id === userId 
-        ? { ...u, status: u.status === "Active" ? "Suspended" : "Active" }
-        : u
-    ))
+    const target = users.find((u) => u.id === userId)
+    if (!target) return
+
+    const nextStatus = target.status === "Suspended" ? "Active" : "Suspended"
+
+    const toggleSuspension = async () => {
+      try {
+        const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-role": "admin",
+          },
+          body: JSON.stringify({ status: nextStatus }),
+        })
+
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || "Failed to update user status")
+        }
+
+        setUsers((prev) =>
+          prev.map((u) => (u.id === userId ? { ...u, status: nextStatus } : u)),
+        )
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to update user status"
+        setUsersError(message)
+      }
+    }
+
+    toggleSuspension()
+  }
+
+  const handleEditUser = (user: AdminUser) => {
+    const nextName = window.prompt("Update user name", user.name)?.trim()
+    if (!nextName || nextName === user.name) {
+      return
+    }
+
+    const persistEdit = async () => {
+      try {
+        const response = await fetch(`/api/admin/users/${encodeURIComponent(user.id)}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            "x-user-role": "admin",
+          },
+          body: JSON.stringify({ name: nextName }),
+        })
+
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || "Failed to edit user")
+        }
+
+        setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, name: nextName } : u)))
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to edit user"
+        setUsersError(message)
+      }
+    }
+
+    persistEdit()
   }
 
   const handleSelectUser = (userId: string) => {
@@ -270,6 +403,8 @@ function UsersContent() {
         </div>
       </div>
 
+      <p className="text-xs text-gray-500 dark:text-gray-400">Auto-refresh is enabled (every 15 seconds).</p>
+
       {/* Filter Tabs */}
       <div className="flex gap-2 overflow-x-auto pb-2">
         {filters.map((filter) => (
@@ -293,6 +428,12 @@ function UsersContent() {
           </button>
         ))}
       </div>
+
+      {usersError ? (
+        <Card className="p-4 border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/40 text-red-700 dark:text-red-300 text-sm">
+          Failed to load users from database: {usersError}
+        </Card>
+      ) : null}
 
       {/* Users Table */}
       <Card className="border-0 shadow-lg overflow-hidden">
@@ -333,7 +474,13 @@ function UsersContent() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredUsers.length > 0 ? (
+              {isLoadingUsers ? (
+                <tr>
+                  <td colSpan={9} className="px-6 py-12 text-center text-gray-600 dark:text-gray-400">
+                    Loading users from database...
+                  </td>
+                </tr>
+              ) : filteredUsers.length > 0 ? (
                 filteredUsers.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                     <td className="px-6 py-4">
@@ -371,11 +518,7 @@ function UsersContent() {
                           <Eye size={18} />
                         </button>
                         <button 
-                          onClick={() => { 
-                            setSelectedUser(user); 
-                            setIsEditingUser(true);
-                            setShowUserModal(true); 
-                          }} 
+                          onClick={() => handleEditUser(user)} 
                           className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors text-purple-600 dark:text-purple-400" 
                           title="Edit"
                         >

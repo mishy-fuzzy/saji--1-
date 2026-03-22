@@ -23,9 +23,9 @@ import { useAuthContext } from "@/lib/auth-context"
 
 export default function ProviderProfilePage() {
   const router = useRouter()
-  const { logout } = useAuthContext()
+  const { user, logout } = useAuthContext()
+  const providerName = user?.name?.trim() || "Provider"
   const [provider] = useState({
-    name: "Mike R.",
     rating: 4.7,
     reviews: 200,
     providerSince: "January 2025",
@@ -64,7 +64,7 @@ export default function ProviderProfilePage() {
         {/* Profile Card */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 text-center border dark:border-gray-700">
           <div className="w-24 h-24 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full mx-auto mb-4"></div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{provider.name}</h2>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{providerName}</h2>
           <div className="flex justify-center gap-1 my-2">
             {[...Array(5)].map((_, i) => (
               <Star

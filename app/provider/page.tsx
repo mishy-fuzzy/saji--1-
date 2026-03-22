@@ -4,6 +4,7 @@ import React from "react"
 
 import { useState, useRef, useEffect, useCallback } from "react"
 import { useLocalization } from "@/lib/hooks/useLocalization"
+import { useAuthContext } from "@/lib/auth-context"
 import { 
   TrendingUp, AlertCircle, CheckCircle2, Clock, DollarSign, Bell, ArrowRight, Briefcase,
   Camera, Video, ImageIcon, X, MapPin, Tag, Send, MessageCircle, Share2,
@@ -18,14 +19,22 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import NextImage from "next/image"
 
-const recentJobs = [
-  { id: 1, title: "Kitchen Renovation", client: "John Doe", status: "Completed", amount: "KES 15,000" },
-  { id: 2, title: "Bathroom Installation", client: "Jane Smith", status: "In Progress", amount: "KES 20,000" },
-  { id: 3, title: "Electrical Repair", client: "Mike Johnson", status: "Active", amount: "KES 8,000" },
-]
+interface DashboardJob {
+  id: string
+  title: string
+  client: string
+  status: "Completed" | "In Progress" | "Pending"
+  amount: string
+}
 
 export default function ProviderHomePage() {
   const { currency } = useLocalization()
+  const { user } = useAuthContext()
+  const providerDisplayName = user?.name?.trim() || "Provider"
+  const providerFirstName = providerDisplayName.split(" ")[0] || "Provider"
+  const providerInitial = providerFirstName.charAt(0).toUpperCase() || "P"
+  const [recentJobs, setRecentJobs] = useState<DashboardJob[]>([])
+  const [isLoadingRecentJobs, setIsLoadingRecentJobs] = useState(true)
   const [showCreatePost, setShowCreatePost] = useState(false)
   const [showLiveStream, setShowLiveStream] = useState(false)
   const [showCreateStory, setShowCreateStory] = useState(false)
@@ -89,6 +98,46 @@ export default function ProviderHomePage() {
     { icon: "👑", name: "Crown", amount: 1000 },
     { icon: "🚀", name: "Rocket", amount: 2000 },
   ]
+
+  useEffect(() => {
+    const fetchRecentJobs = async () => {
+      if (!user?.id) {
+        setIsLoadingRecentJobs(false)
+        return
+      }
+
+      try {
+        const response = await fetch(`/api/bookings?providerId=${encodeURIComponent(user.id)}`)
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !Array.isArray(payload.data)) {
+          setRecentJobs([])
+          return
+        }
+
+        const mapped: DashboardJob[] = payload.data.slice(0, 6).map((booking: any) => {
+          const statusRaw = String(booking?.status || "pending").toLowerCase()
+          const statusLabel: DashboardJob["status"] =
+            statusRaw === "completed" ? "Completed" : statusRaw === "active" ? "In Progress" : "Pending"
+
+          return {
+            id: String(booking?.id || ""),
+            title: booking?.service?.name || "Service Job",
+            client: booking?.customer?.name || "Customer",
+            status: statusLabel,
+            amount: `KES ${Number(booking?.amount || 0).toLocaleString()}`,
+          }
+        })
+
+        setRecentJobs(mapped)
+      } catch {
+        setRecentJobs([])
+      } finally {
+        setIsLoadingRecentJobs(false)
+      }
+    }
+
+    fetchRecentJobs()
+  }, [user?.id])
 
   const handleStreamComment = () => {
     if (streamComment.trim()) {
@@ -341,10 +390,10 @@ export default function ProviderHomePage() {
             {/* User Info */}
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">
-                M
+                {providerInitial}
               </div>
               <div>
-                <p className="font-semibold text-foreground">Mike Thompson</p>
+                <p className="font-semibold text-foreground">{providerDisplayName}</p>
                 <p className="text-sm text-muted-foreground">Electrician - Verified Provider</p>
               </div>
             </div>
@@ -683,8 +732,10 @@ export default function ProviderHomePage() {
                   <div className="flex items-center gap-2">
                     <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm ring-2 ring-red-500">M</div>
                     <div>
-                      <p className="text-white font-semibold text-xs leading-tight">Mike Thompson</p>
+                      <p className="text-white font-semibold text-xs leading-tight">{providerDisplayName}</p>
                       <div className="flex items-center gap-1.5">
+                                            <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-sm ring-2 ring-red-500">{providerInitial}</div>
+                                      <h1 className="text-3xl font-bold mb-1">Welcome Back, {providerFirstName}!</h1>
                         <span className="bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold flex items-center gap-1">
                           <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" /> LIVE
                         </span>
@@ -781,7 +832,7 @@ export default function ProviderHomePage() {
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-3xl font-bold mb-1">Welcome Back, Mike!</h1>
+              <h1 className="text-3xl font-bold mb-1">Welcome Back, {providerFirstName}!</h1>
               <p className="text-blue-100">Here's your performance overview</p>
             </div>
             <Bell className="w-8 h-8 text-blue-100" />
@@ -1020,29 +1071,43 @@ export default function ProviderHomePage() {
                 </tr>
               </thead>
               <tbody>
-                {recentJobs.map((job) => (
-                  <tr
-                    key={job.id}
-                    className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-                  >
-                    <td className="px-6 py-4 text-gray-900 dark:text-white font-medium">{job.title}</td>
-                    <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{job.client}</td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          job.status === "In Progress"
-                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
-                            : job.status === "Completed"
-                              ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
-                              : "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300"
-                        }`}
-                      >
-                        {job.status}
-                      </span>
+                {isLoadingRecentJobs ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                      Loading recent jobs...
                     </td>
-                    <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{job.amount}</td>
                   </tr>
-                ))}
+                ) : recentJobs.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-8 text-center text-gray-500 dark:text-gray-400">
+                      No recent jobs yet.
+                    </td>
+                  </tr>
+                ) : (
+                  recentJobs.map((job) => (
+                    <tr
+                      key={job.id}
+                      className="border-b border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                    >
+                      <td className="px-6 py-4 text-gray-900 dark:text-white font-medium">{job.title}</td>
+                      <td className="px-6 py-4 text-gray-600 dark:text-gray-400">{job.client}</td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            job.status === "In Progress"
+                              ? "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300"
+                              : job.status === "Completed"
+                                ? "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300"
+                                : "bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300"
+                          }`}
+                        >
+                          {job.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{job.amount}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>

@@ -20,7 +20,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const auth = useAuth()
   const router = useRouter()
 
-  const logoutWithRedirect = useCallback(() => {
+  const logoutWithRedirect = useCallback(async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST" })
+    } catch {
+      // Keep local logout behavior even when network call fails.
+    }
+
     auth.logout()
     router.push("/")
   }, [auth, router])

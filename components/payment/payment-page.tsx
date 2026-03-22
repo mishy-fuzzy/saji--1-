@@ -12,13 +12,22 @@ import { PriceBreakdown } from "./price-breakdown"
 import { PaymentForm } from "./payment-form"
 import { ShieldCheck, Zap, RotateCcw } from "lucide-react"
 
+import { useSearchParams } from "next/navigation"
+import { useAuthContext } from "@/lib/auth-context"
+
 export function PaymentPage() {
   const { t, currency, setCurrency } = useLocalization()
+  const { user } = useAuthContext()
+  const searchParams = useSearchParams()
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("mpesa")
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>(currency as CurrencyCode)
   const [paymentStep, setPaymentStep] = useState<"method" | "details" | "confirmation">("method")
+  const [bookingId, setBookingId] = useState<string | null>(null)
 
-  const basePrice = 5000 // KES
+  const serviceId = searchParams.get("serviceId")
+  const providerId = searchParams.get("providerId")
+  const customerId = searchParams.get("customerId") || user?.id || ""
+  const basePrice = Number(searchParams.get("price")) || 5000 // KES
   const locationModifier = 1.0 // No location modifier for now
   const servicePrice = basePrice * locationModifier
 
@@ -27,8 +36,31 @@ export function PaymentPage() {
   const selectedRate = currencies[selectedCurrency].rate
   const convertedPrice = convertCurrency(servicePrice, kesRate, selectedRate)
 
-  const handlePaymentMethodSelect = (method: string) => {
+  const handlePaymentMethodSelect = async (method: string) => {
     setSelectedPaymentMethod(method)
+
+    if (!bookingId && serviceId && providerId && customerId) {
+      try {
+        const response = await fetch("/api/bookings", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerId,
+            providerId,
+            serviceId,
+            amount: Math.round(servicePrice),
+            currency: "KES",
+          }),
+        })
+        const payload = await response.json()
+        if (payload.ok) {
+          setBookingId(payload.data.id)
+        }
+      } catch (error) {
+        console.error("Failed to pre-create booking", error)
+      }
+    }
+    
     setPaymentStep("details")
   }
 
@@ -64,7 +96,8 @@ export function PaymentPage() {
                 <PaymentForm
                   paymentMethod={selectedPaymentMethod}
                   amountKES={Math.round(servicePrice)}
-                  accountReference="SAJI-BOOKING"
+                  accountReference={bookingId ? `BO-${bookingId.slice(-6).toUpperCase()}` : "SAJI-BOOKING"}
+                  bookingId={bookingId || undefined}
                   onSubmit={() => setPaymentStep("confirmation")}
                 />
               </Card>

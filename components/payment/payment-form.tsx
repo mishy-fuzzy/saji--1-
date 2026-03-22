@@ -12,10 +12,11 @@ interface PaymentFormProps {
   paymentMethod: string
   amountKES?: number
   accountReference?: string
+  bookingId?: string
   onSubmit: () => void
 }
 
-export function PaymentForm({ paymentMethod, amountKES = 1, accountReference = "SAJI-SERVICE", onSubmit }: PaymentFormProps) {
+export function PaymentForm({ paymentMethod, amountKES = 1, accountReference = "SAJI-SERVICE", bookingId, onSubmit }: PaymentFormProps) {
   const [formData, setFormData] = useState({
     phone: "",
     cardNumber: "",
@@ -55,6 +56,7 @@ export function PaymentForm({ paymentMethod, amountKES = 1, accountReference = "
             amount: amountKES,
             accountReference,
             transactionDesc: "Service payment",
+            bookingId: bookingId,
           }),
         })
 
@@ -80,6 +82,7 @@ export function PaymentForm({ paymentMethod, amountKES = 1, accountReference = "
               payerPhone: formData.phone,
               payerEmail: formData.email,
               reference: accountReference,
+              bookingId,
             }),
           })
 
@@ -132,6 +135,7 @@ export function PaymentForm({ paymentMethod, amountKES = 1, accountReference = "
             currency: "KES",
             email: formData.email,
             reference: accountReference,
+            bookingId,
           }),
         })
 
@@ -154,6 +158,7 @@ export function PaymentForm({ paymentMethod, amountKES = 1, accountReference = "
             amount: amountKES,
             currency: "USD",
             reference: accountReference,
+            bookingId,
           }),
         })
 

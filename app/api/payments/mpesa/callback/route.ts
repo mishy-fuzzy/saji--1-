@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { db, serializePayload } from "@/lib/server/db"
+import { createInAppNotification } from "@/lib/server/in-app-notifications"
 
 export async function POST(request: Request) {
   try {
@@ -19,6 +20,51 @@ export async function POST(request: Request) {
           error: resultCode === 0 ? null : resultDesc,
         },
       })
+
+      if (resultCode === 0) {
+        const tx = await db.paymentTransaction.findFirst({
+          where: { externalId: checkoutRequestId },
+          include: {
+            booking: {
+              select: {
+                id: true,
+                customerId: true,
+                providerId: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        })
+
+        if (tx?.bookingId) {
+          await db.booking.updateMany({
+            where: { id: tx.bookingId, status: "pending" },
+            data: { status: "confirmed" },
+          })
+
+          if (tx.booking?.customerId) {
+            await createInAppNotification({
+              userId: tx.booking.customerId,
+              type: "payment",
+              title: "Payment received",
+              message: "Your M-Pesa payment was successfully received.",
+              actionHref: "/customer/wallet",
+              metadata: { provider: "mpesa", checkoutRequestId, bookingId: tx.bookingId },
+            })
+          }
+
+          if (tx.booking?.providerId) {
+            await createInAppNotification({
+              userId: tx.booking.providerId,
+              type: "payment",
+              title: "Booking payment confirmed",
+              message: "A customer payment has been confirmed for your booking.",
+              actionHref: "/provider/jobs",
+              metadata: { provider: "mpesa", checkoutRequestId, bookingId: tx.bookingId },
+            })
+          }
+        }
+      }
     } else {
       await db.paymentTransaction.create({
         data: {

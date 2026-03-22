@@ -1,122 +1,58 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
-import { Star, Search, MapPin, Filter } from "lucide-react"
+import { Star, Search, MapPin, Filter, Loader2 } from "lucide-react"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
+import { useRouter } from "next/navigation"
+
 interface Service {
-  id: number
+  id: string
   name: string
-  category: "skilled" | "semi-skilled" | "non-skilled"
-  provider: string
-  rating: number
-  reviews: number
+  category: string
+  provider: {
+    id: string
+    name: string
+    image?: string
+  }
   basePrice: number
-  location: string
-  image: string
-  verified: boolean
   description: string
-}
-
-const mockServices: Service[] = [
-  {
-    id: 1,
-    name: "Professional Electrical Installation",
-    category: "skilled",
-    provider: "John Electrical Services",
-    rating: 4.9,
-    reviews: 128,
-    basePrice: 5000,
-    location: "Nairobi",
-    image: "/electrical-installation.png",
-    verified: true,
-    description: "Expert electrical installation for homes and offices",
-  },
-  {
-    id: 2,
-    name: "Emergency Plumbing Repairs",
-    category: "semi-skilled",
-    provider: "Pipe Master",
-    rating: 4.8,
-    reviews: 95,
-    basePrice: 2000,
-    location: "Westlands",
-    image: "/plumbing-repair.jpg",
-    verified: true,
-    description: "Quick and reliable plumbing solutions",
-  },
-  {
-    id: 3,
-    name: "Residential House Cleaning",
-    category: "non-skilled",
-    provider: "Clean Sweep Team",
-    rating: 4.7,
-    reviews: 203,
-    basePrice: 1500,
-    location: "Kiambu",
-    image: "/home-cleaning-tools.png",
-    verified: true,
-    description: "Thorough and professional cleaning services",
-  },
-  {
-    id: 4,
-    name: "Custom Software Development",
-    category: "skilled",
-    provider: "Dev Labs",
-    rating: 5.0,
-    reviews: 67,
-    basePrice: 50000,
-    location: "Nairobi CBD",
-    image: "/software-development-collaboration.png",
-    verified: true,
-    description: "Bespoke software solutions for your business",
-  },
-  {
-    id: 5,
-    name: "Appliance Repair Service",
-    category: "semi-skilled",
-    provider: "Tech Repairs",
-    rating: 4.6,
-    reviews: 156,
-    basePrice: 3000,
-    location: "Parklands",
-    image: "/appliance-repair-scene.png",
-    verified: true,
-    description: "Professional appliance repair and maintenance",
-  },
-  {
-    id: 6,
-    name: "House Moving & Transport",
-    category: "non-skilled",
-    provider: "Move Easy",
-    rating: 4.8,
-    reviews: 234,
-    basePrice: 8000,
-    location: "Nairobi",
-    image: "/house-moving.jpg",
-    verified: true,
-    description: "Professional house moving and relocation",
-  },
-]
-
-const categoryColors = {
-  skilled: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100",
-  "semi-skilled": "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100",
-  "non-skilled": "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100",
+  image?: string
 }
 
 export function ServiceBrowser() {
+  const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState<string>("all")
   const [priceRange, setPriceRange] = useState([0, 50000])
   const [sortBy, setSortBy] = useState("rating")
-  const [filteredServices, setFilteredServices] = useState(mockServices)
+  const [services, setServices] = useState<Service[]>([])
+  const [filteredServices, setFilteredServices] = useState<Service[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const response = await fetch("/api/services")
+        const payload = await response.json()
+        if (payload.ok) {
+          setServices(payload.data)
+          setFilteredServices(payload.data)
+        }
+      } catch (error) {
+        console.error("Failed to fetch services:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchServices()
+  }, [])
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
@@ -139,11 +75,11 @@ export function ServiceBrowser() {
   }
 
   const filterServices = (query: string, category: string, prices: number[], sort: string) => {
-    let filtered = mockServices.filter((service) => {
+    let filtered = services.filter((service) => {
       const matchesQuery =
         query === "" ||
         service.name.toLowerCase().includes(query.toLowerCase()) ||
-        service.provider.toLowerCase().includes(query.toLowerCase()) ||
+        service.provider.name.toLowerCase().includes(query.toLowerCase()) ||
         service.description.toLowerCase().includes(query.toLowerCase())
 
       const matchesCategory = category === "all" || service.category === category
@@ -154,16 +90,21 @@ export function ServiceBrowser() {
 
     // Apply sorting
     if (sort === "price-low") {
-      filtered = filtered.sort((a, b) => a.basePrice - b.basePrice)
+      filtered = [...filtered].sort((a, b) => a.basePrice - b.basePrice)
     } else if (sort === "price-high") {
-      filtered = filtered.sort((a, b) => b.basePrice - a.basePrice)
-    } else if (sort === "rating") {
-      filtered = filtered.sort((a, b) => b.rating - a.rating)
-    } else if (sort === "reviews") {
-      filtered = filtered.sort((a, b) => b.reviews - a.reviews)
+      filtered = [...filtered].sort((a, b) => b.basePrice - a.basePrice)
     }
 
     setFilteredServices(filtered)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-muted-foreground font-medium text-lg">Loading services...</p>
+      </div>
+    )
   }
 
   return (
@@ -355,7 +296,7 @@ export function ServiceBrowser() {
                     <h3 className="text-lg font-semibold text-foreground mb-1 line-clamp-2">{service.name}</h3>
 
                     {/* Provider Info */}
-                    <p className="text-sm text-muted-foreground mb-3">{service.provider}</p>
+                    <p className="text-sm text-muted-foreground mb-3">{service.provider.name}</p>
 
                     {/* Location */}
                     <div className="flex items-center gap-1 mb-4 text-sm text-muted-foreground">
@@ -377,7 +318,17 @@ export function ServiceBrowser() {
                     </div>
 
                     {/* CTA Button */}
-                    <Button className="w-full rounded-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary text-primary-foreground font-semibold">
+                    <Button 
+                      onClick={() => {
+                        const params = new URLSearchParams({
+                          serviceId: service.id,
+                          providerId: service.provider.id,
+                          price: service.basePrice.toString()
+                        })
+                        router.push(`/payment?${params.toString()}`)
+                      }}
+                      className="w-full rounded-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary text-primary-foreground font-semibold"
+                    >
                       View & Book
                     </Button>
                   </div>

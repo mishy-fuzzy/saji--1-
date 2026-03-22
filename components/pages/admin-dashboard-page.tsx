@@ -1,33 +1,106 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useAuthContext } from "@/lib/auth-context"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LogOut, Users, Briefcase, TrendingUp, AlertCircle, Download, BarChart3, ArrowUpRight } from "lucide-react"
 
+type AdminUserRow = {
+  id: string
+  name: string
+  role: string
+  status: string
+  earnings: number
+  orders: number
+}
+
+type ReportRow = {
+  id: string
+  name: string
+  type: string
+  createdBy: string
+  date: string
+  data?: unknown
+}
+
 export function AdminDashboardPage() {
   const { user, logout } = useAuthContext()
   const [isExporting, setIsExporting] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [usersData, setUsersData] = useState<AdminUserRow[]>([])
+  const [reportsData, setReportsData] = useState<ReportRow[]>([])
+  const [error, setError] = useState<string | null>(null)
 
-  const stats = [
-    { label: "Total Users", value: 1245, icon: Users, color: "bg-purple-500", trend: "+12%" },
-    { label: "Active Jobs", value: 342, icon: Briefcase, color: "bg-blue-500", trend: "+8%" },
-    { label: "Platform Revenue", value: "KES45,230", icon: TrendingUp, color: "bg-green-500", trend: "+24%" },
-    { label: "Disputes", value: 3, icon: AlertCircle, color: "bg-red-500", trend: "-2%" },
-  ]
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const [usersRes, reportsRes] = await Promise.all([
+          fetch("/api/admin/users", {
+            cache: "no-store",
+            headers: { "x-user-role": "admin" },
+          }),
+          fetch("/api/reports?scope=admin", {
+            cache: "no-store",
+            headers: { "x-user-role": "admin" },
+          }),
+        ])
+
+        const usersPayload = await usersRes.json()
+        const reportsPayload = await reportsRes.json()
+
+        if (usersRes.ok && usersPayload?.ok && Array.isArray(usersPayload?.data)) {
+          setUsersData(usersPayload.data)
+        }
+
+        if (reportsRes.ok && reportsPayload?.ok && Array.isArray(reportsPayload?.data)) {
+          setReportsData(reportsPayload.data)
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to load dashboard data"
+        setError(message)
+      }
+    }
+
+    fetchDashboardData()
+  }, [])
+
+  const recentProviders = useMemo(() => {
+    return usersData
+      .filter((u) => String(u.role || "").toLowerCase() === "provider")
+      .slice(0, 3)
+      .map((u) => ({
+        id: u.id,
+        name: u.name,
+        services: Number(u.orders || 0),
+        rating: 4.7,
+        status: String(u.status || "").toLowerCase() === "pending" ? "pending" : "verified",
+      }))
+  }, [usersData])
+
+  const stats = useMemo(() => {
+    const totalUsers = usersData.length
+    const activeJobs = usersData.reduce((sum, u) => sum + Number(u.orders || 0), 0)
+    const revenue = usersData.reduce((sum, u) => sum + Number(u.earnings || 0), 0)
+    const disputes = usersData.filter((u) => String(u.status || "") === "Disputed").length
+
+    return [
+      { label: "Total Users", value: totalUsers, icon: Users, color: "bg-purple-500", trend: "live" },
+      { label: "Active Jobs", value: activeJobs, icon: Briefcase, color: "bg-blue-500", trend: "live" },
+      { label: "Platform Revenue", value: `KES ${revenue.toLocaleString()}`, icon: TrendingUp, color: "bg-green-500", trend: "live" },
+      { label: "Disputes", value: disputes, icon: AlertCircle, color: "bg-red-500", trend: "live" },
+    ]
+  }, [usersData])
 
   const handleExport = async () => {
     setIsExporting(true)
     try {
-      // Simulate export process
-      await new Promise(resolve => setTimeout(resolve, 1500))
       const data = {
         exportDate: new Date().toISOString(),
         stats: stats.map(s => ({ label: s.label, value: s.value })),
         providers: recentProviders,
+        reports: reportsData,
       }
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
       const url = window.URL.createObjectURL(blob)
@@ -36,8 +109,9 @@ export function AdminDashboardPage() {
       a.download = `dashboard-export-${new Date().toISOString().split('T')[0]}.json`
       a.click()
       window.URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error("[v0] Export error:", error)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Export failed"
+      setError(message)
     } finally {
       setIsExporting(false)
     }
@@ -46,45 +120,32 @@ export function AdminDashboardPage() {
   const handleGenerateReport = async () => {
     setIsGenerating(true)
     try {
-      // Simulate report generation
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      const reportData = {
-        title: "Monthly Performance Report",
-        generatedAt: new Date().toLocaleString(),
-        summary: {
-          totalUsers: 1245,
-          activeJobs: 342,
-          completedJobs: 218,
-          revenue: "$45,230",
-          disputes: 3,
+      const response = await fetch("/api/reports", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": "admin",
         },
-        topPerformers: recentProviders.slice(0, 3),
-        metrics: {
-          userGrowth: "+12%",
-          jobCompletion: "89%",
-          customerSatisfaction: "4.7/5",
-          platformHealth: "Excellent",
-        }
+        body: JSON.stringify({
+          scope: "admin",
+          type: "performance",
+        }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        throw new Error(payload?.error || "Report generation failed")
       }
-      const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: 'application/json' })
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `performance-report-${new Date().toISOString().split('T')[0]}.json`
-      a.click()
-      window.URL.revokeObjectURL(url)
-    } catch (error) {
-      console.error("[v0] Report generation error:", error)
+
+      setReportsData((prev) => [payload.data, ...prev])
+      setError(null)
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Report generation failed"
+      setError(message)
     } finally {
       setIsGenerating(false)
     }
   }
-
-  const recentProviders = [
-    { id: 1, name: "Daniel K.", services: 5, rating: 4.8, status: "verified" },
-    { id: 2, name: "Grace M.", services: 3, rating: 4.6, status: "pending" },
-    { id: 3, name: "Robert J.", services: 7, rating: 4.9, status: "verified" },
-  ]
 
   return (
     <div className="space-y-8 pb-8">
@@ -125,6 +186,12 @@ export function AdminDashboardPage() {
           </Button>
         </div>
       </div>
+
+      {error ? (
+        <Card className="p-3 border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30 text-red-700 dark:text-red-300 text-sm">
+          {error}
+        </Card>
+      ) : null}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

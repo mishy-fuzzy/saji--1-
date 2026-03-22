@@ -11,6 +11,7 @@ export async function POST(request: Request) {
     const amount = Number(body?.amount)
     const accountReference = String(body?.accountReference || "SAJI").trim()
     const transactionDesc = String(body?.transactionDesc || "Service payment").trim()
+    const bookingId = body?.bookingId ? String(body.bookingId) : null
 
     if (!phone) {
       return NextResponse.json({ error: "phone is required" }, { status: 400 })
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
       transactionDesc,
     })
 
-    await db.paymentTransaction.create({
+    const transaction = await db.paymentTransaction.create({
       data: {
         provider: "mpesa",
         kind: "stkpush",
@@ -38,10 +39,11 @@ export async function POST(request: Request) {
         status: result?.ResponseCode === "0" ? "PENDING" : "FAILED",
         request: serializePayload(requestBody),
         response: serializePayload(result),
+        bookingId: bookingId,
       },
     })
 
-    return NextResponse.json({ ok: true, data: result })
+    return NextResponse.json({ ok: true, data: result, transactionId: transaction.id })
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to initiate STK push"
 

@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -22,10 +22,151 @@ model PaymentTransaction {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
+  booking    Booking? @relation(fields: [bookingId], references: [id])
+  bookingId  String?
+
   @@index([provider, kind])
   @@index([reference])
   @@index([status])
   @@index([createdAt])
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  name          String?
+  role          String    @default("customer") // admin, agent, customer, provider, secretary, shopkeeper, subadmin
+  image         String?
+  phone         String?
+  isSuspended   Boolean   @default(false)
+  deletedAt     DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  services      Service[]     @relation("ProviderServices")
+  bookings      Booking[]     @relation("CustomerBookings")
+  jobs          Booking[]     @relation("ProviderJobs")
+  wallet        Wallet?
+  messages      Message[]
+  referralsMade Referral[]    @relation("Referrer")
+  referralsGot  Referral?     @relation("Referred")
+
+  customerProfile        Customer?
+  agentProfile           Agent?
+  secretaryProfile       Secretary?
+  serviceProviderProfile ServiceProvider?
+  adminProfile           Admin?
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Agent {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Secretary {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ServiceProvider {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Admin {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Service {
+  id            String    @id @default(cuid())
+  name          String
+  description   String
+  category      String
+  basePrice     Int
+  image         String?
+  providerId    String
+  provider      User      @relation("ProviderServices", fields: [providerId], references: [id])
+  bookings      Booking[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([category])
+}
+
+model Booking {
+  id            String    @id @default(cuid())
+  status        String    @default("pending") // pending, confirmed, active, completed, cancelled
+  amount        Int
+  currency      String    @default("KES")
+  
+  customerId    String
+  customer      User      @relation("CustomerBookings", fields: [customerId], references: [id])
+  
+  providerId    String
+  provider      User      @relation("ProviderJobs", fields: [providerId], references: [id])
+  
+  serviceId     String
+  service       Service   @relation(fields: [serviceId], references: [id])
+  
+  paymentTransactions PaymentTransaction[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status])
+}
+
+model Wallet {
+  id            String    @id @default(cuid())
+  balance       Float     @default(0)
+  currency      String    @default("KES")
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id])
+  updatedAt     DateTime  @updatedAt
+}
+
+model Message {
+  id            String    @id @default(cuid())
+  text          String
+  senderId      String
+  sender        User      @relation(fields: [senderId], references: [id])
+  receiverId    String
+  createdAt     DateTime  @default(now())
+
+  @@index([senderId])
+  @@index([receiverId])
+}
+
+model Referral {
+  id            String    @id @default(cuid())
+  referrerId    String
+  referrer      User      @relation("Referrer", fields: [referrerId], references: [id])
+  referredId    String    @unique
+  referred      User      @relation("Referred", fields: [referredId], references: [id])
+  status        String    @default("pending")
+  reward        Float?
+  createdAt     DateTime  @default(now())
 }
 
 model NotificationLog {

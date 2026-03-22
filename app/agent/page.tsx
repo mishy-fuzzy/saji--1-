@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useLocalization } from "@/lib/hooks/useLocalization"
 import { AlertTriangle, Users, MessageSquare, CheckCircle, TrendingUp, Calendar, Download, Filter, Eye, X } from "lucide-react"
 import { Card } from "@/components/ui/card"
@@ -9,6 +9,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function AgentDashboard() {
   const { currency } = useLocalization()
+  const [agentUsersCount, setAgentUsersCount] = useState(0)
+  const [customerUsersCount, setCustomerUsersCount] = useState(0)
   const [selectedPeriod, setSelectedPeriod] = useState("week")
   const [selectedDispute, setSelectedDispute] = useState<any>(null)
   const [showDisputeModal, setShowDisputeModal] = useState(false)
@@ -19,12 +21,46 @@ export default function AgentDashboard() {
     { id: "DSP-003", provider: "Michael Brown", customer: "Charlie Lee", status: "Resolved", severity: "Low", amount: "KES 2,000", date: "Jan 13", description: "Transaction delay", resolution: "Resolved Successfully" },
   ])
 
-  const stats = [
-    { icon: AlertTriangle, label: "Open Disputes", value: "18", color: "bg-red-100 dark:bg-red-900", trend: "+2" },
-    { icon: Users, label: "Customers Helped", value: "342", color: "bg-blue-100 dark:bg-blue-900", trend: "+45" },
-    { icon: MessageSquare, label: "Pending Queries", value: "12", color: "bg-yellow-100 dark:bg-yellow-900", trend: "-3" },
-    { icon: CheckCircle, label: "Resolved Today", value: "8", color: "bg-green-100 dark:bg-green-900", trend: "+1" },
-  ]
+  const stats = useMemo(() => {
+    const openDisputes = disputes.filter((d) => d.status === "Open").length
+    const inProgress = disputes.filter((d) => d.status === "In Progress").length
+    const resolved = disputes.filter((d) => d.status === "Resolved").length
+
+    return [
+      { icon: AlertTriangle, label: "Open Disputes", value: String(openDisputes), color: "bg-red-100 dark:bg-red-900", trend: "Live" },
+      { icon: Users, label: "Customers Helped", value: String(customerUsersCount), color: "bg-blue-100 dark:bg-blue-900", trend: `${agentUsersCount} users in scope` },
+      { icon: MessageSquare, label: "Pending Queries", value: String(inProgress), color: "bg-yellow-100 dark:bg-yellow-900", trend: "Live" },
+      { icon: CheckCircle, label: "Resolved Today", value: String(resolved), color: "bg-green-100 dark:bg-green-900", trend: "Live" },
+    ]
+  }, [agentUsersCount, customerUsersCount, disputes])
+
+  useEffect(() => {
+    const fetchUsers = async () => {
+      try {
+        const response = await fetch("/api/agent/users", {
+          cache: "no-store",
+          headers: {
+            "x-user-role": "agent",
+          },
+        })
+        const payload = await response.json()
+
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          return
+        }
+
+        const users = payload.data as Array<{ role?: string }>
+        setAgentUsersCount(users.length)
+        setCustomerUsersCount(
+          users.filter((u) => String(u.role || "").toLowerCase() === "customer").length,
+        )
+      } catch {
+        // Keep dashboard usable even if users API is temporarily unavailable.
+      }
+    }
+
+    fetchUsers()
+  }, [])
 
   const performanceMetrics = [
     { label: "Resolution Rate", value: "94%", benchmark: "90%" },
@@ -43,7 +79,6 @@ export default function AgentDashboard() {
   const handleViewDispute = (dispute: any) => {
     setSelectedDispute(dispute)
     setShowDisputeModal(true)
-    console.log("[v0] Viewing dispute:", dispute.id)
   }
 
   const handleExportReport = () => {
@@ -52,10 +87,10 @@ export default function AgentDashboard() {
       agentId: "AGT-001",
       period: selectedPeriod,
       stats: {
-        openDisputes: 18,
-        customersHelped: 342,
-        pendingQueries: 12,
-        resolvedToday: 8,
+        openDisputes: Number(stats[0].value),
+        customersHelped: Number(stats[1].value),
+        pendingQueries: Number(stats[2].value),
+        resolvedToday: Number(stats[3].value),
       },
       performance: performanceMetrics,
       disputes: disputes,
@@ -67,7 +102,6 @@ export default function AgentDashboard() {
     a.download = `agent-report-${new Date().toISOString().split('T')[0]}.json`
     a.click()
     window.URL.revokeObjectURL(url)
-    console.log("[v0] Report exported successfully")
   }
 
   const handleUpdateDisputeStatus = () => {

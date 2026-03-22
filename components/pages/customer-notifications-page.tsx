@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useAuthContext } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -11,7 +11,7 @@ import {
 import Link from "next/link"
 
 interface Notification {
-  id: number
+  id: string
   type: "job" | "message" | "payment" | "system" | "review" | "promo"
   title: string
   message: string
@@ -19,19 +19,6 @@ interface Notification {
   read: boolean
   action?: { label: string; href: string }
 }
-
-const initialNotifications: Notification[] = [
-  { id: 1, type: "job", title: "Provider En Route", message: "Sarah M. is on her way. ETA 12 minutes.", timestamp: "2 min ago", read: false, action: { label: "Track", href: "/customer/jobs" } },
-  { id: 2, type: "message", title: "New Message", message: "John P. sent you a message about plumbing repairs.", timestamp: "15 min ago", read: false, action: { label: "Reply", href: "/customer/messages" } },
-  { id: 3, type: "payment", title: "Payment Confirmed", message: "KES 2,500 for house cleaning has been charged to your wallet.", timestamp: "1 hour ago", read: false, action: { label: "View", href: "/customer/wallet" } },
-  { id: 4, type: "review", title: "Rate Your Service", message: "How was your plumbing service with Andrew O.?", timestamp: "2 hours ago", read: false, action: { label: "Rate Now", href: "/customer/jobs" } },
-  { id: 5, type: "promo", title: "Weekend Special", message: "Get 20% off all cleaning services this weekend.", timestamp: "5 hours ago", read: true },
-  { id: 6, type: "system", title: "Account Verified", message: "Your identity verification is complete.", timestamp: "Yesterday", read: true },
-  { id: 7, type: "job", title: "Job Completed", message: "Your electrical wiring job has been marked as complete.", timestamp: "Yesterday", read: true, action: { label: "Review", href: "/customer/jobs" } },
-  { id: 8, type: "payment", title: "Refund Processed", message: "KES 1,200 has been refunded to your wallet.", timestamp: "2 days ago", read: true, action: { label: "View", href: "/customer/wallet" } },
-  { id: 9, type: "promo", title: "Refer & Earn", message: "Invite friends and earn KES 500 for each referral.", timestamp: "3 days ago", read: true, action: { label: "Refer", href: "/customer/referrals" } },
-  { id: 10, type: "system", title: "Security Alert", message: "A new device was used to log into your account.", timestamp: "4 days ago", read: true },
-]
 
 const typeConfig: Record<string, { icon: typeof Bell; color: string; bg: string }> = {
   job: { icon: Briefcase, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-100 dark:bg-blue-900/30" },
@@ -46,10 +33,62 @@ type FilterType = "all" | "unread" | "job" | "message" | "payment"
 
 export function CustomerNotificationsPage() {
   const { user } = useAuthContext()
-  const [notifications, setNotifications] = useState<Notification[]>(initialNotifications)
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [filter, setFilter] = useState<FilterType>("all")
 
-  const unreadCount = notifications.filter(n => !n.read).length
+  const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications])
+
+  const formatTimestamp = (createdAt: string) => {
+    const date = new Date(createdAt)
+    const diffMs = Date.now() - date.getTime()
+    const minutes = Math.floor(diffMs / 60000)
+    if (minutes < 1) return "Just now"
+    if (minutes < 60) return `${minutes} min ago`
+    const hours = Math.floor(minutes / 60)
+    if (hours < 24) return `${hours} hour${hours > 1 ? "s" : ""} ago`
+    const days = Math.floor(hours / 24)
+    if (days < 7) return `${days} day${days > 1 ? "s" : ""} ago`
+    return date.toLocaleDateString()
+  }
+
+  const loadNotifications = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch("/api/notifications", { cache: "no-store" })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to fetch notifications")
+      }
+
+      const items: Notification[] = Array.isArray(payload?.data)
+        ? payload.data.map((item: any) => ({
+            id: String(item.id),
+            type: ["job", "message", "payment", "system", "review", "promo"].includes(item.type)
+              ? item.type
+              : "system",
+            title: String(item.title || "Notification"),
+            message: String(item.message || ""),
+            timestamp: formatTimestamp(String(item.createdAt || new Date().toISOString())),
+            read: Boolean(item.read),
+            action: item.actionHref ? { label: "Open", href: String(item.actionHref) } : undefined,
+          }))
+        : []
+
+      setNotifications(items)
+    } catch (error) {
+      console.error("Failed to load notifications", error)
+      setNotifications([])
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (user?.id) {
+      loadNotifications()
+    }
+  }, [user?.id])
 
   const filtered = notifications.filter(n => {
     if (filter === "unread") return !n.read
@@ -60,9 +99,28 @@ export function CustomerNotificationsPage() {
   const today = filtered.filter(n => n.timestamp.includes("min") || n.timestamp.includes("hour"))
   const earlier = filtered.filter(n => !n.timestamp.includes("min") && !n.timestamp.includes("hour"))
 
-  const markAsRead = (id: number) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n))
-  const markAllAsRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })))
-  const deleteNotif = (id: number) => setNotifications(prev => prev.filter(n => n.id !== id))
+  const markAsRead = async (id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id }),
+    })
+  }
+
+  const markAllAsRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+    await fetch("/api/notifications", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ markAllRead: true }),
+    })
+  }
+
+  const deleteNotif = async (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+    await fetch(`/api/notifications?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+  }
 
   const filters: { id: FilterType; label: string }[] = [
     { id: "all", label: "All" },
@@ -151,7 +209,11 @@ export function CustomerNotificationsPage() {
         </div>
 
         {/* Grouped Notifications */}
-        {filtered.length > 0 ? (
+        {isLoading ? (
+          <Card className="border-0 shadow-sm p-12 text-center">
+            <p className="text-sm text-muted-foreground">Loading notifications...</p>
+          </Card>
+        ) : filtered.length > 0 ? (
           <div className="space-y-6">
             {today.length > 0 && (
               <div>

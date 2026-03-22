@@ -5,10 +5,18 @@ import { Gift, Copy, Share2, Users, DollarSign, Check, ChevronRight, Star, Clock
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { useAuthContext } from "@/lib/auth-context"
 
 export default function ReferralsPage() {
+  const { user } = useAuthContext()
   const [copied, setCopied] = useState(false)
-  const referralCode = "MIKE-SAJI-2026"
+  const referralPrefix = (user?.name || "provider")
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part.slice(0, 3).toUpperCase())
+    .join("")
+  const referralCode = `${referralPrefix || "SAJI"}-SAJI-2026`
   const referralLink = `https://saji.app/join?ref=${referralCode}`
 
   const referrals = [

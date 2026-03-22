@@ -2,18 +2,29 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { ArrowLeft, Save, User, Mail, MapPin } from "lucide-react"
 import Link from "next/link"
 import { useLocalization } from "@/lib/hooks/useLocalization"
+import { useAuthContext } from "@/lib/auth-context"
 
 export default function MyAccountPage() {
   const { currency } = useLocalization()
+  const { user } = useAuthContext()
+  const defaultNames = useMemo(() => {
+    const fullName = user?.name?.trim() || ""
+    const parts = fullName.split(" ").filter(Boolean)
+    return {
+      firstName: parts[0] || "",
+      lastName: parts.slice(1).join(" ") || "",
+    }
+  }, [user?.name])
+
   const [formData, setFormData] = useState({
-    firstName: "Mike",
-    lastName: "Rodriguez",
-    email: "mike@example.com",
-    phone: "+254 702 123456",
+    firstName: defaultNames.firstName,
+    lastName: defaultNames.lastName,
+    email: user?.email || "",
+    phone: user?.phone || "",
     city: "Nairobi",
     country: "Kenya",
   })

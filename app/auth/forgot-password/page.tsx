@@ -20,13 +20,8 @@ function ForgotPasswordContent() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
-  const [generatedCode, setGeneratedCode] = useState("")
-
-  const generateCode = () => {
-    const code = Math.floor(100000 + Math.random() * 900000).toString()
-    setGeneratedCode(code)
-    console.log("[v0] Password reset code (demo):", code)
-  }
+  const [resetToken, setResetToken] = useState("")
+  const [devCodeHint, setDevCodeHint] = useState("")
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,12 +39,26 @@ function ForgotPasswordContent() {
 
     setIsLoading(true)
 
-    // Simulate sending reset code
-    setTimeout(() => {
-      generateCode()
+    try {
+      const response = await fetch("/api/auth/forgot-password/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to send reset code")
+      }
+
+      setDevCodeHint(String(payload?.devCode || ""))
       setStep("code")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to send reset code"
+      setError(message)
+    } finally {
       setIsLoading(false)
-    }, 1500)
+    }
   }
 
   const handleCodeSubmit = async (e: React.FormEvent) => {
@@ -68,15 +77,26 @@ function ForgotPasswordContent() {
 
     setIsLoading(true)
 
-    // Simulate verifying code
-    setTimeout(() => {
-      if (verificationCode === generatedCode) {
-        setStep("reset")
-      } else {
-        setError("Invalid verification code. Please try again.")
+    try {
+      const response = await fetch("/api/auth/forgot-password/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, code: verificationCode }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok || !payload?.resetToken) {
+        throw new Error(payload?.error || "Invalid verification code")
       }
+
+      setResetToken(payload.resetToken)
+      setStep("reset")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Invalid verification code"
+      setError(message)
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
   }
 
   const handleResetSubmit = async (e: React.FormEvent) => {
@@ -100,11 +120,29 @@ function ForgotPasswordContent() {
 
     setIsLoading(true)
 
-    // Simulate resetting password
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/auth/forgot-password/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          resetToken,
+          newPassword,
+        }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to reset password")
+      }
+
       setStep("success")
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to reset password"
+      setError(message)
+    } finally {
       setIsLoading(false)
-    }, 1500)
+    }
   }
 
   if (step === "success") {
@@ -159,6 +197,12 @@ function ForgotPasswordContent() {
         {error && (
           <div className="mb-6 p-4 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 text-red-700 dark:text-red-400 text-sm">
             {error}
+          </div>
+        )}
+
+        {step === "code" && devCodeHint && (
+          <div className="mb-6 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-900/30 text-blue-700 dark:text-blue-300 text-sm">
+            Dev code: {devCodeHint}
           </div>
         )}
 
