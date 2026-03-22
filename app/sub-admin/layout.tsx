@@ -20,16 +20,22 @@ export default function SubAdminLayout({ children }: { children: React.ReactNode
   const [notifOpen, setNotifOpen] = useState(false)
   const [showMore, setShowMore] = useState(false)
 
+  const normalizedRole = String(user?.role || "")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-")
+  const hasSubAdminAccess = normalizedRole === "sub-admin" || normalizedRole === "subadmin"
+
   useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
-    if (mounted && !isLoading && (!isAuthenticated || user?.role !== "sub-admin")) {
+    if (mounted && !isLoading && (!isAuthenticated || !hasSubAdminAccess)) {
       router.push("/")
     }
-  }, [isAuthenticated, isLoading, user, router, mounted])
+  }, [isAuthenticated, isLoading, hasSubAdminAccess, router, mounted])
 
   if (isLoading || !mounted) return <LoadingScreen />
-  if (!isAuthenticated || user?.role !== "sub-admin") return null
+  if (!isAuthenticated || !hasSubAdminAccess) return null
 
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/sub-admin" },
