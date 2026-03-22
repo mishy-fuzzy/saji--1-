@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
 }
 
 model PaymentTransaction {
@@ -35,6 +36,8 @@ model User {
   id            String    @id @default(cuid())
   email         String    @unique
   passwordHash  String?
+  emailVerified Boolean   @default(false)
+  lastLoginAt   DateTime?
   name          String?
   role          String    @default("customer") // admin, agent, customer, provider, secretary, shopkeeper, subadmin
   image         String?
@@ -57,6 +60,8 @@ model User {
   secretaryProfile       Secretary?
   serviceProviderProfile ServiceProvider?
   adminProfile           Admin?
+
+  @@index([role, isSuspended])
 }
 
 model Customer {
