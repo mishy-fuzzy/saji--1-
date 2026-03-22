@@ -119,22 +119,23 @@ export default function ProviderSidebar() {
             if (item.hasSubmenu) {
               return (
                 <div key={item.href}>
-                  <button
-                    onClick={toggleProfileMenu}
+                  <div
                     className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors ${
                       active
                         ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400"
                         : "hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300"
                     }`}
                   >
-                    <div className="flex items-center gap-3">
+                    <Link href={item.href} onClick={closeMobileMenu} className="flex items-center gap-3 min-w-0 flex-1">
                       <IconComponent className="w-5 h-5" />
                       <span className="font-medium text-sm">{item.label}</span>
-                    </div>
-                    <ChevronDown
-                      className={`w-4 h-4 transition-transform ${expandedMenu === "profile" ? "rotate-180" : ""}`}
-                    />
-                  </button>
+                    </Link>
+                    <button onClick={toggleProfileMenu} className="ml-2 p-1 rounded hover:bg-black/5 dark:hover:bg-white/10" aria-label="Toggle profile submenu">
+                      <ChevronDown
+                        className={`w-4 h-4 transition-transform ${expandedMenu === "profile" ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  </div>
 
                   {expandedMenu === "profile" && (
                     <div className="mt-1 ml-4 pl-4 border-l-2 border-gray-200 dark:border-gray-700 space-y-1">

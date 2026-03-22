@@ -41,6 +41,7 @@ export default function ProviderContentPage() {
   const [postToDelete, setPostToDelete] = useState<string | null>(null)
   const [showFilters, setShowFilters] = useState(false)
   const [showCreatePost, setShowCreatePost] = useState(false)
+  const [editingPostId, setEditingPostId] = useState<string | null>(null)
   const [newPostCaption, setNewPostCaption] = useState("")
   const [newPostVisibility, setNewPostVisibility] = useState<"public" | "followers" | "private">("public")
   const [newPostType, setNewPostType] = useState<"image" | "video" | "carousel">("image")
@@ -82,7 +83,7 @@ export default function ProviderContentPage() {
       status: "published",
       visibility: "public",
       isPinned: false,
-      media: ["https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800&h=600&fit=crop"]
+      media: ["https://samplelib.com/lib/preview/mp4/sample-5s.mp4"]
     },
     {
       id: "3",
@@ -137,7 +138,7 @@ export default function ProviderContentPage() {
       status: "draft",
       visibility: "private",
       isPinned: false,
-      media: ["https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&h=600&fit=crop"]
+      media: ["https://samplelib.com/lib/preview/mp4/sample-10s.mp4"]
     },
     {
       id: "6",
@@ -217,10 +218,40 @@ export default function ProviderContentPage() {
 
   const handleCreatePost = () => {
     if (newPostCaption.trim()) {
+      const mediaByType =
+        newPostType === "video"
+          ? ["https://samplelib.com/lib/preview/mp4/sample-5s.mp4"]
+          : ["https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&h=600&fit=crop"]
+
+      if (editingPostId) {
+        setPosts(posts.map((post) =>
+          post.id === editingPostId
+            ? {
+                ...post,
+                type: newPostType,
+                caption: newPostCaption,
+                visibility: newPostVisibility,
+                media: mediaByType,
+                thumbnail:
+                  newPostType === "video"
+                    ? "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&h=300&fit=crop"
+                    : post.thumbnail,
+              }
+            : post,
+        ))
+        setShowCreatePost(false)
+        setEditingPostId(null)
+        setNewPostCaption("")
+        return
+      }
+
       const newPost: Post = {
         id: (posts.length + 1).toString(),
         type: newPostType,
-        thumbnail: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=300&fit=crop",
+        thumbnail:
+          newPostType === "video"
+            ? "https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&h=300&fit=crop"
+            : "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=300&fit=crop",
         caption: newPostCaption,
         createdAt: new Date().toISOString(),
         views: 0,
@@ -232,13 +263,21 @@ export default function ProviderContentPage() {
         status: "published",
         visibility: newPostVisibility,
         isPinned: false,
-        media: ["https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800&h=600&fit=crop"]
+        media: mediaByType,
       }
       setPosts([newPost, ...posts])
       setShowCreatePost(false)
       setNewPostCaption("")
-      alert("Post created successfully!")
+      setEditingPostId(null)
     }
+  }
+
+  const handleEditPost = (post: Post) => {
+    setEditingPostId(post.id)
+    setNewPostCaption(post.caption)
+    setNewPostType(post.type)
+    setNewPostVisibility(post.visibility)
+    setShowCreatePost(true)
   }
 
   // Sort posts - pinned posts first
@@ -378,7 +417,7 @@ export default function ProviderContentPage() {
           <ImageIcon className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-foreground mb-2">No posts found</h3>
           <p className="text-muted-foreground mb-4">Try adjusting your filters or create a new post</p>
-          <Button>Create New Post</Button>
+          <Button onClick={() => setShowCreatePost(true)}>Create New Post</Button>
         </Card>
       ) : viewMode === "grid" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -466,7 +505,10 @@ export default function ProviderContentPage() {
                       >
                         <BarChart3 className="w-4 h-4" /> View Analytics
                       </button>
-                      <button className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors">
+                      <button
+                        onClick={() => handleEditPost(post)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
+                      >
                         <Edit className="w-4 h-4" /> Edit Post
                       </button>
                       <button 
@@ -579,7 +621,7 @@ export default function ProviderContentPage() {
                   <Button variant="ghost" size="sm" onClick={() => setSelectedPost(post)}>
                     <BarChart3 className="w-4 h-4" />
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" onClick={() => handleEditPost(post)}>
                     <Edit className="w-4 h-4" />
                   </Button>
                   <Button 
@@ -609,19 +651,22 @@ export default function ProviderContentPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Media Preview */}
                 <div className="space-y-4">
-                  <div className="relative aspect-video rounded-lg overflow-hidden">
-                    <NextImage 
-                      src={selectedPost.media[0] || "/placeholder.svg"} 
-                      alt="" 
-                      fill 
-                      className="object-cover"
-                    />
-                    {selectedPost.type === "video" && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                        <button className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center hover:scale-110 transition-transform">
-                          <Play className="w-8 h-8 text-gray-900 fill-gray-900 ml-1" />
-                        </button>
-                      </div>
+                  <div className="relative aspect-video rounded-lg overflow-hidden bg-black">
+                    {selectedPost.type === "video" ? (
+                      <video
+                        controls
+                        playsInline
+                        className="h-full w-full object-cover"
+                        poster={selectedPost.thumbnail || "/placeholder.svg"}
+                        src={selectedPost.media[0]}
+                      />
+                    ) : (
+                      <NextImage 
+                        src={selectedPost.media[0] || "/placeholder.svg"} 
+                        alt="" 
+                        fill 
+                        className="object-cover"
+                      />
                     )}
                   </div>
                   <p className="text-sm text-foreground">{selectedPost.caption}</p>
@@ -693,7 +738,7 @@ export default function ProviderContentPage() {
                       <Pin className="w-4 h-4 mr-2" />
                       {selectedPost.isPinned ? "Unpin" : "Pin"}
                     </Button>
-                    <Button variant="outline" className="flex-1 bg-transparent">
+                    <Button variant="outline" className="flex-1 bg-transparent" onClick={() => handleEditPost(selectedPost)}>
                       <Edit className="w-4 h-4 mr-2" />
                       Edit
                     </Button>
@@ -738,7 +783,7 @@ export default function ProviderContentPage() {
       <Dialog open={showCreatePost} onOpenChange={setShowCreatePost}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Create New Post</DialogTitle>
+            <DialogTitle>{editingPostId ? "Edit Post" : "Create New Post"}</DialogTitle>
           </DialogHeader>
           
           <div className="space-y-4">
@@ -794,7 +839,11 @@ export default function ProviderContentPage() {
             <div className="flex gap-3 pt-4">
               <Button 
                 variant="outline" 
-                onClick={() => setShowCreatePost(false)}
+                onClick={() => {
+                  setShowCreatePost(false)
+                  setEditingPostId(null)
+                  setNewPostCaption("")
+                }}
                 className="flex-1 bg-transparent"
               >
                 Cancel
@@ -803,7 +852,7 @@ export default function ProviderContentPage() {
                 onClick={handleCreatePost}
                 className="flex-1 bg-primary hover:bg-primary/90"
               >
-                Create Post
+                {editingPostId ? "Save Changes" : "Create Post"}
               </Button>
             </div>
           </div>

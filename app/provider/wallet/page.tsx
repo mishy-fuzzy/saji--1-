@@ -18,6 +18,7 @@ export default function ProviderWalletPage() {
   const [showWithdraw, setShowWithdraw] = useState(false)
   const [withdrawAmount, setWithdrawAmount] = useState("")
   const [withdrawMethod, setWithdrawMethod] = useState<string | null>("mpesa")
+  const [mpesaNumber, setMpesaNumber] = useState("0712000045")
   const [withdrawError, setWithdrawError] = useState("")
   const [walletData, setWalletData] = useState({
     balance: 45600,
@@ -120,6 +121,15 @@ export default function ProviderWalletPage() {
       setWithdrawError("Please select a withdrawal method")
       return
     }
+
+    if (withdrawMethod === "mpesa") {
+      const normalized = mpesaNumber.replace(/\s+/g, "")
+      const isValid = /^(?:\+254|254|0)?7\d{8}$/.test(normalized)
+      if (!isValid) {
+        setWithdrawError("Enter a valid M-Pesa number (e.g. 0712345678)")
+        return
+      }
+    }
     
     // Process withdrawal - deduct from available and add transaction
     const methodName = withdrawMethods.find(m => m.id === withdrawMethod)?.name || "M-Pesa"
@@ -135,7 +145,7 @@ export default function ProviderWalletPage() {
       id: transactionsList.length + 1,
       type: "debit",
       title: `Withdrawal to ${methodName}`,
-      client: withdrawMethod === "mpesa" ? "0712****45" : "KCB ****7890",
+      client: withdrawMethod === "mpesa" ? mpesaNumber : "KCB ****7890",
       amount: amount,
       date: new Date().toLocaleString(),
       status: "completed"
@@ -145,7 +155,7 @@ export default function ProviderWalletPage() {
     
     setShowWithdraw(false)
     setWithdrawAmount("")
-    alert(`Withdrawal of KES ${amount.toLocaleString()} initiated!\nMethod: ${methodName}\nYou will receive the funds within 24 hours.`)
+    alert(`Withdrawal of KES ${amount.toLocaleString()} initiated!\nMethod: ${methodName}${withdrawMethod === "mpesa" ? `\nM-Pesa Number: ${mpesaNumber}` : ""}\nYou will receive the funds within 24 hours.`)
   }
 
   const handleDownloadStatement = () => {
@@ -524,6 +534,19 @@ export default function ProviderWalletPage() {
                 })}
               </div>
             </div>
+
+            {withdrawMethod === "mpesa" && (
+              <div>
+                <Label>M-Pesa Number</Label>
+                <Input
+                  type="tel"
+                  placeholder="0712345678"
+                  value={mpesaNumber}
+                  onChange={(e) => setMpesaNumber(e.target.value)}
+                  className="mt-1.5"
+                />
+              </div>
+            )}
 
             {withdrawError && (
               <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-sm flex items-start gap-2">
