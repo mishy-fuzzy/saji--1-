@@ -27,20 +27,10 @@ async function logSignupEvent(data: {
   }
 }
 
-const ALLOWED_ROLES = new Set([
-  "customer",
-  "provider",
-  "admin",
-  "agent",
-  "secretary",
-  "shopkeeper",
-  "sub-admin",
-  "subadmin",
-])
+const PUBLIC_SIGNUP_ROLES = new Set(["customer", "provider", "shopkeeper"])
 
 function normalizeRole(roleRaw: string): string {
-  if (roleRaw === "sub-admin") return "subadmin"
-  return ALLOWED_ROLES.has(roleRaw) ? roleRaw : "customer"
+  return PUBLIC_SIGNUP_ROLES.has(roleRaw) ? roleRaw : "customer"
 }
 
 async function createRoleProfile(tx: any, role: string, userId: string) {
@@ -64,9 +54,7 @@ async function createRoleProfile(tx: any, role: string, userId: string) {
     return
   }
 
-  if (role === "admin") {
-    await tx.admin.create({ data: { userId } })
-  }
+  // shopkeeper currently uses user role only and no dedicated profile table.
 }
 
 export async function POST(request: Request) {
