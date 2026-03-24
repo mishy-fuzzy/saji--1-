@@ -25,9 +25,29 @@ function getRequiredEnv(name: string): string {
   return value
 }
 
+export function resolveGoogleRedirectUri(origin?: string): string {
+  const explicit = process.env.GOOGLE_REDIRECT_URI
+  if (explicit) return explicit
+
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Missing GOOGLE_REDIRECT_URI environment variable in production")
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  if (appUrl) {
+    return `${appUrl.replace(/\/$/, "")}/api/auth/google/callback`
+  }
+
+  if (origin) {
+    return `${origin.replace(/\/$/, "")}/api/auth/google/callback`
+  }
+
+  throw new Error("Missing GOOGLE_REDIRECT_URI environment variable")
+}
+
 export function buildGoogleAuthUrl(state: string) {
   const clientId = getRequiredEnv("GOOGLE_CLIENT_ID")
-  const redirectUri = getRequiredEnv("GOOGLE_REDIRECT_URI")
+  const redirectUri = resolveGoogleRedirectUri()
 
   const params = new URLSearchParams({
     client_id: clientId,
@@ -46,7 +66,7 @@ export function buildGoogleAuthUrl(state: string) {
 export async function exchangeCodeForToken(code: string) {
   const clientId = getRequiredEnv("GOOGLE_CLIENT_ID")
   const clientSecret = getRequiredEnv("GOOGLE_CLIENT_SECRET")
-  const redirectUri = getRequiredEnv("GOOGLE_REDIRECT_URI")
+  const redirectUri = resolveGoogleRedirectUri()
 
   const body = new URLSearchParams({
     code,

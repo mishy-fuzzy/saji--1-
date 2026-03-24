@@ -5,25 +5,11 @@ import { Button } from "@/components/ui/button"
 import { BarChart3, TrendingUp, Award, Users } from "lucide-react"
 
 export default function AgentStatsPage() {
-  const stats = [
-    { label: "Total Cases Handled", value: "1,247", icon: Users, color: "bg-blue-100 dark:bg-blue-900/30", trend: "+89 this month" },
-    { label: "Average Rating", value: "4.8/5", icon: Award, color: "bg-yellow-100 dark:bg-yellow-900/30", trend: "Excellent" },
-    { label: "Resolution Rate", value: "96%", icon: TrendingUp, color: "bg-green-100 dark:bg-green-900/30", trend: "+2% vs last month" },
-    { label: "Customer Satisfaction", value: "94%", icon: Users, color: "bg-purple-100 dark:bg-purple-900/30", trend: "Top performer" },
-  ]
+  const stats: Array<{ label: string; value: string; icon: typeof Users; color: string; trend: string }> = []
 
-  const monthlyStats = [
-    { month: "Jan", cases: 127, resolved: 122, rating: 4.8 },
-    { month: "Dec", cases: 108, resolved: 104, rating: 4.7 },
-    { month: "Nov", cases: 119, resolved: 114, rating: 4.8 },
-    { month: "Oct", cases: 101, resolved: 97, rating: 4.6 },
-  ]
+  const monthlyStats: Array<{ month: string; cases: number; resolved: number; rating: number }> = []
 
-  const topMetrics = [
-    { title: "Fastest Response Time", value: "1.2h", benchmark: "2.3h avg" },
-    { title: "Highest Resolution", value: "98%", benchmark: "96% avg" },
-    { title: "Customer Repeat Rate", value: "87%", benchmark: "75% avg" },
-  ]
+  const topMetrics: Array<{ title: string; value: string; benchmark: string }> = []
 
   return (
     <div className="space-y-8 pb-8">
@@ -50,6 +36,11 @@ export default function AgentStatsPage() {
             </Card>
           )
         })}
+        {stats.length === 0 && (
+          <Card className="p-6 md:col-span-2 lg:col-span-4">
+            <p className="text-sm text-gray-500 dark:text-gray-400">No statistics available.</p>
+          </Card>
+        )}
       </div>
 
       {/* Top Metrics */}
@@ -64,6 +55,11 @@ export default function AgentStatsPage() {
             <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-300 rounded-full"></div>
           </Card>
         ))}
+        {topMetrics.length === 0 && (
+          <Card className="p-6 md:col-span-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">No top metrics available.</p>
+          </Card>
+        )}
       </div>
 
       {/* Monthly Stats */}
@@ -97,25 +93,22 @@ export default function AgentStatsPage() {
                   </td>
                 </tr>
               ))}
+              {monthlyStats.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No monthly performance data available.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </Card>
 
       {/* Achievement Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="p-6 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20">
-          <p className="text-sm text-muted-foreground mb-2">Top Performer Badge</p>
-          <p className="text-xl font-bold text-gray-900 dark:text-white">Earned in 5 consecutive months</p>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">Keep up the exceptional performance!</p>
-        </Card>
-
-        <Card className="p-6 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20">
-          <p className="text-sm text-muted-foreground mb-2">Excellence Award</p>
-          <p className="text-xl font-bold text-gray-900 dark:text-white">Customer Satisfaction {String.fromCharCode(62)}95%</p>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">You are in the top 10% of agents!</p>
-        </Card>
-      </div>
+      <Card className="p-6">
+        <p className="text-sm text-gray-500 dark:text-gray-400">No achievement highlights available.</p>
+      </Card>
     </div>
   )
 }

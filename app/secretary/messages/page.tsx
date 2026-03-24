@@ -1,274 +1,163 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Search, Send, Paperclip, Phone, MoreVertical, ArrowLeft, CheckCheck } from "lucide-react"
+import { Search, Send, ArrowLeft } from "lucide-react"
 
-type ThreadItem = {
-  sender: string
+type Contact = {
+  id: string
+  name: string
+  role: string
+}
+
+type ConversationItem = {
+  peerId: string
+  lastMessage: string
+  createdAt: string
+  unread: number
+  peer: Contact
+}
+
+type ChatMessage = {
+  id: string
   text: string
-  time: string
-  type: "sent" | "received"
+  senderId: string
+  receiverId: string
+  createdAt: string
 }
-
-type ExternalInboxItem = {
-  id: number
-  from: string
-  message: string
-  time: string
-  unread: boolean
-  replies: number
-  category: string
-  thread: ThreadItem[]
-}
-
-const ADMIN_INBOX_STORAGE_KEY = "saji-admin-inbox"
-const SECRETARY_FROM = "Secretary"
-
-function readExternalInbox(): ExternalInboxItem[] {
-  if (typeof window === "undefined") return []
-  try {
-    const raw = window.localStorage.getItem(ADMIN_INBOX_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as ExternalInboxItem[]) : []
-  } catch {
-    return []
-  }
-}
-
-function writeExternalInbox(items: ExternalInboxItem[]) {
-  if (typeof window === "undefined") return
-  try {
-    window.localStorage.setItem(ADMIN_INBOX_STORAGE_KEY, JSON.stringify(items))
-  } catch {
-    // Keep UI responsive even if storage write fails.
-  }
-}
-
-const conversations = [
-  { id: 1, name: "Agent - Kevin Otieno", role: "Agent", lastMsg: "The reconciliation for batch #4521 is complete", time: "2m ago", unread: 2, avatar: "KO" },
-  { id: 2, name: "Admin - Sarah Njeri", role: "Admin", lastMsg: "Please approve the pending payouts before 5pm", time: "15m ago", unread: 1, avatar: "SN" },
-  { id: 3, name: "Provider - James Mwangi", role: "Provider", lastMsg: "My withdrawal has been pending for 3 days", time: "1h ago", unread: 0, avatar: "JM" },
-  { id: 4, name: "Shopkeeper - Nairobi Fresh", role: "Shopkeeper", lastMsg: "Invoice #1089 was double charged", time: "3h ago", unread: 0, avatar: "NF" },
-  { id: 5, name: "Sub-Admin - Peter K.", role: "Sub-Admin", lastMsg: "Forwarding the tax documents now", time: "1d ago", unread: 0, avatar: "PK" },
-]
-
-const chatMessages = [
-  { id: 1, sender: "them", text: "Hi, the reconciliation for batch #4521 has some discrepancies", time: "10:30 AM" },
-  { id: 2, sender: "me", text: "Let me check. Which entries are mismatched?", time: "10:32 AM" },
-  { id: 3, sender: "them", text: "Transactions #8821 and #8825 show different amounts on the bank statement vs our records", time: "10:33 AM" },
-  { id: 4, sender: "me", text: "I see it. Looks like a partial refund was processed on #8825. Let me verify with the payment gateway.", time: "10:35 AM" },
-  { id: 5, sender: "them", text: "The reconciliation for batch #4521 is complete", time: "10:40 AM" },
-]
 
 export default function SecretaryMessagesPage() {
-  const [selectedChat, setSelectedChat] = useState<number | null>(null)
-  const [message, setMessage] = useState("")
+  const [contacts, setContacts] = useState<Contact[]>([])
+  const [conversations, setConversations] = useState<ConversationItem[]>([])
+  const [selectedPeerId, setSelectedPeerId] = useState<string | null>(null)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [search, setSearch] = useState("")
-  const [adminThread, setAdminThread] = useState<ThreadItem[]>(
-    chatMessages.map((msg) => ({
-      sender: msg.sender === "me" ? SECRETARY_FROM : "Admin",
-      text: msg.text,
-      time: msg.time,
-      type: msg.sender === "me" ? "received" : "sent",
-    })),
-  )
-  const [conversationState, setConversationState] = useState(conversations)
-  const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [localMessagesByConversation, setLocalMessagesByConversation] = useState<Record<number, typeof chatMessages>>(() =>
-    Object.fromEntries(conversations.map((conv) => [conv.id, [...chatMessages]])),
-  )
+  const [message, setMessage] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState(false)
+  const [error, setError] = useState("")
 
-  const selected = conversationState.find(c => c.id === selectedChat)
+  async function loadConversations() {
+    const response = await fetch("/api/messages", { cache: "no-store" })
+    const payload = await response.json()
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || "Failed to load conversations")
+    }
+    const rows = Array.isArray(payload.data) ? payload.data : []
+    setConversations(rows)
+    if (!selectedPeerId && rows.length > 0) {
+      setSelectedPeerId(rows[0].peerId)
+    }
+  }
+
+  async function loadContacts() {
+    const response = await fetch("/api/secretary/users", { cache: "no-store" })
+    const payload = await response.json()
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || "Failed to load contacts")
+    }
+
+    const rows = Array.isArray(payload.data) ? payload.data : []
+    const normalized = rows.map((row: any) => ({
+      id: String(row.id),
+      name: String(row.name || "User"),
+      role: String(row.role || "User"),
+    }))
+    setContacts(normalized)
+  }
+
+  async function loadThread(peerId: string) {
+    const response = await fetch(`/api/messages?withUserId=${encodeURIComponent(peerId)}`, { cache: "no-store" })
+    const payload = await response.json()
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || "Failed to load messages")
+    }
+    setMessages(Array.isArray(payload.data) ? payload.data : [])
+  }
 
   useEffect(() => {
-    const syncSecretaryThread = () => {
-      const inbox = readExternalInbox()
-      const secretaryEntry = inbox.find((item) => item.from === SECRETARY_FROM)
-      if (!secretaryEntry) return
+    let mounted = true
 
-      const thread = Array.isArray(secretaryEntry.thread) ? secretaryEntry.thread : []
-      setAdminThread(thread)
-
-      setConversationState((prev) =>
-        prev.map((conv) =>
-          conv.role === "Admin"
-            ? {
-                ...conv,
-                lastMsg: secretaryEntry.message || conv.lastMsg,
-                time: secretaryEntry.time || conv.time,
-              }
-            : conv,
-        ),
-      )
+    const bootstrap = async () => {
+      setLoading(true)
+      setError("")
+      try {
+        await Promise.all([loadContacts(), loadConversations()])
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Failed to load messages"
+        if (mounted) setError(message)
+      } finally {
+        if (mounted) setLoading(false)
+      }
     }
 
-    syncSecretaryThread()
-    window.addEventListener("storage", syncSecretaryThread)
-    return () => window.removeEventListener("storage", syncSecretaryThread)
+    bootstrap()
+    return () => {
+      mounted = false
+    }
   }, [])
 
-  const currentMessages =
-    selected?.role === "Admin"
-      ? adminThread.map((msg, idx) => ({
-          id: idx + 1,
-          sender: msg.sender === SECRETARY_FROM ? "me" : "them",
-          text: msg.text,
-          time: msg.time,
-        }))
-      : selected
-        ? localMessagesByConversation[selected.id] || []
-        : []
+  useEffect(() => {
+    if (!selectedPeerId) return
+    loadThread(selectedPeerId).catch((err) => {
+      const message = err instanceof Error ? err.message : "Failed to load thread"
+      setError(message)
+    })
+  }, [selectedPeerId])
 
-  const getAutoReply = (role: string) => {
-    if (role === "Provider") return "Received. I will share an update with Admin shortly."
-    if (role === "Shopkeeper") return "Thanks. Please share the invoice reference and I will verify."
-    if (role === "Agent") return "Noted. I will coordinate and get back to you shortly."
-    if (role === "Sub-Admin") return "Thanks for forwarding this, I am checking it now."
-    return "Thanks, message received."
-  }
+  const conversationRows = useMemo(() => {
+    const byPeerId = new Map(conversations.map((item) => [item.peerId, item]))
+    const merged = contacts.map((contact) => {
+      const conv = byPeerId.get(contact.id)
+      return {
+        peerId: contact.id,
+        peer: contact,
+        lastMessage: conv?.lastMessage || "No messages yet",
+        createdAt: conv?.createdAt || "",
+        unread: conv?.unread || 0,
+      }
+    })
 
-  const handleSend = () => {
-    if (!message.trim() || !selected) return
+    return merged
+      .filter((item) => item.peer.name.toLowerCase().includes(search.toLowerCase()))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+  }, [contacts, conversations, search])
 
-    const outboundText = message
-    const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  const selectedPeer = conversationRows.find((item) => item.peerId === selectedPeerId)?.peer || contacts.find((c) => c.id === selectedPeerId)
 
-    if (selected.role !== "Admin") {
-      setLocalMessagesByConversation((prev) => {
-        const current = prev[selected.id] || []
-        return {
-          ...prev,
-          [selected.id]: [...current, { id: current.length + 1, sender: "me", text: outboundText, time: now }],
-        }
+  const handleSend = async () => {
+    const text = message.trim()
+    if (!text || !selectedPeerId) return
+
+    setSending(true)
+    setError("")
+    try {
+      const response = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiverId: selectedPeerId, text }),
       })
 
-      setConversationState((prev) =>
-        prev.map((conv) =>
-          conv.id === selected.id
-            ? {
-                ...conv,
-                lastMsg: outboundText,
-                time: "Just now",
-              }
-            : conv,
-        ),
-      )
-
-      const autoReply = getAutoReply(selected.role)
-      const selectedId = selected.id
-      setTimeout(() => {
-        const replyTime = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-        setLocalMessagesByConversation((prev) => {
-          const current = prev[selectedId] || []
-          return {
-            ...prev,
-            [selectedId]: [...current, { id: current.length + 1, sender: "them", text: autoReply, time: replyTime }],
-          }
-        })
-
-        setConversationState((prev) =>
-          prev.map((conv) =>
-            conv.id === selectedId
-              ? {
-                  ...conv,
-                  lastMsg: autoReply,
-                  time: "Just now",
-                }
-              : conv,
-          ),
-        )
-      }, 1200)
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to send message")
+      }
 
       setMessage("")
-      return
+      await Promise.all([loadThread(selectedPeerId), loadConversations()])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to send message"
+      setError(message)
+    } finally {
+      setSending(false)
     }
-
-    const outgoingThreadItem: ThreadItem = {
-      sender: SECRETARY_FROM,
-      text: outboundText,
-      time: now,
-      type: "received",
-    }
-
-    const nextThread = [...adminThread, outgoingThreadItem]
-    setAdminThread(nextThread)
-
-    const inbox = readExternalInbox()
-    const targetIndex = inbox.findIndex((item) => item.from === SECRETARY_FROM)
-    const nextInbox = [...inbox]
-
-    if (targetIndex >= 0) {
-      const current = nextInbox[targetIndex]
-      nextInbox[targetIndex] = {
-        ...current,
-        message: outboundText,
-        time: "Just now",
-        unread: true,
-        replies: (current.replies || 0) + 1,
-        category: current.category || "Internal",
-        thread: nextThread,
-      }
-    } else {
-      nextInbox.unshift({
-        id: Date.now(),
-        from: SECRETARY_FROM,
-        message: outboundText,
-        time: "Just now",
-        unread: true,
-        replies: 1,
-        category: "Internal",
-        thread: nextThread,
-      })
-    }
-
-    writeExternalInbox(nextInbox)
-
-    setConversationState((prev) =>
-      prev.map((conv) =>
-        conv.role === "Admin"
-          ? {
-              ...conv,
-              lastMsg: outboundText,
-              time: "Just now",
-            }
-          : conv,
-      ),
-    )
-
-    setMessage("")
-  }
-
-  const handleCall = () => {
-    if (!selected) return
-    alert(`Calling ${selected.name}...`)
-  }
-
-  const handleConversationOptions = () => {
-    if (!selected) return
-    alert(`More options for ${selected.name} will be available here.`)
-  }
-
-  const handleAttachmentClick = () => {
-    fileInputRef.current?.click()
-  }
-
-  const handleAttachmentSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      const fileMsg = `Attached file: ${file.name}`
-      setMessage((prev) => (prev ? `${prev} ${fileMsg}` : fileMsg))
-    }
-    event.target.value = ""
   }
 
   return (
     <div className="h-[calc(100vh-8rem)] lg:h-[calc(100vh-5rem)]">
-      <div className="flex h-full rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-        {/* Conversations List */}
-        <div className={`w-full lg:w-80 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col ${selectedChat ? "hidden lg:flex" : "flex"}`}>
+      <Card className="flex h-full rounded-xl overflow-hidden border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+        <div className={`w-full lg:w-80 flex-shrink-0 border-r border-gray-200 dark:border-gray-700 flex flex-col ${selectedPeerId ? "hidden lg:flex" : "flex"}`}>
           <div className="p-3 border-b border-gray-100 dark:border-gray-700">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-2">Messages</h2>
             <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2">
@@ -277,77 +166,64 @@ export default function SecretaryMessagesPage() {
             </div>
           </div>
           <div className="flex-1 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
-            {conversationState.filter(c => c.name.toLowerCase().includes(search.toLowerCase())).map(conv => (
-              <button key={conv.id} onClick={() => setSelectedChat(conv.id)} className={`w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${selectedChat === conv.id ? "bg-blue-50 dark:bg-blue-900/20" : ""}`}>
-                <div className="flex items-start gap-2.5">
-                  <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">{conv.avatar}</div>
+            {conversationRows.map(conv => (
+              <button key={conv.peerId} onClick={() => setSelectedPeerId(conv.peerId)} className={`w-full text-left px-3 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors ${selectedPeerId === conv.peerId ? "bg-blue-50 dark:bg-blue-900/20" : ""}`}>
+                <div className="flex items-start gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-semibold flex-shrink-0">{conv.peer.name.split(" ").map(p => p[0]).join("").slice(0,2)}</div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{conv.name}</p>
-                      <span className="text-[10px] text-gray-400 flex-shrink-0 ml-2">{conv.time}</span>
+                    <div className="flex items-center justify-between mb-0.5">
+                      <p className="font-medium text-sm text-gray-900 dark:text-white truncate">{conv.peer.name}</p>
+                      <span className="text-[10px] text-gray-400">{conv.createdAt ? new Date(conv.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}</span>
                     </div>
-                    <div className="flex items-center justify-between mt-0.5">
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{conv.lastMsg}</p>
-                      {conv.unread > 0 && <span className="w-4 h-4 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center flex-shrink-0 ml-2">{conv.unread}</span>}
-                    </div>
-                    <span className={`inline-block mt-1 text-[10px] px-1.5 py-0.5 rounded font-medium ${conv.role === "Admin" ? "bg-red-100 dark:bg-red-900/30 text-red-600" : conv.role === "Agent" ? "bg-amber-100 dark:bg-amber-900/30 text-amber-600" : conv.role === "Provider" ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600" : conv.role === "Sub-Admin" ? "bg-purple-100 dark:bg-purple-900/30 text-purple-600" : "bg-blue-100 dark:bg-blue-900/30 text-blue-600"}`}>{conv.role}</span>
+                    <p className="text-xs text-gray-500 truncate">{conv.lastMessage}</p>
                   </div>
+                  {conv.unread > 0 ? <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] flex items-center justify-center font-bold">{conv.unread}</span> : null}
                 </div>
               </button>
             ))}
+            {!loading && conversationRows.length === 0 && <p className="p-4 text-sm text-gray-500">No conversations found.</p>}
           </div>
         </div>
 
-        {/* Chat Area */}
-        <div className={`flex-1 flex flex-col ${selectedChat ? "flex" : "hidden lg:flex"}`}>
-          {selected ? (
+        <div className={`flex-1 flex flex-col ${selectedPeerId ? "flex" : "hidden lg:flex"}`}>
+          {selectedPeer ? (
             <>
-              <div className="p-3 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
-                <button onClick={() => setSelectedChat(null)} className="lg:hidden text-gray-600 dark:text-gray-300"><ArrowLeft size={20} /></button>
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">{selected.avatar}</div>
+              <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3">
+                <button onClick={() => setSelectedPeerId(null)} className="lg:hidden text-gray-600 dark:text-gray-300"><ArrowLeft size={20} /></button>
+                <div className="w-9 h-9 rounded-full bg-blue-600 flex items-center justify-center text-white font-semibold text-xs">{selectedPeer.name.split(" ").map(p => p[0]).join("").slice(0,2)}</div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{selected.name}</p>
-                  <p className="text-[11px] text-emerald-500">Online</p>
+                  <p className="font-medium text-gray-900 dark:text-white text-sm truncate">{selectedPeer.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{selectedPeer.role}</p>
                 </div>
-                <button onClick={handleCall} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500"><Phone size={18} /></button>
-                <button onClick={handleConversationOptions} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500"><MoreVertical size={18} /></button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                {currentMessages.map(msg => (
-                  <div key={msg.id} className={`flex ${msg.sender === "me" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[80%] lg:max-w-[65%] px-3 py-2 rounded-2xl ${msg.sender === "me" ? "bg-blue-600 text-white rounded-br-sm" : "bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white rounded-bl-sm"}`}>
-                      <p className="text-sm leading-relaxed">{msg.text}</p>
-                      <div className={`flex items-center justify-end gap-1 mt-1 ${msg.sender === "me" ? "text-blue-200" : "text-gray-400"}`}>
-                        <span className="text-[10px]">{msg.time}</span>
-                        {msg.sender === "me" && <CheckCheck size={12} />}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50/50 dark:bg-gray-900/20">
+                {messages.map(m => {
+                  const incoming = m.senderId === selectedPeerId
+                  return (
+                    <div key={m.id} className={`flex ${incoming ? "justify-start" : "justify-end"}`}>
+                      <div className={`max-w-[80%] rounded-xl px-3 py-2 text-sm ${incoming ? "bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-gray-100" : "bg-blue-600 text-white"}`}>
+                        <p className="whitespace-pre-wrap break-words">{m.text}</p>
+                        <p className={`text-[10px] mt-1 ${incoming ? "text-gray-400" : "text-blue-100"}`}>{new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</p>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
+                {messages.length === 0 && <p className="text-sm text-gray-500">No messages yet.</p>}
               </div>
 
-              <div className="p-3 border-t border-gray-200 dark:border-gray-700">
-                <div className="flex items-center gap-2">
-                  <button onClick={handleAttachmentClick} className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"><Paperclip size={18} /></button>
-                  <input ref={fileInputRef} type="file" className="hidden" onChange={handleAttachmentSelected} />
-                  <input value={message} onChange={e => setMessage(e.target.value)} placeholder="Type a message..." className="flex-1 bg-gray-100 dark:bg-gray-700 text-sm rounded-full px-4 py-2.5 outline-none text-gray-900 dark:text-white placeholder:text-gray-400" onKeyDown={e => { if (e.key === "Enter") handleSend() }} />
-                  <Button size="sm" className="rounded-full w-9 h-9 p-0 bg-blue-600 hover:bg-blue-700" onClick={handleSend}><Send size={16} /></Button>
-                </div>
+              <div className="p-3 border-t border-gray-200 dark:border-gray-700 flex items-center gap-2">
+                <input value={message} onChange={e => setMessage(e.target.value)} placeholder="Type a message..." className="flex-1 bg-gray-100 dark:bg-gray-700 text-sm rounded-full px-4 py-2.5 outline-none text-gray-900 dark:text-white placeholder:text-gray-400" onKeyDown={e => { if (e.key === "Enter") handleSend() }} />
+                <Button size="sm" className="rounded-full w-9 h-9 p-0 bg-blue-600 hover:bg-blue-700" onClick={handleSend} disabled={sending}><Send size={16} /></Button>
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-16 h-16 rounded-full bg-gray-100 dark:bg-gray-700 flex items-center justify-center mx-auto mb-3">
-                  <Search size={24} className="text-gray-400" />
-                </div>
-                <p className="text-gray-500 dark:text-gray-400 text-sm">Select a conversation to start messaging</p>
-              </div>
-            </div>
+            <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">Select a conversation to view messages</div>
           )}
         </div>
-      </div>
+
+        {error && <div className="absolute bottom-4 right-4 bg-red-100 text-red-700 px-3 py-2 rounded-lg text-sm">{error}</div>}
+      </Card>
     </div>
   )
 }

@@ -6,20 +6,24 @@ import { Button } from "@/components/ui/button"
 import { TrendingUp, Download, Eye, Plus, X, Trash2 } from "lucide-react"
 
 export default function InvoicingPage() {
-  const [invoices, setInvoices] = useState([
-    { id: "INV-001", client: "Provider ABC", amount: "KES 125,000", dueDate: "Jan 31", status: "Paid", date: "Jan 5" },
-    { id: "INV-002", client: "Agent XYZ", amount: "KES 45,500", dueDate: "Feb 5", status: "Pending", date: "Jan 10" },
-    { id: "INV-003", client: "Vendor Corp", amount: "KES 89,900", dueDate: "Jan 20", status: "Overdue", date: "Dec 25" },
-  ])
+  type Invoice = {
+    id: string
+    client: string
+    amount: string
+    dueDate: string
+    status: "Paid" | "Pending" | "Overdue"
+    date: string
+  }
+  const [invoices, setInvoices] = useState<Invoice[]>([])
 
   const [showModal, setShowModal] = useState(false)
   const [formData, setFormData] = useState({ client: "", amount: "", dueDate: "", description: "" })
 
   const summaryData = [
-    { label: "Total Invoiced", value: "KES 12,450,000", trend: "+8%" },
-    { label: "Paid", value: "KES 11,890,000", trend: "+12%" },
-    { label: "Pending", value: "KES 450,000", trend: "-5%" },
-    { label: "Overdue", value: "KES 110,000", trend: "+2%" },
+    { label: "Total Invoiced", value: invoices.length.toString(), trend: "No data" },
+    { label: "Paid", value: invoices.filter((i) => i.status === "Paid").length.toString(), trend: "No data" },
+    { label: "Pending", value: invoices.filter((i) => i.status === "Pending").length.toString(), trend: "No data" },
+    { label: "Overdue", value: invoices.filter((i) => i.status === "Overdue").length.toString(), trend: "No data" },
   ]
 
   const handleCreateInvoice = () => {
@@ -142,6 +146,13 @@ export default function InvoicingPage() {
                   </td>
                 </tr>
               ))}
+              {invoices.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No invoices available.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -12,92 +12,27 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import Image from "next/image"
 
-const reviewsData = [
-  {
-    id: 1,
-    customer: "John Kamau",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop",
-    product: "Samsung Smart TV 55\"",
-    rating: 5,
-    text: "Excellent quality TV! The picture is crystal clear and the delivery was fast. The shopkeeper was very helpful in explaining all the features. Highly recommended!",
-    date: "2 days ago",
-    helpful: 12,
-    replied: true,
-    reply: "Thank you John! We're glad you love the TV. Feel free to reach out anytime if you need help with the settings.",
-    replyDate: "1 day ago"
-  },
-  {
-    id: 2,
-    customer: "Sarah Wanjiku",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
-    product: "LG Side-by-Side Refrigerator",
-    rating: 4,
-    text: "Good product overall. The refrigerator works well and is very spacious. Delivery took a bit longer than expected but the product quality makes up for it.",
-    date: "5 days ago",
-    helpful: 8,
-    replied: false,
-    reply: "",
-    replyDate: ""
-  },
-  {
-    id: 3,
-    customer: "Peter Ochieng",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop",
-    product: "Bosch Washing Machine 7KG",
-    rating: 5,
-    text: "Best washing machine I've ever owned! Very quiet, efficient, and the digital display makes it easy to use. Great customer service from the shop too.",
-    date: "1 week ago",
-    helpful: 15,
-    replied: true,
-    reply: "Thanks Peter! The Bosch brand is indeed top-notch. Glad the machine is working well for you.",
-    replyDate: "6 days ago"
-  },
-  {
-    id: 4,
-    customer: "Grace Muthoni",
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop",
-    product: "Sony Home Theater System",
-    rating: 3,
-    text: "Sound quality is good but I had some issues with the Bluetooth connectivity. The support team helped me resolve it eventually. Product could be better for the price.",
-    date: "2 weeks ago",
-    helpful: 4,
-    replied: false,
-    reply: "",
-    replyDate: ""
-  },
-  {
-    id: 5,
-    customer: "David Kipchoge",
-    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop",
-    product: "HP Laptop 15.6\"",
-    rating: 5,
-    text: "Fast performance, great build quality, and the price was unbeatable. Will definitely shop here again. The shopkeeper even helped me set up the laptop!",
-    date: "3 weeks ago",
-    helpful: 20,
-    replied: true,
-    reply: "Appreciate the kind words David! We're always here to help. Let us know if you need any accessories.",
-    replyDate: "3 weeks ago"
-  },
-  {
-    id: 6,
-    customer: "Alice Njeri",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop",
-    product: "Ramtons Microwave Oven",
-    rating: 2,
-    text: "The product stopped working after just 2 weeks. I'm waiting for a replacement or refund. Very disappointed with the quality.",
-    date: "1 month ago",
-    helpful: 3,
-    replied: false,
-    reply: "",
-    replyDate: ""
-  }
-]
+type Review = {
+  id: number
+  customer: string
+  avatar: string
+  product: string
+  rating: number
+  text: string
+  date: string
+  helpful: number
+  replied: boolean
+  reply: string
+  replyDate: string
+}
+
+const reviewsData: Review[] = []
 
 export default function ShopkeeperReviewsPage() {
   const [activeFilter, setActiveFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [showReplyModal, setShowReplyModal] = useState(false)
-  const [selectedReview, setSelectedReview] = useState<typeof reviewsData[0] | null>(null)
+  const [selectedReview, setSelectedReview] = useState<Review | null>(null)
   const [replyText, setReplyText] = useState("")
   const [reviews, setReviews] = useState(reviewsData)
 
@@ -122,11 +57,11 @@ export default function ShopkeeperReviewsPage() {
   })
 
   const totalReviews = reviews.length
-  const avgRating = (reviews.reduce((acc, r) => acc + r.rating, 0) / totalReviews).toFixed(1)
+  const avgRating = totalReviews > 0 ? (reviews.reduce((acc, r) => acc + r.rating, 0) / totalReviews).toFixed(1) : "0.0"
   const ratingDistribution = [5, 4, 3, 2, 1].map(star => ({
     star,
     count: reviews.filter(r => r.rating === star).length,
-    percent: Math.round((reviews.filter(r => r.rating === star).length / totalReviews) * 100)
+    percent: totalReviews > 0 ? Math.round((reviews.filter(r => r.rating === star).length / totalReviews) * 100) : 0
   }))
   const unrepliedCount = reviews.filter(r => !r.replied).length
 
@@ -201,7 +136,7 @@ export default function ShopkeeperReviewsPage() {
                   <span className="text-xs text-gray-500 dark:text-gray-400">Response Rate</span>
                 </div>
                 <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {Math.round(((totalReviews - unrepliedCount) / totalReviews) * 100)}%
+                  {totalReviews > 0 ? Math.round(((totalReviews - unrepliedCount) / totalReviews) * 100) : 0}%
                 </p>
               </div>
               <div>

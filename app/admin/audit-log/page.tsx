@@ -24,18 +24,7 @@ interface LogEntry {
   flagged: boolean
 }
 
-const initialLogs: LogEntry[] = [
-  { id: 1, user: "Admin Sarah N.", role: "Admin", action: "Approved verification", target: "Provider James Mwangi (ID #4521)", category: "verification", severity: "info", time: "2 min ago", timestamp: "2026-02-21 14:32:05", ip: "192.168.1.45", device: "Chrome / macOS", location: "Nairobi, KE", reversible: true, reverted: false, flagged: false },
-  { id: 2, user: "Sub-Admin Peter K.", role: "Sub-Admin", action: "Suspended account", target: "Shopkeeper FakeStore (ID #1102)", category: "user", severity: "warning", time: "15 min ago", timestamp: "2026-02-21 14:19:22", ip: "10.0.0.23", device: "Firefox / Windows", location: "Nairobi, KE", reversible: true, reverted: false, flagged: false },
-  { id: 3, user: "System", role: "System", action: "Auto-flagged content", target: "Post #8821 - Inappropriate image detected", category: "moderation", severity: "warning", time: "32 min ago", timestamp: "2026-02-21 14:02:11", ip: "auto", device: "System", location: "Server", reversible: false, reverted: false, flagged: false },
-  { id: 4, user: "Admin Sarah N.", role: "Admin", action: "Updated commission rate", target: "Provider tier changed from 12% to 10%", category: "settings", severity: "info", time: "1h ago", timestamp: "2026-02-21 13:30:44", ip: "192.168.1.45", device: "Chrome / macOS", location: "Nairobi, KE", reversible: true, reverted: false, flagged: false },
-  { id: 5, user: "Secretary Jane A.", role: "Secretary", action: "Processed payout", target: "Batch #892 - KES 2.4M to 45 providers", category: "payment", severity: "info", time: "2h ago", timestamp: "2026-02-21 12:15:33", ip: "10.0.0.55", device: "Safari / macOS", location: "Nairobi, KE", reversible: false, reverted: false, flagged: false },
-  { id: 6, user: "Agent Kevin O.", role: "Agent", action: "Resolved dispute", target: "Dispute #D-2045 in favor of customer", category: "dispute", severity: "info", time: "3h ago", timestamp: "2026-02-21 11:45:12", ip: "172.16.0.12", device: "Chrome / Android", location: "Mombasa, KE", reversible: true, reverted: false, flagged: false },
-  { id: 7, user: "Sub-Admin Peter K.", role: "Sub-Admin", action: "Failed login attempt (3x)", target: "Account temporarily locked", category: "security", severity: "critical", time: "4h ago", timestamp: "2026-02-21 10:02:55", ip: "203.0.113.42", device: "Unknown", location: "Lagos, NG", reversible: false, reverted: false, flagged: true },
-  { id: 8, user: "System", role: "System", action: "Database backup completed", target: "Full backup - 4.2GB stored", category: "system", severity: "info", time: "6h ago", timestamp: "2026-02-21 08:00:00", ip: "auto", device: "System", location: "Server", reversible: false, reverted: false, flagged: false },
-  { id: 9, user: "Admin Sarah N.", role: "Admin", action: "Created announcement", target: "Platform maintenance scheduled for Feb 25", category: "settings", severity: "info", time: "8h ago", timestamp: "2026-02-21 06:45:22", ip: "192.168.1.45", device: "Chrome / macOS", location: "Nairobi, KE", reversible: true, reverted: false, flagged: false },
-  { id: 10, user: "System", role: "System", action: "Unusual login detected", target: "Admin login from new location (Mombasa)", category: "security", severity: "critical", time: "12h ago", timestamp: "2026-02-21 02:12:08", ip: "41.89.12.100", device: "Chrome / Windows", location: "Mombasa, KE", reversible: false, reverted: false, flagged: true },
-]
+const initialLogs: LogEntry[] = []
 
 const categories = ["all", "verification", "user", "moderation", "settings", "payment", "dispute", "security", "system"]
 
@@ -96,6 +85,7 @@ export default function AdminAuditLogPage() {
 
   const criticalCount = logs.filter(l => l.severity === "critical").length
   const flaggedCount = logs.filter(l => l.flagged).length
+  const uniqueAdmins = new Set(logs.filter(l => l.role === "Admin" || l.role === "Sub-Admin").map(l => l.user)).size
 
   return (
     <div className="space-y-6 pb-24 lg:pb-8">
@@ -110,10 +100,10 @@ export default function AdminAuditLogPage() {
       {/* Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: "Total Events Today", value: "248", color: "text-blue-600" },
+          { label: "Total Events Today", value: logs.length.toString(), color: "text-blue-600" },
           { label: "Critical Alerts", value: criticalCount.toString(), color: "text-red-600" },
           { label: "Flagged Events", value: flaggedCount.toString(), color: "text-amber-600" },
-          { label: "Active Admins", value: "4", color: "text-emerald-600" },
+          { label: "Active Admins", value: uniqueAdmins.toString(), color: "text-emerald-600" },
         ].map((s, i) => (
           <Card key={i} className="p-4">
             <p className="text-xs text-gray-500 dark:text-gray-400">{s.label}</p>

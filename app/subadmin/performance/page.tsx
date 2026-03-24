@@ -5,17 +5,9 @@ import { Button } from "@/components/ui/button"
 import { TrendingUp, Users, Award, AlertCircle } from "lucide-react"
 
 export default function PerformancePage() {
-  const performanceData = [
-    { agent: "Daniel K.", cases: 127, resolved: 122, rating: 4.8, satisfaction: 96, status: "Excellent" },
-    { agent: "Grace M.", cases: 98, resolved: 94, rating: 4.6, satisfaction: 92, status: "Good" },
-    { agent: "Robert J.", cases: 112, resolved: 107, rating: 4.7, satisfaction: 94, status: "Excellent" },
-  ]
+  const performanceData: Array<{ agent: string; cases: number; resolved: number; rating: number; satisfaction: number; status: string }> = []
 
-  const benchmarks = [
-    { metric: "Avg Cases Handled", value: 112, target: 100, status: "above" },
-    { metric: "Resolution Rate", value: "95%", target: "90%", status: "above" },
-    { metric: "Customer Satisfaction", value: "94%", target: "90%", status: "above" },
-  ]
+  const benchmarks: Array<{ metric: string; value: string | number; target: string | number; status: string }> = []
 
   return (
     <div className="space-y-8 pb-8">
@@ -36,6 +28,11 @@ export default function PerformancePage() {
             <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-300 rounded-full"></div>
           </Card>
         ))}
+        {benchmarks.length === 0 && (
+          <Card className="p-6 md:col-span-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">No performance benchmarks available.</p>
+          </Card>
+        )}
       </div>
 
       {/* Performance Table */}
@@ -70,6 +67,13 @@ export default function PerformancePage() {
                   </td>
                 </tr>
               ))}
+              {performanceData.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No agent performance records available.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

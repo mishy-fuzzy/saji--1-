@@ -9,24 +9,26 @@ import { Users, TrendingUp, AlertCircle, CheckCircle, Download, Eye } from "luci
 export default function SubadminDashboard() {
   const [selectedPeriod, setSelectedPeriod] = useState("week")
 
+  type AgentSummary = {
+    id: number
+    name: string
+    email: string
+    active: number
+    rating: number
+    status: string
+    joined: string
+  }
+
+  const agents: AgentSummary[] = []
+
   const stats = [
-    { icon: Users, label: "Total Agents", value: "142", color: "bg-blue-100 dark:bg-blue-900", trend: "+8" },
-    { icon: TrendingUp, label: "Active Cases", value: "2,847", color: "bg-green-100 dark:bg-green-900", trend: "+124" },
-    { icon: AlertCircle, label: "Pending Issues", value: "34", color: "bg-yellow-100 dark:bg-yellow-900", trend: "-5" },
-    { icon: CheckCircle, label: "Resolution Rate", value: "94%", color: "bg-purple-100 dark:bg-purple-900", trend: "+2%" },
+    { icon: Users, label: "Total Agents", value: agents.length.toString(), color: "bg-blue-100 dark:bg-blue-900", trend: "No data" },
+    { icon: TrendingUp, label: "Active Cases", value: agents.reduce((sum, a) => sum + a.active, 0).toString(), color: "bg-green-100 dark:bg-green-900", trend: "No data" },
+    { icon: AlertCircle, label: "Pending Issues", value: "0", color: "bg-yellow-100 dark:bg-yellow-900", trend: "No data" },
+    { icon: CheckCircle, label: "Resolution Rate", value: "N/A", color: "bg-purple-100 dark:bg-purple-900", trend: "No data" },
   ]
 
-  const agents = [
-    { id: 1, name: "Daniel K.", email: "daniel@example.com", active: 47, rating: 4.8, status: "Active", joined: "Jan 2025" },
-    { id: 2, name: "Grace M.", email: "grace@example.com", active: 32, rating: 4.6, status: "Active", joined: "Dec 2024" },
-    { id: 3, name: "Robert J.", email: "robert@example.com", active: 53, rating: 4.9, status: "Active", joined: "Nov 2024" },
-  ]
-
-  const teamMetrics = [
-    { metric: "Avg Cases/Agent", value: "20.1", target: "18", status: "above" },
-    { metric: "Avg Rating", value: "4.7/5", target: "4.5/5", status: "above" },
-    { metric: "Satisfaction Rate", value: "92%", target: "90%", status: "above" },
-  ]
+  const teamMetrics: Array<{ metric: string; value: string; target: string; status: string }> = []
 
   const handleExportReport = () => {
     const data = {
@@ -142,6 +144,13 @@ export default function SubadminDashboard() {
                       </td>
                     </tr>
                   ))}
+                  {agents.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                        No agent data available.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -161,6 +170,11 @@ export default function SubadminDashboard() {
                 <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-300 rounded-full"></div>
               </Card>
             ))}
+            {teamMetrics.length === 0 && (
+              <Card className="p-6 md:col-span-3">
+                <p className="text-sm text-gray-500 dark:text-gray-400">No team metrics available.</p>
+              </Card>
+            )}
           </div>
         </TabsContent>
       </Tabs>

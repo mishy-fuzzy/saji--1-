@@ -39,23 +39,11 @@ function LoginContent() {
   }
 
   React.useEffect(() => {
-    const google = searchParams.get("google")
-    const emailFromOAuth = searchParams.get("email")
-    const nameFromOAuth = searchParams.get("name")
-
-    if (google === "1" && emailFromOAuth) {
-      const user = {
-        id: "user_" + Date.now(),
-        name: nameFromOAuth || emailFromOAuth.split("@")[0],
-        email: emailFromOAuth,
-        phone: "+254700000000",
-        role: "customer" as UserRole,
-        createdAt: new Date().toISOString(),
-      }
-      login(user)
-      navigateByRole(user.role)
+    const errorFromQuery = searchParams.get("error")
+    if (errorFromQuery) {
+      setError(errorFromQuery)
     }
-  }, [searchParams, login, router])
+  }, [searchParams])
 
   const generateCaptcha = () => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -120,12 +108,7 @@ function LoginContent() {
   }
 
   const handleAppleLogin = () => {
-    setIsLoading(true)
-    setTimeout(() => {
-      login({ id: "user_" + Date.now(), name: "Apple User", email: "user@icloud.com", phone: "+254700000000", role: "customer" as UserRole, createdAt: new Date().toISOString() })
-      router.push("/customer/home")
-      setIsLoading(false)
-    }, 1000)
+    setError("Apple sign-in is not configured yet. Use email/password or Google sign-in.")
   }
 
   return (

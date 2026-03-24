@@ -3,19 +3,24 @@
 import { useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Megaphone, Plus, Send, Users, Clock, CheckCircle2, Eye, Trash2, Edit3, Globe } from "lucide-react"
+import { Megaphone, Plus, Send, Users, Clock, Eye, Trash2, Edit3 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 
-const initialAnnouncements = [
-  { id: 1, title: "Platform Maintenance - Feb 25", message: "SAJI will undergo scheduled maintenance on Feb 25, 2026 from 2:00 AM to 5:00 AM EAT. Some services may be temporarily unavailable.", audience: "All Users", status: "sent", sentAt: "Feb 20, 2026", views: 8420, type: "maintenance" },
-  { id: 2, title: "New Commission Structure", message: "Starting March 1, provider commissions will be reduced from 12% to 10% for Gold-tier providers. Check your dashboard for details.", audience: "Providers", status: "sent", sentAt: "Feb 18, 2026", views: 3210, type: "policy" },
-  { id: 3, title: "Holiday Promotions Campaign", message: "Launch your Easter promotions early! New promotion tools are now available in your shopkeeper dashboard.", audience: "Shopkeepers", status: "scheduled", sentAt: "Mar 1, 2026", views: 0, type: "promo" },
-  { id: 4, title: "Agent Performance Bonus Q1", message: "Top 10 performing agents in Q1 will receive a KES 50,000 bonus. Keep resolving disputes efficiently!", audience: "Agents", status: "sent", sentAt: "Feb 15, 2026", views: 45, type: "internal" },
-  { id: 5, title: "KYC Deadline Reminder", message: "All providers must complete KYC verification by March 15 to continue receiving payouts.", audience: "Providers", status: "draft", sentAt: "-", views: 0, type: "policy" },
-]
+type Announcement = {
+  id: number
+  title: string
+  message: string
+  audience: string
+  status: "sent" | "scheduled" | "draft"
+  sentAt: string
+  views: number
+  type: string
+}
+
+const initialAnnouncements: Announcement[] = []
 
 export default function AdminAnnouncementsPage() {
-  const [announcements, setAnnouncements] = useState(initialAnnouncements)
+  const [announcements, setAnnouncements] = useState<Announcement[]>(initialAnnouncements)
   const [showCreate, setShowCreate] = useState(false)
   const [newTitle, setNewTitle] = useState("")
   const [newMessage, setNewMessage] = useState("")
@@ -149,6 +154,11 @@ export default function AdminAnnouncementsPage() {
             </div>
           </Card>
         ))}
+        {filtered.length === 0 && (
+          <Card className="p-8 text-center text-sm text-gray-500 dark:text-gray-400">
+            No announcements available.
+          </Card>
+        )}
       </div>
     </div>
   )

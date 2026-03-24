@@ -12,14 +12,22 @@ export default function AgentDashboard() {
   const [agentUsersCount, setAgentUsersCount] = useState(0)
   const [customerUsersCount, setCustomerUsersCount] = useState(0)
   const [selectedPeriod, setSelectedPeriod] = useState("week")
-  const [selectedDispute, setSelectedDispute] = useState<any>(null)
+  type Dispute = {
+    id: string
+    provider: string
+    customer: string
+    status: "Open" | "In Progress" | "Resolved"
+    severity: "High" | "Medium" | "Low"
+    amount: string
+    date: string
+    description: string
+    resolution: string
+  }
+
+  const [selectedDispute, setSelectedDispute] = useState<Dispute | null>(null)
   const [showDisputeModal, setShowDisputeModal] = useState(false)
   const [showOpenOnly, setShowOpenOnly] = useState(false)
-  const [disputes, setDisputes] = useState([
-    { id: "DSP-001", provider: "John Smith", customer: "Alice Johnson", status: "Open", severity: "High", amount: "KES 5,000", date: "Jan 15", description: "Payment mismatch issue", resolution: "Pending" },
-    { id: "DSP-002", provider: "Emma Davis", customer: "Bob Wilson", status: "In Progress", severity: "Medium", amount: "KES 3,500", date: "Jan 14", description: "Service quality complaint", resolution: "In Review" },
-    { id: "DSP-003", provider: "Michael Brown", customer: "Charlie Lee", status: "Resolved", severity: "Low", amount: "KES 2,000", date: "Jan 13", description: "Transaction delay", resolution: "Resolved Successfully" },
-  ])
+  const [disputes, setDisputes] = useState<Dispute[]>([])
 
   const stats = useMemo(() => {
     const openDisputes = disputes.filter((d) => d.status === "Open").length
@@ -62,19 +70,9 @@ export default function AgentDashboard() {
     fetchUsers()
   }, [])
 
-  const performanceMetrics = [
-    { label: "Resolution Rate", value: "94%", benchmark: "90%" },
-    { label: "Avg Response Time", value: "2.3h", benchmark: "4h" },
-    { label: "Customer Satisfaction", value: "4.8/5", benchmark: "4.5/5" },
-    { label: "Cases Handled", value: "127", benchmark: "100" },
-  ]
+  const performanceMetrics: Array<{ label: string; value: string; benchmark: string }> = []
 
-  const recentActivity = [
-    { type: "dispute_resolved", description: "Dispute DSP-023 resolved successfully", time: "2 hours ago" },
-    { type: "query_answered", description: "Customer query from Sarah answered", time: "4 hours ago" },
-    { type: "escalation", description: "Dispute DSP-025 escalated to senior", time: "6 hours ago" },
-    { type: "assignment", description: "New dispute DSP-026 assigned", time: "8 hours ago" },
-  ]
+  const recentActivity: Array<{ type: string; description: string; time: string }> = []
 
   const handleViewDispute = (dispute: any) => {
     setSelectedDispute(dispute)
@@ -246,6 +244,13 @@ export default function AgentDashboard() {
                       </td>
                     </tr>
                   ))}
+                  {visibleDisputes.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                        No disputes available.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -269,6 +274,11 @@ export default function AgentDashboard() {
                 </div>
               </Card>
             ))}
+            {performanceMetrics.length === 0 && (
+              <Card className="p-6 md:col-span-2">
+                <p className="text-sm text-gray-500 dark:text-gray-400">No performance metrics available.</p>
+              </Card>
+            )}
           </div>
         </TabsContent>
 
@@ -291,6 +301,9 @@ export default function AgentDashboard() {
                   </div>
                 </div>
               ))}
+              {recentActivity.length === 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No recent activity available.</p>
+              )}
             </div>
           </Card>
         </TabsContent>

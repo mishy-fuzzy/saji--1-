@@ -5,27 +5,30 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Download, FileSpreadsheet, Calendar, Filter, Eye, Printer, ArrowUpRight, AlertCircle, CheckCircle2 } from "lucide-react"
 
-const reports = [
-  { id: "TR-2026-Q4", period: "Q4 2025", type: "Quarterly", status: "Filed", dueDate: "Jan 31, 2026", filedDate: "Jan 28, 2026", amount: "KES 4.2M", taxDue: "KES 672K" },
-  { id: "TR-2026-Q1", period: "Q1 2026", type: "Quarterly", status: "Draft", dueDate: "Apr 30, 2026", filedDate: "-", amount: "KES 5.1M", taxDue: "KES 816K" },
-  { id: "TR-2025-AN", period: "FY 2025", type: "Annual", status: "Filed", dueDate: "Mar 31, 2026", filedDate: "Mar 15, 2026", amount: "KES 18.6M", taxDue: "KES 2.98M" },
-  { id: "TR-2026-M01", period: "Jan 2026", type: "Monthly VAT", status: "Filed", dueDate: "Feb 20, 2026", filedDate: "Feb 18, 2026", amount: "KES 1.8M", taxDue: "KES 288K" },
-  { id: "TR-2026-M02", period: "Feb 2026", type: "Monthly VAT", status: "Pending", dueDate: "Mar 20, 2026", filedDate: "-", amount: "KES 1.6M", taxDue: "KES 256K" },
-  { id: "TR-2026-PAYE01", period: "Jan 2026", type: "PAYE", status: "Filed", dueDate: "Feb 9, 2026", filedDate: "Feb 7, 2026", amount: "KES 890K", taxDue: "KES 267K" },
-  { id: "TR-2026-PAYE02", period: "Feb 2026", type: "PAYE", status: "Overdue", dueDate: "Mar 9, 2026", filedDate: "-", amount: "KES 920K", taxDue: "KES 276K" },
-]
+type TaxReport = {
+  id: string
+  period: string
+  type: string
+  status: string
+  dueDate: string
+  filedDate: string
+  amount: string
+  taxDue: string
+}
 
-const taxSummary = [
-  { label: "Total Tax Filed (YTD)", value: "KES 5.27M", change: "+12%" },
-  { label: "Pending Filings", value: "2", change: "Due soon" },
-  { label: "Next Deadline", value: "Mar 9", change: "PAYE" },
-  { label: "Compliance Score", value: "94%", change: "Good" },
+const reports: TaxReport[] = []
+
+const taxSummary: Array<{ label: string; value: string; change: string }> = [
+  { label: "Total Tax Filed (YTD)", value: "KES 0", change: "No data" },
+  { label: "Pending Filings", value: "0", change: "No data" },
+  { label: "Next Deadline", value: "N/A", change: "No data" },
+  { label: "Compliance Score", value: "N/A", change: "No data" },
 ]
 
 export default function SecretaryTaxReportsPage() {
   const [filter, setFilter] = useState("all")
   const [typeFilter, setTypeFilter] = useState("all")
-  const [localReports, setLocalReports] = useState(reports)
+  const [localReports, setLocalReports] = useState<TaxReport[]>(reports)
 
   const filtered = localReports.filter(r => {
     if (filter !== "all" && r.status.toLowerCase() !== filter) return false
@@ -103,13 +106,13 @@ export default function SecretaryTaxReportsPage() {
       </div>
 
       {/* Upcoming Deadlines Alert */}
-      {reports.some(r => r.status === "Overdue") && (
+      {localReports.some(r => r.status === "Overdue") && (
         <Card className="p-4 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/10">
           <div className="flex items-start gap-3">
             <AlertCircle size={20} className="text-red-600 dark:text-red-400 mt-0.5 flex-shrink-0" />
             <div>
               <p className="text-sm font-semibold text-red-800 dark:text-red-300">Overdue Filing</p>
-              <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{reports.filter(r => r.status === "Overdue").map(r => `${r.type} for ${r.period} (due ${r.dueDate})`).join(", ")}. File immediately to avoid penalties.</p>
+              <p className="text-xs text-red-600 dark:text-red-400 mt-0.5">{localReports.filter(r => r.status === "Overdue").map(r => `${r.type} for ${r.period} (due ${r.dueDate})`).join(", ")}. File immediately to avoid penalties.</p>
             </div>
           </div>
         </Card>

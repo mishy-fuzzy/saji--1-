@@ -29,24 +29,24 @@ export default function ShopkeeperDashboard() {
   const kpis = [
     {
       label: "Total Revenue",
-      value: "KES 245,320",
-      change: 12.5,
-      trend: "up",
+      value: "KES 0",
+      change: 0,
+      trend: "down",
       icon: DollarSign,
       color: "from-emerald-600 to-emerald-700"
     },
     {
       label: "Orders Today",
-      value: "24",
-      change: 8.2,
-      trend: "up",
+      value: "0",
+      change: 0,
+      trend: "down",
       icon: ShoppingCart,
       color: "from-blue-600 to-blue-700"
     },
     {
       label: "Active Products",
-      value: "156",
-      change: 2.1,
+      value: "0",
+      change: 0,
       trend: "down",
       icon: Package,
       color: "from-purple-600 to-purple-700"
@@ -54,8 +54,8 @@ export default function ShopkeeperDashboard() {
     {
       label: "Total Customers",
       value: String(shopkeeperCustomersCount),
-      change: 15.3,
-      trend: "up",
+      change: 0,
+      trend: "down",
       icon: Users,
       color: "from-orange-600 to-orange-700"
     }
@@ -88,19 +88,9 @@ export default function ShopkeeperDashboard() {
     fetchUsers()
   }, [])
 
-  const recentOrders = [
-    { id: "ORD-001", customer: "John Doe", items: 3, amount: "KES 2,500", status: "completed", time: "2 hours ago" },
-    { id: "ORD-002", customer: "Jane Smith", items: 1, amount: "KES 1,200", status: "processing", time: "1 hour ago" },
-    { id: "ORD-003", customer: "Mike Johnson", items: 5, amount: "KES 5,800", status: "pending", time: "30 mins ago" },
-    { id: "ORD-004", customer: "Sarah Williams", items: 2, amount: "KES 3,400", status: "completed", time: "1 hour ago" },
-  ]
+  const recentOrders: Array<{ id: string; customer: string; items: number; amount: string; status: string; time: string }> = []
 
-  const topProducts = [
-    { id: 1, name: "Smartphone X1", sales: 234, revenue: "KES 58,500" },
-    { id: 2, name: "Wireless Headphones", sales: 189, revenue: "KES 37,800" },
-    { id: 3, name: "USB-C Cable", sales: 412, revenue: "KES 20,600" },
-    { id: 4, name: "Phone Stand", sales: 156, revenue: "KES 9,360" },
-  ]
+  const topProducts: Array<{ id: number; name: string; sales: number; revenue: string }> = []
 
   const getStatusColor = (status: string) => {
     const colors = {
@@ -203,6 +193,9 @@ export default function ShopkeeperDashboard() {
                     </div>
                   </div>
                 ))}
+                {recentOrders.length === 0 && (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No recent orders available.</p>
+                )}
               </div>
             </Card>
           </div>
@@ -232,6 +225,9 @@ export default function ShopkeeperDashboard() {
                   </div>
                 </div>
               ))}
+              {topProducts.length === 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No top product data available.</p>
+              )}
             </div>
           </Card>
         </div>
@@ -242,7 +238,7 @@ export default function ShopkeeperDashboard() {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <p className="text-blue-100 text-sm font-medium mb-1">Processing Orders</p>
-                <p className="text-4xl font-bold">12</p>
+                <p className="text-4xl font-bold">0</p>
               </div>
               <Clock className="w-8 h-8 text-blue-200" />
             </div>
@@ -257,7 +253,7 @@ export default function ShopkeeperDashboard() {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <p className="text-amber-100 text-sm font-medium mb-1">Low Stock Items</p>
-                <p className="text-4xl font-bold">8</p>
+                <p className="text-4xl font-bold">0</p>
               </div>
               <AlertCircle className="w-8 h-8 text-amber-200" />
             </div>
@@ -272,7 +268,7 @@ export default function ShopkeeperDashboard() {
             <div className="flex items-start justify-between mb-4">
               <div>
                 <p className="text-emerald-100 text-sm font-medium mb-1">Today's Revenue</p>
-                <p className="text-3xl font-bold">KES 18,540</p>
+                <p className="text-3xl font-bold">KES 0</p>
               </div>
               <TrendingUp className="w-8 h-8 text-emerald-200" />
             </div>

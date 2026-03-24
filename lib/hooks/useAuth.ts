@@ -12,17 +12,55 @@ export function useAuth() {
 
   // Initialize auth on mount
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
+    let isMounted = true
+
+    const initializeAuth = async () => {
+      let storedUser: User | null = null
+      const stored = localStorage.getItem(STORAGE_KEY)
+
+      if (stored) {
+        try {
+          storedUser = JSON.parse(stored) as User
+          if (isMounted) {
+            setUser(storedUser)
+            setIsAuthenticated(true)
+          }
+        } catch {
+          localStorage.removeItem(STORAGE_KEY)
+          storedUser = null
+        }
+      }
+
       try {
-        const parsedUser = JSON.parse(stored)
-        setUser(parsedUser)
-        setIsAuthenticated(true)
+        const response = await fetch("/api/auth/me", { cache: "no-store" })
+
+        if (response.ok) {
+          const payload = await response.json()
+          if (payload?.ok && payload?.data && isMounted) {
+            const serverUser = payload.data as User
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(serverUser))
+            setUser(serverUser)
+            setIsAuthenticated(true)
+          }
+        } else if (storedUser && isMounted) {
+          localStorage.removeItem(STORAGE_KEY)
+          setUser(null)
+          setIsAuthenticated(false)
+        }
       } catch {
-        localStorage.removeItem(STORAGE_KEY)
+        // Preserve local auth fallback when network checks are unavailable.
+      } finally {
+        if (isMounted) {
+          setIsLoading(false)
+        }
       }
     }
-    setIsLoading(false)
+
+    initializeAuth()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   const login = useCallback((userData: User) => {

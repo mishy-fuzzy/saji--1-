@@ -1,5 +1,5 @@
 // Core type definitions for SAJI marketplace
-export type UserRole = "customer" | "provider" | "admin" | "sub-admin" | "secretary" | "agent"
+export type UserRole = "customer" | "provider" | "shopkeeper" | "admin" | "sub-admin" | "subadmin" | "secretary" | "agent"
 
 export interface User {
   id: string

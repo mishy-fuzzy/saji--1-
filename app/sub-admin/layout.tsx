@@ -52,12 +52,7 @@ export default function SubAdminLayout({ children }: { children: React.ReactNode
   const isActive = (href: string) =>
     href === "/sub-admin" ? pathname === "/sub-admin" : pathname.startsWith(href)
 
-  const notifications = [
-    { id: 1, text: "New user registration pending approval", time: "2m ago", type: "user" },
-    { id: 2, text: "Verification request from John M.", time: "15m ago", type: "verification" },
-    { id: 3, text: "Monthly report is ready for review", time: "1h ago", type: "report" },
-    { id: 4, text: "3 users flagged for suspicious activity", time: "2h ago", type: "alert" },
-  ]
+  const notifications: Array<{ id: number; text: string; time: string; type: string }> = []
 
   const bottomNavItems = menuItems.slice(0, 4)
   const moreItems = menuItems.slice(4)
@@ -123,7 +118,7 @@ export default function SubAdminLayout({ children }: { children: React.ReactNode
             <div className="relative">
               <button onClick={() => setNotifOpen(!notifOpen)} className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
                 <Bell size={20} className="text-gray-600 dark:text-gray-300" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+                {notifications.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />}
               </button>
               {notifOpen && (
                 <div className="absolute right-0 top-12 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50">
@@ -138,6 +133,9 @@ export default function SubAdminLayout({ children }: { children: React.ReactNode
                         <p className="text-[10px] text-gray-500 mt-0.5">{n.time}</p>
                       </div>
                     ))}
+                    {notifications.length === 0 && (
+                      <div className="px-3 py-6 text-xs text-gray-500 dark:text-gray-400 text-center">No notifications.</div>
+                    )}
                   </div>
                 </div>
               )}

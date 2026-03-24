@@ -6,20 +6,21 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-const verificationsData = [
-  { id: "VF-001", name: "Sarah K.", email: "sarah@example.com", role: "Developer", documents: "ID + Portfolio", status: "Pending", submittedDate: "Feb 05, 2026" },
-  { id: "VF-002", name: "John M.", email: "john@example.com", role: "Designer", documents: "ID + Certificates", status: "Approved", submittedDate: "Feb 03, 2026" },
-  { id: "VF-003", name: "Martin M.", email: "martin@example.com", role: "Consultant", documents: "ID + Experience Proof", status: "Rejected", submittedDate: "Feb 01, 2026" },
-  { id: "VF-004", name: "Betty N.", email: "betty@example.com", role: "Electrician", documents: "License + Portfolio", status: "Pending", submittedDate: "Jan 31, 2026" },
-  { id: "VF-005", name: "Alice T.", email: "alice@example.com", role: "Gardener", documents: "ID + Experience", status: "Under Review", submittedDate: "Jan 29, 2026" },
-  { id: "VF-006", name: "Josh F.", email: "josh@example.com", role: "Installer", documents: "ID + Certificates", status: "Approved", submittedDate: "Jan 27, 2026" },
-]
+type Verification = {
+  id: string
+  name: string
+  email: string
+  role: string
+  documents: string
+  status: "Pending" | "Under Review" | "Approved" | "Rejected"
+  submittedDate: string
+}
 
 export default function VerificationsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [activeFilter, setActiveFilter] = useState("All")
-  const [verifications, setVerifications] = useState(verificationsData)
-  const [selectedVerification, setSelectedVerification] = useState<any>(null)
+  const [verifications, setVerifications] = useState<Verification[]>([])
+  const [selectedVerification, setSelectedVerification] = useState<Verification | null>(null)
   const [showModal, setShowModal] = useState(false)
 
   const filters = [
@@ -188,6 +189,13 @@ export default function VerificationsPage() {
                   </td>
                 </tr>
               ))}
+              {filteredVerifications.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No verification requests available.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

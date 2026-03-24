@@ -16,22 +16,9 @@ interface Tier {
   status: "active" | "paused"
 }
 
-const initialTiers: Tier[] = [
-  { id: 1, name: "Standard Provider", role: "Provider", rate: 12, minJobs: 0, description: "Default rate for all new providers", status: "active" },
-  { id: 2, name: "Silver Provider", role: "Provider", rate: 10, minJobs: 50, description: "Achieved after 50 completed jobs", status: "active" },
-  { id: 3, name: "Gold Provider", role: "Provider", rate: 8, minJobs: 200, description: "Top providers with 200+ jobs and 4.5+ rating", status: "active" },
-  { id: 4, name: "Standard Shopkeeper", role: "Shopkeeper", rate: 8, minJobs: 0, description: "Default rate for all shopkeepers", status: "active" },
-  { id: 5, name: "Premium Shopkeeper", role: "Shopkeeper", rate: 5, minJobs: 500, description: "High volume sellers with 500+ orders", status: "active" },
-  { id: 6, name: "Agent Referral", role: "Agent", rate: 3, minJobs: 0, description: "Agent earns per successful referral conversion", status: "active" },
-]
+const initialTiers: Tier[] = []
 
-const changeHistory = [
-  { date: "Feb 18, 2026", change: "Gold Provider rate reduced from 10% to 8%", by: "Admin Sarah N.", type: "edit" },
-  { date: "Jan 15, 2026", change: "New Premium Shopkeeper tier added at 5%", by: "Admin Sarah N.", type: "add" },
-  { date: "Dec 10, 2025", change: "Agent referral rate increased from 2% to 3%", by: "Admin Sarah N.", type: "edit" },
-  { date: "Nov 20, 2025", change: "Standard Provider rate reduced from 15% to 12%", by: "Admin Sarah N.", type: "edit" },
-  { date: "Oct 05, 2025", change: "Trial Shopkeeper tier deleted", by: "Admin Sarah N.", type: "delete" },
-]
+const changeHistory: Array<{ date: string; change: string; by: string; type: "add" | "edit" | "delete" }> = []
 
 export default function AdminCommissionsPage() {
   const [tiers, setTiers] = useState<Tier[]>(initialTiers)
@@ -269,6 +256,9 @@ export default function AdminCommissionsPage() {
               </span>
             </div>
           ))}
+          {changeHistory.length === 0 && (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No commission history available.</p>
+          )}
         </div>
       </Card>
 
@@ -327,7 +317,7 @@ export default function AdminCommissionsPage() {
                 </div>
                 <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Users on Tier</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{Math.floor(Math.random() * 200 + 20)}</p>
+                  <p className="text-2xl font-bold text-gray-900 dark:text-white">N/A</p>
                 </div>
               </div>
               <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3">

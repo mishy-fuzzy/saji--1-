@@ -59,8 +59,26 @@ export async function GET(request: Request) {
       take: 300,
     })
 
+    const unreadRows = await prismaDb.message.findMany({
+      where: {
+        receiverId: actor.id,
+      },
+      select: {
+        senderId: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 500,
+    })
+
+    const unreadCountByPeer = unreadRows.reduce((acc: Record<string, number>, row: { senderId: string }) => {
+      const key = String(row.senderId || "")
+      if (!key) return acc
+      acc[key] = (acc[key] || 0) + 1
+      return acc
+    }, {})
+
     const seen = new Set<string>()
-    const conversations = latest
+    const rawConversations = latest
       .map((row: any) => {
         const peerId = row.senderId === actor.id ? row.receiverId : row.senderId
         if (!peerId || seen.has(peerId)) return null
@@ -69,10 +87,45 @@ export async function GET(request: Request) {
           peerId,
           lastMessage: row.text,
           createdAt: row.createdAt,
-          sender: row.sender,
+          unread: unreadCountByPeer[peerId] || 0,
         }
       })
-      .filter(Boolean)
+      .filter(Boolean) as Array<{ peerId: string; lastMessage: string; createdAt: string; unread: number }>
+
+    const peerIds = rawConversations.map((item) => item.peerId)
+    const peers = peerIds.length
+      ? await prismaDb.user.findMany({
+          where: {
+            id: { in: peerIds },
+            deletedAt: null,
+          },
+          select: {
+            id: true,
+            name: true,
+            role: true,
+          },
+        })
+      : []
+
+    const peerMap = new Map(peers.map((peer: { id: string; name: string | null; role: string }) => [peer.id, peer]))
+
+    const conversations = rawConversations.map((item) => {
+      const peer = peerMap.get(item.peerId)
+      return {
+        ...item,
+        peer: peer
+          ? {
+              id: peer.id,
+              name: peer.name || "User",
+              role: String(peer.role || "user"),
+            }
+          : {
+              id: item.peerId,
+              name: "User",
+              role: "user",
+            },
+      }
+    })
 
     return NextResponse.json({ ok: true, data: conversations })
   } catch (error) {

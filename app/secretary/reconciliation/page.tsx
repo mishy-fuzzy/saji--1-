@@ -6,26 +6,26 @@ import { Button } from "@/components/ui/button"
 import { Download, AlertCircle, CheckCircle, Plus, Edit, Trash2, Eye, X, Search } from "lucide-react"
 
 export default function BankReconciliationPage() {
-  const [reconciliations, setReconciliations] = useState([
-    { id: "REC-001", date: "Jan 15", account: "Main Operating", systemBalance: "KES 5,234,500", bankBalance: "KES 5,239,400", variance: "KES 4,900", status: "Pending" },
-    { id: "REC-002", date: "Jan 14", account: "Commission Pool", systemBalance: "KES 892,300", bankBalance: "KES 892,300", variance: "KES 0", status: "Reconciled" },
-    { id: "REC-003", date: "Jan 13", account: "Escrow Fund", systemBalance: "KES 1,234,000", bankBalance: "KES 1,230,000", variance: "KES 4,000", status: "Under Review" },
-  ])
+  type Reconciliation = {
+    id: string
+    date: string
+    account: string
+    systemBalance: string
+    bankBalance: string
+    variance: string
+    status: "Pending" | "Reconciled" | "Under Review"
+  }
 
-  const [discrepancies, setDiscrepancies] = useState([
-    { id: "DIS-001", date: "Jan 10", description: "Missing deposit record", amount: "KES 5,000", status: "Under review", resolution: "Investigating" },
-    { id: "DIS-002", date: "Jan 8", description: "Duplicate charge", amount: "KES 2,500", status: "Resolved", resolution: "Refunded" },
-  ])
+  const [reconciliations, setReconciliations] = useState<Reconciliation[]>([])
 
-  const [reconciliationData, setReconciliationData] = useState([
-    { type: "in", description: "Deposit", date: "Jan 15", amount: "KES 5,234,500" },
-    { type: "out", description: "Withdrawal", date: "Jan 14", amount: "KES 2,500" },
-  ])
+  const [discrepancies, setDiscrepancies] = useState<Array<{ id: string; date: string; description: string; amount: string; status: string; resolution: string }>>([])
+
+  const [reconciliationData, setReconciliationData] = useState<Array<{ type: "in" | "out"; description: string; date: string; amount: string }>>([])
 
   const [searchTerm, setSearchTerm] = useState("")
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState<"add" | "edit" | "view">("add")
-  const [selectedReconciliation, setSelectedReconciliation] = useState<any>(null)
+  const [selectedReconciliation, setSelectedReconciliation] = useState<Reconciliation | null>(null)
   const [formData, setFormData] = useState({ account: "", date: "", systemBalance: "", bankBalance: "", variance: "", status: "Pending" })
 
   const filteredReconciliations = reconciliations.filter(r =>
@@ -40,14 +40,14 @@ export default function BankReconciliationPage() {
     setShowModal(true)
   }
 
-  const handleViewReconciliation = (rec: any) => {
+  const handleViewReconciliation = (rec: Reconciliation) => {
     setSelectedReconciliation(rec)
     setFormData(rec)
     setModalMode("view")
     setShowModal(true)
   }
 
-  const handleEditReconciliation = (rec: any) => {
+  const handleEditReconciliation = (rec: Reconciliation) => {
     setSelectedReconciliation(rec)
     setFormData(rec)
     setModalMode("edit")
@@ -93,10 +93,10 @@ export default function BankReconciliationPage() {
   }
 
   const stats = [
-    { label: "System Balance", value: "KES 5,234,500" },
-    { label: "Bank Balance", value: "KES 5,239,400" },
-    { label: "Total Variance", value: "KES 8,900" },
-    { label: "Reconciled %", value: "94%" },
+    { label: "System Balance", value: "KES 0" },
+    { label: "Bank Balance", value: "KES 0" },
+    { label: "Total Variance", value: "KES 0" },
+    { label: "Reconciled %", value: "N/A" },
   ]
 
   return (
@@ -197,6 +197,13 @@ export default function BankReconciliationPage() {
                   </td>
                 </tr>
               ))}
+              {filteredReconciliations.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No reconciliations available.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -218,6 +225,9 @@ export default function BankReconciliationPage() {
               <p className="font-semibold text-gray-900 dark:text-white">{item.amount}</p>
             </div>
           ))}
+          {reconciliationData.length === 0 && (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No reconciliation line items available.</p>
+          )}
         </div>
       </Card>
 

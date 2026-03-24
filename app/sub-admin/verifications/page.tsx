@@ -6,18 +6,22 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-const data = [
-  { id: "VF-001", name: "Sarah K.", role: "Provider", documents: "ID + Portfolio", status: "Pending", date: "Feb 05, 2026" },
-  { id: "VF-002", name: "John M.", role: "Shopkeeper", documents: "Business License", status: "Approved", date: "Feb 03, 2026" },
-  { id: "VF-003", name: "Martin M.", role: "Provider", documents: "ID + Experience", status: "Rejected", date: "Feb 01, 2026" },
-  { id: "VF-004", name: "Betty N.", role: "Provider", documents: "License + Certs", status: "Pending", date: "Jan 31, 2026" },
-]
+type Verification = {
+  id: string
+  name: string
+  role: string
+  documents: string
+  status: "Pending" | "Approved" | "Rejected"
+  date: string
+}
+
+const data: Verification[] = []
 
 export default function SubAdminVerificationsPage() {
   const [verifications, setVerifications] = useState(data)
   const [filter, setFilter] = useState("All")
   const [search, setSearch] = useState("")
-  const [selected, setSelected] = useState<(typeof data)[0] | null>(null)
+  const [selected, setSelected] = useState<Verification | null>(null)
   const [showModal, setShowModal] = useState(false)
 
   const filtered = verifications.filter(v => {
@@ -84,6 +88,13 @@ export default function SubAdminVerificationsPage() {
                   </td>
                 </tr>
               ))}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No verification requests found.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

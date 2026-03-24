@@ -6,43 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Download, TrendingUp, BarChart3, ArrowUpRight, ArrowDownRight, Users, CreditCard, Shield, Activity } from "lucide-react"
 import { AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 
-const revenueData = [
-  { month: "Aug", revenue: 1.2, users: 980, transactions: 4200 },
-  { month: "Sep", revenue: 1.5, users: 1120, transactions: 5100 },
-  { month: "Oct", revenue: 1.8, users: 1340, transactions: 6300 },
-  { month: "Nov", revenue: 2.1, users: 1560, transactions: 7200 },
-  { month: "Dec", revenue: 2.4, users: 1780, transactions: 8100 },
-  { month: "Jan", revenue: 2.2, users: 1950, transactions: 7800 },
-  { month: "Feb", revenue: 2.6, users: 2200, transactions: 8900 },
-]
+const revenueData: Array<{ month: string; revenue: number; users: number; transactions: number }> = []
 
-const userGrowthData = [
-  { month: "Aug", providers: 320, shopkeepers: 410, customers: 250 },
-  { month: "Sep", providers: 380, shopkeepers: 460, customers: 280 },
-  { month: "Oct", providers: 440, shopkeepers: 520, customers: 380 },
-  { month: "Nov", providers: 510, shopkeepers: 590, customers: 460 },
-  { month: "Dec", providers: 580, shopkeepers: 650, customers: 550 },
-  { month: "Jan", providers: 640, shopkeepers: 710, customers: 600 },
-  { month: "Feb", providers: 720, shopkeepers: 790, customers: 690 },
-]
+const userGrowthData: Array<{ month: string; providers: number; shopkeepers: number; customers: number }> = []
 
-const roleDistribution = [
-  { name: "Providers", value: 720 },
-  { name: "Shopkeepers", value: 790 },
-  { name: "Customers", value: 690 },
-  { name: "Agents", value: 45 },
-  { name: "Sub-Admins", value: 12 },
-]
+const roleDistribution: Array<{ name: string; value: number }> = []
 
-const weeklyActivity = [
-  { day: "Mon", agents: 120, cases: 342, volume: 450 },
-  { day: "Tue", agents: 125, cases: 356, volume: 482 },
-  { day: "Wed", agents: 128, cases: 378, volume: 510 },
-  { day: "Thu", agents: 132, cases: 395, volume: 534 },
-  { day: "Fri", agents: 135, cases: 412, volume: 558 },
-  { day: "Sat", agents: 110, cases: 280, volume: 390 },
-  { day: "Sun", agents: 85, cases: 195, volume: 280 },
-]
+const weeklyActivity: Array<{ day: string; agents: number; cases: number; volume: number }> = []
 
 const COLORS = ["#2563eb", "#0891b2", "#10b981", "#f59e0b", "#6366f1"]
 
@@ -50,10 +20,10 @@ export default function AdminAnalyticsPage() {
   const [period, setPeriod] = useState<"week" | "month" | "quarter">("month")
 
   const metrics = [
-    { label: "Total Users", value: "2,257", change: "+12%", up: true, icon: Users },
-    { label: "Revenue (MTD)", value: "KES 2.6B", change: "+18%", up: true, icon: CreditCard },
-    { label: "System Uptime", value: "99.9%", change: "Stable", up: true, icon: Activity },
-    { label: "Active Agents", value: "142", change: "+8%", up: true, icon: Shield },
+    { label: "Total Users", value: "0", change: "No data", up: false, icon: Users },
+    { label: "Revenue (MTD)", value: "KES 0", change: "No data", up: false, icon: CreditCard },
+    { label: "System Uptime", value: "N/A", change: "No data", up: false, icon: Activity },
+    { label: "Active Agents", value: "0", change: "No data", up: false, icon: Shield },
   ]
 
   return (
@@ -200,22 +170,11 @@ export default function AdminAnalyticsPage() {
               </tr>
             </thead>
             <tbody>
-              {[
-                { rank: 1, name: "Kevin Otieno", cases: 98, rating: 4.9, satisfaction: 98, commission: "KES 59,500" },
-                { rank: 2, name: "Grace Wairimu", cases: 87, rating: 4.8, satisfaction: 96, commission: "KES 52,200" },
-                { rank: 3, name: "Daniel Ouma", cases: 79, rating: 4.7, satisfaction: 94, commission: "KES 47,100" },
-                { rank: 4, name: "Faith Njeri", cases: 72, rating: 4.6, satisfaction: 92, commission: "KES 43,200" },
-                { rank: 5, name: "Brian Kibet", cases: 68, rating: 4.5, satisfaction: 91, commission: "KES 40,800" },
-              ].map(p => (
-                <tr key={p.rank} className="border-b border-gray-100 dark:border-gray-700/50">
-                  <td className="py-2.5 px-3"><span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${p.rank <= 3 ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400" : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"}`}>{p.rank}</span></td>
-                  <td className="py-2.5 px-3 font-medium text-gray-900 dark:text-white">{p.name}</td>
-                  <td className="py-2.5 px-3 text-right text-gray-700 dark:text-gray-300">{p.cases}</td>
-                  <td className="py-2.5 px-3 text-right text-amber-600 font-medium">{p.rating}</td>
-                  <td className="py-2.5 px-3 text-right text-emerald-600 hidden sm:table-cell">{p.satisfaction}%</td>
-                  <td className="py-2.5 px-3 text-right font-medium text-gray-900 dark:text-white">{p.commission}</td>
-                </tr>
-              ))}
+              <tr>
+                <td colSpan={6} className="py-8 px-3 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No agent performance data available.
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>

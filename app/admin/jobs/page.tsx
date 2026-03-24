@@ -2,26 +2,30 @@
 
 import { useState } from "react"
 import {
-  Search, Download, Trash2, Settings, Filter, Eye, MoreVertical,
-  Calendar, MapPin, DollarSign, TrendingUp, Clock, CheckCircle, Pause, AlertCircle, Plus, Briefcase
+  Search, Download, Filter, Eye, MoreVertical,
+  DollarSign, Clock, CheckCircle, Plus, Briefcase
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-const jobsData = [
-  { id: "JB-2401", title: "Web Development", client: "Tech Corp", budget: 150000, status: "Active", progress: 75, deadline: "Feb 15, 2026", applicants: 8, assigned: "John Dev", category: "Development" },
-  { id: "JB-2402", title: "Mobile App Design", client: "StartUp Inc", budget: 200000, status: "Active", progress: 45, deadline: "Mar 01, 2026", applicants: 12, assigned: "Alice Designer", category: "Design" },
-  { id: "JB-2403", title: "UI/UX Redesign", client: "Fashion Co", budget: 120000, status: "Paused", progress: 30, deadline: "Feb 28, 2026", applicants: 5, assigned: "Unassigned", category: "Design" },
-  { id: "JB-2404", title: "Backend API", client: "Finance Ltd", budget: 180000, status: "Completed", progress: 100, deadline: "Jan 30, 2026", applicants: 6, assigned: "James Backend", category: "Development" },
-  { id: "JB-2405", title: "Content Writing", client: "Media Group", budget: 50000, status: "Active", progress: 60, deadline: "Feb 10, 2026", applicants: 15, assigned: "Sarah Writer", category: "Content" },
-  { id: "JB-2406", title: "SEO Optimization", client: "E-commerce Hub", budget: 75000, status: "Pending", progress: 0, deadline: "Feb 25, 2026", applicants: 9, assigned: "Unassigned", category: "Marketing" },
-]
+type JobItem = {
+  id: string
+  title: string
+  client: string
+  budget: number
+  status: string
+  progress: number
+  deadline: string
+  applicants: number
+  assigned: string
+  category: string
+}
 
 export default function JobsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [activeFilter, setActiveFilter] = useState("All")
-  const [jobs, setJobs] = useState(jobsData)
+  const [jobs, setJobs] = useState<JobItem[]>([])
   const [selectedJob, setSelectedJob] = useState<any>(null)
   const [showJobModal, setShowJobModal] = useState(false)
   const [showCreateJob, setShowCreateJob] = useState(false)
@@ -277,6 +281,11 @@ export default function JobsPage() {
             </div>
           </Card>
         ))}
+        {filteredJobs.length === 0 && (
+          <Card className="p-8 border-0 shadow-lg text-center text-sm text-gray-500 dark:text-gray-400 lg:col-span-2">
+            No jobs available.
+          </Card>
+        )}
       </div>
 
       {/* Job Detail Modal */}

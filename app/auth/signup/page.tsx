@@ -10,7 +10,6 @@ import { useAuthContext } from "@/lib/auth-context"
 import { Mail, Lock, User, ArrowRight, Eye, EyeOff, Apple, ArrowLeft, Sparkles, Shield, Clock } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
 import type { UserRole } from "@/lib/types"
 
 function SignupContent() {
@@ -25,30 +24,18 @@ function SignupContent() {
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)
-  const [showOAuthModal, setShowOAuthModal] = useState(false)
-  const [oauthProvider, setOauthProvider] = useState<"google" | "apple" | null>(null)
-  const [oauthAccounts] = useState({
-    google: [{ email: "john.doe@gmail.com", name: "John Doe" }, { email: "j.doe@gmail.com", name: "J Doe" }],
-    apple: [{ email: "john@icloud.com", name: "John Apple" }],
-  })
-  const [selectedOAuthAccount, setSelectedOAuthAccount] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
   useEffect(() => {
-    const google = searchParams.get("google")
-    const email = searchParams.get("email")
-    const name = searchParams.get("name")
-    const role = (searchParams.get("role") as UserRole | null) || formData.role
+    const roleFromQuery = searchParams.get("role") as UserRole | null
+    if (roleFromQuery) {
+      setFormData((prev) => ({ ...prev, role: roleFromQuery }))
+    }
 
-    if (google === "1" && email) {
-      setFormData((prev) => ({
-        ...prev,
-        name: name || prev.name,
-        email,
-        role,
-      }))
-      setStep(2)
+    const errorFromQuery = searchParams.get("error")
+    if (errorFromQuery) {
+      setError(errorFromQuery)
     }
   }, [searchParams])
 
@@ -106,44 +93,7 @@ function SignupContent() {
   }
 
   const handleGoogleSignup = () => { window.location.href = `/api/auth/google/start?mode=signup&role=${formData.role}` }
-  const handleAppleSignup = () => { setOauthProvider("apple"); setShowOAuthModal(true) }
-
-  const handleSelectOAuthAccount = async (account: any) => {
-    setSelectedOAuthAccount(account)
-    setIsLoading(true)
-    try {
-      setFormData((prev) => ({ ...prev, name: account.name, email: account.email }))
-
-      const response = await fetch("/api/auth/signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: account.name,
-          email: account.email,
-          phone: "+254700000000",
-          role: formData.role,
-          password: "oauth-signup",
-        }),
-      })
-
-      const payload = await response.json()
-      if (!response.ok || !payload?.ok) {
-        throw new Error(payload?.error || "OAuth signup failed")
-      }
-
-      login(payload.data)
-      if (formData.role === "customer") router.push("/customer/home")
-      else if (formData.role === "provider") router.push("/provider")
-      else if (formData.role === "shopkeeper") router.push("/shopkeeper/register")
-      else router.push("/admin")
-      setShowOAuthModal(false)
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "OAuth signup failed"
-      setError(message)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  const handleAppleSignup = () => setError("Apple sign-up is not configured yet. Use email/password or Google sign-up.")
 
   // Password strength
   const getPasswordStrength = () => {
@@ -350,40 +300,6 @@ function SignupContent() {
         </div>
       </div>
 
-      {/* OAuth Modal */}
-      <Dialog open={showOAuthModal} onOpenChange={setShowOAuthModal}>
-        <DialogContent className="max-w-sm">
-          <div className="text-center mb-4">
-            <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mx-auto mb-3">
-              {oauthProvider === "google" ? (
-                <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.64-.15-3.21-.43-4.73H24v9.01h12.4c-.54 2.91-2.18 5.38-4.65 7.04l7.2 5.59c4.21-3.88 6.65-9.6 6.65-16.91z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.81l-7.2-5.59c-2 1.35-4.56 2.15-8.7 2.15-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-              ) : <Apple className="w-5 h-5 text-foreground" />}
-            </div>
-            <h3 className="font-bold text-foreground">
-              {oauthProvider === "google" ? "Select Google Account" : "Select Apple Account"}
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">Choose an account to continue</p>
-          </div>
-          <div className="space-y-2">
-            {oauthProvider && oauthAccounts[oauthProvider].map((account, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleSelectOAuthAccount(account)}
-                className="w-full p-3.5 border border-border rounded-xl hover:border-primary hover:bg-muted/30 transition-all text-left flex items-center gap-3"
-              >
-                <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <span className="text-sm font-bold text-primary">{account.name[0]}</span>
-                </div>
-                <div className="min-w-0">
-                  <p className="font-medium text-sm text-foreground">{account.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{account.email}</p>
-                </div>
-              </button>
-            ))}
-          </div>
-          <Button variant="outline" onClick={() => setShowOAuthModal(false)} className="w-full mt-2 rounded-xl bg-transparent">Cancel</Button>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

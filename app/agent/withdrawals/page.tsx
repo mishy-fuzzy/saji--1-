@@ -9,16 +9,19 @@ export default function WithdrawalsPage() {
   const [showWithdrawModal, setShowWithdrawModal] = useState(false)
   const [withdrawAmount, setWithdrawAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState("bank")
-  const [withdrawals, setWithdrawals] = useState([
-    { id: "WTH-001", amount: "KES 45,500", method: "Bank Transfer", status: "Completed", date: "Jan 31", referenceNo: "REF-2025-001" },
-    { id: "WTH-002", amount: "KES 38,200", method: "M-Pesa", status: "Completed", date: "Dec 31", referenceNo: "REF-2024-012" },
-    { id: "WTH-003", amount: "KES 25,000", method: "Bank Transfer", status: "Processing", date: "Jan 15", referenceNo: "REF-2025-002" },
-    { id: "WTH-004", amount: "KES 30,000", method: "M-Pesa", status: "Pending", date: "Jan 10", referenceNo: "REF-2025-003" },
-  ])
+  type Withdrawal = {
+    id: string
+    amount: string
+    method: string
+    status: "Completed" | "Processing" | "Pending"
+    date: string
+    referenceNo: string
+  }
+  const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([])
 
-  const availableBalance = "KES 42,350"
-  const minimumWithdrawal = "KES 5,000"
-  const maximumWithdrawal = "KES 100,000"
+  const availableBalance = "KES 0"
+  const minimumWithdrawal = "KES 0"
+  const maximumWithdrawal = "KES 0"
 
   const openWithdrawWithMethod = (method: "bank" | "mpesa") => {
     setPaymentMethod(method)
@@ -192,6 +195,13 @@ export default function WithdrawalsPage() {
                   <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{withdrawal.referenceNo}</td>
                 </tr>
               ))}
+              {withdrawals.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No withdrawal history available.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

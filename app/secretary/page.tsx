@@ -42,12 +42,7 @@ export default function SecretaryDashboard() {
     fetchUsers()
   }, [])
 
-  const recentTransactions = [
-    { id: "TXN-001", description: "Commission payout - Agent AGT-001", amount: `${currency} 45,000`, status: "Completed", date: "Jan 15", method: "Bank Transfer" },
-    { id: "TXN-002", description: "Refund to customer - CUS-234", amount: `${currency} 12,500`, status: "Processing", date: "Jan 14", method: "M-Pesa" },
-    { id: "TXN-003", description: "Provider withdrawal - PRV-567", amount: `${currency} 38,200`, status: "Completed", date: "Jan 13", method: "Bank Transfer" },
-    { id: "TXN-004", description: "System fees collection", amount: `${currency} 8,900`, status: "Completed", date: "Jan 12", method: "Automatic" },
-  ]
+  const recentTransactions: Array<{ id: string; description: string; amount: string; status: string; date: string; method: string }> = []
 
   const transactionTotals = useMemo(() => {
     const completed = recentTransactions.filter((t) => t.status === "Completed").length
@@ -96,12 +91,7 @@ export default function SecretaryDashboard() {
     },
   ]
 
-  const reconciliationStatus = [
-    { account: "Main Operating", balance: `${currency} 5,234,500`, lastReconciled: "Jan 15", status: "Reconciled" },
-    { account: "Commission Pool", balance: `${currency} 892,300`, lastReconciled: "Jan 15", status: "Reconciled" },
-    { account: "Escrow Fund", balance: `${currency} 1,234,000`, lastReconciled: "Jan 14", status: "Pending" },
-    { account: "Reserve Fund", balance: `${currency} 750,000`, lastReconciled: "Jan 13", status: "Reconciled" },
-  ]
+  const reconciliationStatus: Array<{ account: string; balance: string; lastReconciled: string; status: string }> = []
 
   const visibleTransactions = showProcessingOnly
     ? recentTransactions.filter((txn) => txn.status === "Processing")
@@ -228,6 +218,13 @@ export default function SecretaryDashboard() {
                       <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{txn.date}</td>
                     </tr>
                   ))}
+                  {visibleTransactions.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                        No transactions available.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -261,6 +258,9 @@ export default function SecretaryDashboard() {
                   </div>
                 </div>
               ))}
+              {reconciliationStatus.length === 0 && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">No reconciliation records available.</p>
+              )}
             </div>
           </Card>
         </TabsContent>

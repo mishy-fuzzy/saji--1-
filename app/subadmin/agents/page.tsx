@@ -1,71 +1,132 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Search, Filter, Download, Edit, Trash2, Eye, Plus, X } from "lucide-react"
 
+type Agent = {
+  id: string
+  name: string
+  email: string
+  phone: string
+  status: string
+  joined: string
+  performance: string
+  commission: string
+}
+
 export default function AgentManagementPage() {
-  const [agents, setAgents] = useState([
-    { id: "AGT-001", name: "Daniel K.", email: "daniel@example.com", phone: "+254712345678", status: "Active", joined: "Jan 2025", performance: "Excellent", commission: "12%" },
-    { id: "AGT-002", name: "Grace M.", email: "grace@example.com", phone: "+254712345679", status: "Active", joined: "Dec 2024", performance: "Good", commission: "10%" },
-    { id: "AGT-003", name: "Robert J.", email: "robert@example.com", phone: "+254712345680", status: "Inactive", joined: "Nov 2024", performance: "Fair", commission: "8%" },
-  ])
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
 
   const [searchTerm, setSearchTerm] = useState("")
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState<"add" | "edit" | "view">("add")
-  const [selectedAgent, setSelectedAgent] = useState<any>(null)
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [formData, setFormData] = useState({ name: "", email: "", phone: "", commission: "", status: "Active" })
 
-  const filteredAgents = agents.filter(a =>
+  async function loadAgents() {
+    setIsLoading(true)
+    setError("")
+    try {
+      const response = await fetch("/api/subadmin/agents", { cache: "no-store" })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to load agents")
+      }
+      setAgents(Array.isArray(payload.data) ? payload.data : [])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load agents"
+      setError(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadAgents()
+  }, [])
+
+  const filteredAgents = useMemo(() => agents.filter(a =>
     a.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     a.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     a.id.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  ), [agents, searchTerm])
 
   const handleAddAgent = () => {
+    setError("")
     setFormData({ name: "", email: "", phone: "", commission: "", status: "Active" })
     setModalMode("add")
     setSelectedAgent(null)
     setShowModal(true)
   }
 
-  const handleViewAgent = (agent: any) => {
+  const handleViewAgent = (agent: Agent) => {
+    setError("")
     setSelectedAgent(agent)
     setFormData(agent)
     setModalMode("view")
     setShowModal(true)
   }
 
-  const handleEditAgent = (agent: any) => {
+  const handleEditAgent = (agent: Agent) => {
+    setError("")
     setSelectedAgent(agent)
     setFormData(agent)
     setModalMode("edit")
     setShowModal(true)
   }
 
-  const handleSaveAgent = () => {
+  const handleSaveAgent = async () => {
     if (modalMode === "add") {
-      const newAgent = {
-        id: `AGT-${String(agents.length + 1).padStart(3, "0")}`,
-        ...formData,
-        joined: new Date().toLocaleDateString("en-US", { year: "numeric", month: "short" }),
-        performance: "New"
-      }
-      setAgents([...agents, newAgent])
-      console.log("[v0] New agent added:", newAgent)
-    } else if (modalMode === "edit") {
-      setAgents(agents.map(a => a.id === selectedAgent.id ? { ...a, ...formData } : a))
-      console.log("[v0] Agent updated:", formData)
+      setError("Agent creation is managed from Team Management. Add a member with Agent role.")
+      return
     }
-    setShowModal(false)
+
+    setError("")
+    setIsSaving(true)
+    try {
+      const response = await fetch("/api/subadmin/agents", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selectedAgent?.id, ...formData }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to update agent")
+      }
+      setShowModal(false)
+      await loadAgents()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to update agent"
+      setError(message)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleDeleteAgent = (agentId: string) => {
     if (confirm("Are you sure you want to delete this agent?")) {
-      setAgents(agents.filter(a => a.id !== agentId))
-      console.log("[v0] Agent deleted:", agentId)
+      setError("")
+      fetch("/api/subadmin/agents", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: agentId }),
+      })
+        .then(async (response) => {
+          const payload = await response.json()
+          if (!response.ok || !payload?.ok) {
+            throw new Error(payload?.error || "Failed to delete agent")
+          }
+          await loadAgents()
+        })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : "Failed to delete agent"
+          setError(message)
+        })
     }
   }
 
@@ -82,7 +143,6 @@ export default function AgentManagementPage() {
     a.download = `agents-${new Date().toISOString().split('T')[0]}.json`
     a.click()
     window.URL.revokeObjectURL(url)
-    console.log("[v0] Agents exported successfully")
   }
 
   return (
@@ -124,6 +184,7 @@ export default function AgentManagementPage() {
 
       {/* Agents Table */}
       <Card className="p-6">
+        {error && <p className="mb-4 text-sm text-red-600">{error}</p>}
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -138,6 +199,11 @@ export default function AgentManagementPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {!isLoading && filteredAgents.length === 0 && (
+                <tr>
+                  <td className="px-6 py-8 text-center text-sm text-gray-500" colSpan={7}>No agents found</td>
+                </tr>
+              )}
               {filteredAgents.map(agent => (
                 <tr key={agent.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{agent.id}</td>
@@ -258,7 +324,7 @@ export default function AgentManagementPage() {
                   Cancel
                 </Button>
                 {modalMode !== "view" && (
-                  <Button className="flex-1 bg-blue-600 hover:bg-blue-700" onClick={handleSaveAgent}>
+                  <Button className="flex-1 bg-blue-600 hover:bg-blue-700" onClick={handleSaveAgent} disabled={isSaving}>
                     Save Agent
                   </Button>
                 )}

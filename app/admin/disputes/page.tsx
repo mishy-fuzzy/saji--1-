@@ -1,23 +1,26 @@
 "use client"
 
 import { useState } from "react"
-import { Search, Download, Filter, Eye, MoreVertical, AlertTriangle, Plus, DollarSign, User, MessageSquare, Clock } from "lucide-react"
+import { Search, Download, Eye, AlertTriangle, DollarSign, MessageSquare, Clock } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-const disputesData = [
-  { id: "DP-001", user: "Sarah K.", job: "Web Development", amount: 150000, reason: "Quality Mismatch", status: "Open", severity: "High", date: "Feb 05, 2026" },
-  { id: "DP-002", user: "John D.", job: "UI Design", amount: 75000, reason: "Deadline Missed", status: "In Review", severity: "Medium", date: "Feb 04, 2026" },
-  { id: "DP-003", user: "Alice T.", job: "Content Writing", amount: 50000, reason: "Incomplete Work", status: "Resolved", severity: "High", date: "Feb 02, 2026" },
-  { id: "DP-004", user: "Mark L.", job: "SEO Services", amount: 40000, reason: "Poor Results", status: "Open", severity: "Low", date: "Feb 01, 2026" },
-  { id: "DP-005", user: "Emma B.", job: "Logo Design", amount: 60000, reason: "Not as Requested", status: "In Review", severity: "Medium", date: "Jan 31, 2026" },
-]
+type Dispute = {
+  id: string
+  user: string
+  job: string
+  amount: number
+  reason: string
+  status: "Open" | "In Review" | "Resolved"
+  severity: "High" | "Medium" | "Low"
+  date: string
+}
 
 export default function DisputesPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [activeFilter, setActiveFilter] = useState("All")
-  const [disputes, setDisputes] = useState(disputesData)
+  const [disputes, setDisputes] = useState<Dispute[]>([])
   const [selectedDispute, setSelectedDispute] = useState<any>(null)
   const [showModal, setShowModal] = useState(false)
 
@@ -199,6 +202,13 @@ export default function DisputesPage() {
                   </td>
                 </tr>
               ))}
+              {filteredDisputes.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    No dispute records available.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

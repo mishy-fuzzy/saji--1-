@@ -1,8 +1,10 @@
 import { PrismaClient } from '@prisma/client'
+import { hashPassword } from '../lib/server/password'
 const prisma: any = new PrismaClient()
 
 async function main() {
   console.log('Seeding database...')
+  const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD || 'Admin@12345'
 
   // Clean tables in FK-safe order for deterministic seeding.
   await prisma.paymentTransaction.deleteMany()
@@ -26,6 +28,7 @@ async function main() {
       data: {
         name: 'Michele Admin',
         email: 'admin@saji.app',
+        passwordHash: hashPassword(seedAdminPassword),
         role: 'admin',
         phone: '+254700000100',
       },

@@ -5,19 +5,21 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Shield, Eye, Trash2, CheckCircle2, XCircle, AlertTriangle, Flag, Search, ImageIcon, MessageSquare, FileText } from "lucide-react"
 
-const flaggedContent = [
-  { id: 1, type: "post", user: "Provider - Mike Ochieng", content: "Offering 'special services' at discounted rates tonight...", reason: "Potentially inappropriate", severity: "high", time: "10 min ago", reports: 5 },
-  { id: 2, type: "image", user: "Shopkeeper - Quick Mart", content: "Product image with misleading pricing overlay", reason: "Misleading content", severity: "medium", time: "25 min ago", reports: 3 },
-  { id: 3, type: "review", user: "Customer - Anonymous", content: "This provider is a SCAM!!! Dont use them they will steal your money!!!", reason: "Hate speech / defamation", severity: "high", time: "1h ago", reports: 8 },
-  { id: 4, type: "post", user: "Provider - Jane Wambui", content: "Copy of competitor's before/after photos used as own work", reason: "Copyright / stolen content", severity: "medium", time: "2h ago", reports: 2 },
-  { id: 5, type: "message", user: "Customer - John Doe", content: "Sending repeated unsolicited messages to multiple providers", reason: "Spam / harassment", severity: "high", time: "3h ago", reports: 12 },
-  { id: 6, type: "post", user: "Provider - Alex Kamau", content: "Live stream with background music (copyrighted)", reason: "Copyright violation", severity: "low", time: "5h ago", reports: 1 },
-  { id: 7, type: "review", user: "Customer - Mary K.", content: "Fake 5-star review (user never booked this service)", reason: "Fake review", severity: "medium", time: "6h ago", reports: 4 },
-  { id: 8, type: "image", user: "Shopkeeper - CBD Electronics", content: "Product listing using stock photos not matching actual product", reason: "Misleading product imagery", severity: "low", time: "8h ago", reports: 2 },
-]
+type ModerationItem = {
+  id: number
+  type: string
+  user: string
+  content: string
+  reason: string
+  severity: "high" | "medium" | "low"
+  time: string
+  reports: number
+}
+
+const flaggedContent: ModerationItem[] = []
 
 export default function AdminModerationPage() {
-  const [items, setItems] = useState(flaggedContent)
+  const [items, setItems] = useState<ModerationItem[]>(flaggedContent)
   const [filter, setFilter] = useState("all")
   const [search, setSearch] = useState("")
 
@@ -64,9 +66,9 @@ export default function AdminModerationPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           { label: "Pending Review", value: items.length.toString(), icon: Shield, color: "text-blue-600" },
-          { label: "Resolved Today", value: "23", icon: CheckCircle2, color: "text-emerald-600" },
-          { label: "Auto-Flagged", value: "5", icon: AlertTriangle, color: "text-amber-600" },
-          { label: "User Reports", value: "37", icon: Flag, color: "text-red-600" },
+          { label: "Resolved Today", value: "0", icon: CheckCircle2, color: "text-emerald-600" },
+          { label: "Auto-Flagged", value: items.filter(i => i.type === "post" || i.type === "image").length.toString(), icon: AlertTriangle, color: "text-amber-600" },
+          { label: "User Reports", value: items.reduce((sum, i) => sum + i.reports, 0).toString(), icon: Flag, color: "text-red-600" },
         ].map((s, i) => (
           <Card key={i} className="p-4 flex items-start gap-3">
             <div className={`w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center ${s.color} flex-shrink-0`}><s.icon size={18} /></div>
