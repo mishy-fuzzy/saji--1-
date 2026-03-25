@@ -303,5 +303,6 @@ Please open an issue or submit a pull request.
 
 ✨ Author
 OliverYoung-dev(githubusername)
+Michelle mutheu(https://github.com/mishy-fuzzy)
 ver-otieno-potfolio.vercel.app
 Developed with passion as a real-world service marketplace solution.

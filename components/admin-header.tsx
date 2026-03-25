@@ -1,19 +1,20 @@
 "use client"
 
 import { useLocalization } from "@/lib/hooks/useLocalization"
-import { Bell, Search, MessageSquare, Sun, Moon, LogOut, Settings, Palette, BellIcon, X, CheckCircle, AlertCircle, User } from "lucide-react"
+import { Bell, Search, MessageSquare, Sun, Moon, LogOut, Settings, Palette, BellIcon, X, CheckCircle, AlertCircle, User, PanelLeftClose, PanelLeftOpen } from "lucide-react"
 import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useAuthContext } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 
 type HeaderNotification = {
-  id: number
+  id: string
   type: "user" | "warning" | "success" | "info"
   title: string
   message: string
   time: string
   read: boolean
+  actionHref?: string
 }
 
 type HeaderMessage = {
@@ -44,7 +45,12 @@ const ADMIN_INBOX_STORAGE_KEY = "saji-admin-inbox"
 const ADMIN_MESSAGES_STORAGE_KEY = "saji-admin-messages"
 const ADMIN_MESSAGES_UPDATED_EVENT = "saji-admin-messages-updated"
 
-export function AdminHeader() {
+type AdminHeaderProps = {
+  onToggleSidebar?: () => void
+  isSidebarHidden?: boolean
+}
+
+export function AdminHeader({ onToggleSidebar, isSidebarHidden = false }: AdminHeaderProps) {
   const { currency, setCurrency, theme, setTheme } = useLocalization()
   const { logout } = useAuthContext()
   const router = useRouter()
@@ -56,12 +62,7 @@ export function AdminHeader() {
   const notificationsRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
 
-  const [notifications, setNotifications] = useState<HeaderNotification[]>([
-    { id: 1, type: "user", title: "New user registered", message: "John Doe just signed up", time: "5 mins ago", read: false },
-    { id: 2, type: "warning", title: "Dispute reported", message: "Payment dispute on order #2547", time: "12 mins ago", read: false },
-    { id: 3, type: "success", title: "Task completed", message: "Mobile app development completed", time: "1 hour ago", read: true },
-    { id: 4, type: "info", title: "System update", message: "Platform maintenance scheduled", time: "2 hours ago", read: true },
-  ])
+  const [notifications, setNotifications] = useState<HeaderNotification[]>([])
   const [messages, setMessages] = useState<HeaderMessage[]>([])
 
   useEffect(() => {
@@ -154,6 +155,55 @@ export function AdminHeader() {
     }
   }, [])
 
+  useEffect(() => {
+    const normalizeType = (value: string): HeaderNotification["type"] => {
+      const lower = value.toLowerCase()
+      if (lower === "warning") return "warning"
+      if (lower === "success") return "success"
+      if (lower === "user") return "user"
+      return "info"
+    }
+
+    const formatTime = (value: string) => {
+      const date = new Date(value)
+      if (Number.isNaN(date.getTime())) return "Just now"
+      return date.toLocaleString()
+    }
+
+    const fetchNotifications = async () => {
+      try {
+        const response = await fetch("/api/notifications?unreadOnly=true", {
+          cache: "no-store",
+        })
+        const payload = await response.json()
+
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          return
+        }
+
+        const items = payload.data.map((item: any) => ({
+          id: String(item.id),
+          type: normalizeType(String(item.type || "info")),
+          title: String(item.title || "Notification"),
+          message: String(item.message || ""),
+          read: Boolean(item.read),
+          actionHref: item.actionHref ? String(item.actionHref) : undefined,
+          time: formatTime(String(item.createdAt || "")),
+        })) as HeaderNotification[]
+
+        setNotifications(items)
+      } catch {
+        // Keep UI responsive even if notifications endpoint is unavailable.
+      }
+    }
+
+    fetchNotifications()
+    const intervalId = window.setInterval(fetchNotifications, 15000)
+    return () => {
+      window.clearInterval(intervalId)
+    }
+  }, [])
+
   const toggleTheme = () => {
     const newTheme = theme === "dark" ? "light" : "dark"
     setTheme(newTheme)
@@ -197,6 +247,24 @@ export function AdminHeader() {
     window.dispatchEvent(new Event(ADMIN_MESSAGES_UPDATED_EVENT))
   }
 
+  const markNotificationAsRead = async (notificationId: string) => {
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id: notificationId }),
+      })
+
+      if (response.ok) {
+        setNotifications((prev) => prev.filter((item) => item.id !== notificationId))
+      }
+    } catch {
+      // Keep local UI stable if patch fails.
+    }
+  }
+
   const unreadSystemNotifications = notifications.filter((n) => !n.read)
   const unreadMessageNotifications = messages.map((m) => ({
     id: Number(`9${m.id}`),
@@ -215,7 +283,16 @@ export function AdminHeader() {
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 lg:px-8 py-4 sticky top-0 z-40">
       <div className="flex items-center justify-between gap-4">
-        <div className="flex-1 max-w-md">
+        <div className="flex items-center gap-2 flex-1 max-w-md">
+          <button
+            type="button"
+            onClick={onToggleSidebar}
+            className="hidden lg:inline-flex p-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            aria-label={isSidebarHidden ? "Show sidebar" : "Hide sidebar"}
+            title={isSidebarHidden ? "Show sidebar" : "Hide sidebar"}
+          >
+            {isSidebarHidden ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+          </button>
           <div className="relative hidden md:block">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
             <input
@@ -266,7 +343,11 @@ export function AdminHeader() {
                           return
                         }
 
-                        setNotifications((prev) => prev.map((item) => (item.id === notif.id ? { ...item, read: true } : item)))
+                        markNotificationAsRead(notif.id)
+                        if (notif.actionHref) {
+                          setShowNotifications(false)
+                          router.push(notif.actionHref)
+                        }
                       }}
                       className="w-full text-left p-4 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors bg-blue-50 dark:bg-blue-900/20"
                     >

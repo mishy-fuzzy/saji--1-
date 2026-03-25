@@ -14,6 +14,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { isAuthenticated, isLoading, user } = useAuthContext()
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
+  const [isSidebarHidden, setIsSidebarHidden] = useState(false)
 
   useEffect(() => {
     setMounted(true)
@@ -35,9 +36,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
-      <AdminSidebar />
+      <AdminSidebar isHidden={isSidebarHidden} />
       <div className="flex flex-col flex-1 overflow-hidden">
-        <AdminHeader />
+        <AdminHeader
+          isSidebarHidden={isSidebarHidden}
+          onToggleSidebar={() => setIsSidebarHidden((prev) => !prev)}
+        />
         <main className="flex-1 overflow-auto pb-20 lg:pb-0">
           <div className="container mx-auto p-4 lg:p-8">{children}</div>
         </main>

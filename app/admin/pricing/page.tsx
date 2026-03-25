@@ -6,14 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-const pricingData = [
-  { id: "SV-001", name: "Web Development", category: "Development", basePrice: 150000, commission: 3, tier: "Skilled", status: "Active" },
-  { id: "SV-002", name: "Mobile App Design", category: "Design", basePrice: 200000, commission: 4, tier: "Professional", status: "Active" },
-  { id: "SV-003", name: "UI/UX Redesign", category: "Design", basePrice: 120000, commission: 3.5, tier: "Skilled", status: "Active" },
-  { id: "SV-004", name: "Backend API Dev", category: "Development", basePrice: 180000, commission: 3, tier: "Professional", status: "Active" },
-  { id: "SV-005", name: "Content Writing", category: "Content", basePrice: 50000, commission: 2.5, tier: "Standard", status: "Active" },
-  { id: "SV-006", name: "SEO Optimization", category: "Marketing", basePrice: 75000, commission: 3, tier: "Skilled", status: "Inactive" },
-]
+const pricingData: any[] = []
 
 export default function PricingPage() {
   const [searchTerm, setSearchTerm] = useState("")

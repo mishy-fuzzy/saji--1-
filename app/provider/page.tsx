@@ -1341,72 +1341,41 @@ export default function ProviderHomePage() {
   )
 }
 
-const sampleImages = [
-  "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=400&h=300&fit=crop",
-  "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=300&fit=crop",
-  "https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=400&h=300&fit=crop",
-  "https://images.unsplash.com/photo-1621905251189-0a1dd7228f2d?w=400&h=300&fit=crop",
-]
+const sampleImages: string[] = []
 
 // Nearby shops for endorsement requests
-const nearbyShops = [
-  { id: 1, name: "Hotpoint Kenya", owner: "James Mwangi", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=50&h=50&fit=crop", location: "Westlands, Nairobi", category: "Electronics" },
-  { id: 2, name: "Hardware Hub", owner: "Michael Otieno", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50&h=50&fit=crop", location: "Parklands, Nairobi", category: "Hardware" },
-  { id: 3, name: "Green Energy Solutions", owner: "Patrick Kamau", avatar: "https://images.unsplash.com/photo-15602500970b93528c311a?w=50&h=50&fit=crop", location: "Kilimani, Nairobi", category: "Solar & Energy" },
-  { id: 4, name: "Kenya Tiles Center", owner: "Grace Njeri", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50&h=50&fit=crop", location: "Industrial Area", category: "Tiles & Flooring" }
-]
+const nearbyShops: any[] = []
 
 // Vibe badges the provider has earned
-const myBadges = [
-  { key: "great-teacher", label: "Great Teacher", icon: "📚", votes: 45 },
-  { key: "fast-responder", label: "Fast Responder", icon: "⚡", votes: 67 },
-  { key: "local-legend", label: "Local Legend", icon: "🏆", votes: 23, locked: true, needed: 50 }
-]
+const myBadges: any[] = []
 
 // Stats array
 const stats = [
   {
     icon: Briefcase,
     label: "Active Jobs",
-    value: "3",
+    value: "0",
     color: "bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300",
   },
   {
     icon: CheckCircle2,
     label: "Completed",
-    value: "24",
+    value: "0",
     color: "bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-300",
   },
   {
     icon: Clock,
     label: "In Progress",
-    value: "2",
+    value: "0",
     color: "bg-purple-100 text-purple-600 dark:bg-purple-900 dark:text-purple-300",
   },
   {
     icon: DollarSign,
     label: "Earnings",
-    value: "KES 42.5K",
+    value: "KES 0",
     color: "bg-emerald-100 text-emerald-600 dark:bg-emerald-900 dark:text-emerald-300",
   },
 ]
 
 // Alerts array
-const alerts = [
-  {
-    type: "proof",
-    title: "Proof Required",
-    service: "Plumbing Repair",
-    amount: "KES 11,000",
-    action: "Verify & Accept",
-    color: "orange",
-  },
-  {
-    type: "dispute",
-    title: "Dispute Open",
-    service: "Appliance Repair",
-    amount: "KES 22,500",
-    action: "Review Dispute",
-    color: "red",
-  },
-]
+const alerts: any[] = []

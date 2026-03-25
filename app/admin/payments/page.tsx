@@ -6,14 +6,7 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
-const paymentsData = [
-  { id: "PM-001", user: "Sarah K.", job: "Web Development", amount: 150000, method: "Bank Transfer", status: "Completed", date: "Feb 05, 2026", fee: 4500 },
-  { id: "PM-002", user: "John D.", job: "UI Design", amount: 75000, method: "Mobile Money", status: "Pending", date: "Feb 04, 2026", fee: 2250 },
-  { id: "PM-003", user: "Alice T.", job: "Content Writing", amount: 50000, method: "Card", status: "Completed", date: "Feb 02, 2026", fee: 1500 },
-  { id: "PM-004", user: "Mark L.", job: "SEO Services", amount: 40000, method: "Bank Transfer", status: "Failed", date: "Feb 01, 2026", fee: 1200 },
-  { id: "PM-005", user: "Emma B.", job: "Logo Design", amount: 60000, method: "Mobile Money", status: "Completed", date: "Jan 31, 2026", fee: 1800 },
-  { id: "PM-006", user: "Tom C.", job: "App Dev", amount: 200000, method: "Card", status: "Processing", date: "Jan 30, 2026", fee: 6000 },
-]
+const paymentsData: any[] = []
 
 export default function PaymentsPage() {
   const [searchTerm, setSearchTerm] = useState("")

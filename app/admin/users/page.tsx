@@ -362,7 +362,9 @@ function UsersContent() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 dark:text-gray-400">Total Earnings</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">KES {(users.reduce((sum, u) => sum + u.earnings, 0) / 1000).toFixed(0)}K</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                KES {users.reduce((sum, u) => sum + u.earnings, 0).toLocaleString()}
+              </p>
             </div>
             <div className="p-3 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg">
               <TrendingUp className="w-5 h-5 text-yellow-600" />

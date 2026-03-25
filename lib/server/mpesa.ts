@@ -7,6 +7,10 @@ interface StkPushParams {
   transactionDesc: string
 }
 
+interface StkQueryParams {
+  checkoutRequestId: string
+}
+
 interface MpesaConfig {
   env: MpesaEnv
   consumerKey: string
@@ -14,6 +18,26 @@ interface MpesaConfig {
   shortCode: string
   passkey: string
   callbackUrl: string
+}
+
+function normalizeBaseUrl(value: string | null | undefined): string {
+  const raw = String(value || "").trim()
+  if (!raw) return ""
+  if (/^https?:\/\//i.test(raw)) return raw.replace(/\/+$/, "")
+  return `https://${raw.replace(/\/+$/, "")}`
+}
+
+function resolveAppBaseUrl(): string {
+  const explicit = normalizeBaseUrl(process.env.NEXT_PUBLIC_APP_URL)
+  if (explicit) return explicit
+
+  const production = normalizeBaseUrl(process.env.VERCEL_PROJECT_PRODUCTION_URL)
+  if (production) return production
+
+  const vercelUrl = normalizeBaseUrl(process.env.VERCEL_URL)
+  if (vercelUrl) return vercelUrl
+
+  return "http://localhost:3500"
 }
 
 function getMpesaConfig(): MpesaConfig {
@@ -24,7 +48,7 @@ function getMpesaConfig(): MpesaConfig {
   const passkey = process.env.MPESA_PASSKEY || ""
   const callbackUrl =
     process.env.MPESA_CALLBACK_URL ||
-    `${process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3500"}/api/payments/mpesa/callback`
+    `${resolveAppBaseUrl()}/api/payments/mpesa/callback`
 
   const missingKeys = [
     !consumerKey ? "MPESA_CONSUMER_KEY" : null,
@@ -43,8 +67,9 @@ function getMpesaConfig(): MpesaConfig {
   }
 
   const callbackHost = new URL(callbackUrl).hostname.toLowerCase()
-  if (callbackHost === "localhost" || callbackHost === "127.0.0.1") {
-    throw new Error("MPESA_CALLBACK_URL must be a public URL (use ngrok or a deployed domain)")
+  const isLocalCallback = callbackHost === "localhost" || callbackHost === "127.0.0.1"
+  if (isLocalCallback && env === "production") {
+    throw new Error("MPESA_CALLBACK_URL must be a public URL in production")
   }
 
   return {
@@ -135,6 +160,43 @@ export async function initiateStkPush(params: StkPushParams) {
 
   if (!response.ok || payload?.ResponseCode !== "0") {
     throw new Error(payload?.errorMessage || payload?.ResponseDescription || "M-Pesa STK push failed")
+  }
+
+  return payload
+}
+
+export async function queryStkPushStatus(params: StkQueryParams) {
+  const checkoutRequestId = String(params.checkoutRequestId || "").trim()
+  if (!checkoutRequestId) {
+    throw new Error("checkoutRequestId is required")
+  }
+
+  const config = getMpesaConfig()
+  const token = await getAccessToken(config)
+  const baseUrl = getBaseUrl(config.env)
+
+  const timestamp = new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14)
+  const password = Buffer.from(`${config.shortCode}${config.passkey}${timestamp}`).toString("base64")
+
+  const response = await fetch(`${baseUrl}/mpesa/stkpushquery/v1/query`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      BusinessShortCode: config.shortCode,
+      Password: password,
+      Timestamp: timestamp,
+      CheckoutRequestID: checkoutRequestId,
+    }),
+    cache: "no-store",
+  })
+
+  const payload = await response.json()
+
+  if (!response.ok) {
+    throw new Error(payload?.errorMessage || payload?.ResponseDescription || "Failed to query STK status")
   }
 
   return payload

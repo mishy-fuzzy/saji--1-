@@ -1,5 +1,5 @@
 "use client"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useLocalization } from "@/lib/hooks/useLocalization"
 import { 
@@ -10,47 +10,80 @@ import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, L
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
-const chartData = [
-  { day: "Mon", earnings: 40000, commission: 2400, users: 240 },
-  { day: "Tue", earnings: 35000, commission: 2210, users: 221 },
-  { day: "Wed", earnings: 50000, commission: 2290, users: 229 },
-  { day: "Thu", earnings: 45000, commission: 2000, users: 200 },
-  { day: "Fri", earnings: 52000, commission: 2181, users: 218 },
-  { day: "Sat", earnings: 48000, commission: 2500, users: 250 },
-  { day: "Sun", earnings: 55000, commission: 2100, users: 210 },
-]
+const chartData: any[] = []
 
-const pieData = [
-  { name: "Completed", value: 65, color: "#10b981" },
-  { name: "Pending", value: 25, color: "#f59e0b" },
-  { name: "Disputed", value: 10, color: "#ef4444" },
-]
+const pieData: any[] = []
 
 export default function AdminDashboard() {
-  const { currency, convertPrice } = useLocalization()
+  const { currency, convertPrice, formatCurrency } = useLocalization()
   const router = useRouter()
   const [selectedMetric, setSelectedMetric] = useState("revenue")
+  const [data, setData] = useState({
+    users: 0,
+    jobs: 0,
+    revenue: 0,
+    pending: 0
+  })
+
+  useEffect(() => {
+    fetch("/api/admin/stats", {
+      headers: { "x-user-role": "admin" }
+    })
+      .then(res => res.json())
+      .then(json => {
+        if (json.ok) {
+          setData({
+            users: json.count,
+            jobs: json.jobs,
+            revenue: json.revenue,
+            pending: json.pending
+          })
+        }
+      })
+  }, [])
 
   const stats = [
-    { icon: Users, label: "Total Users", value: "1,238", change: "+12.5%", color: "from-blue-50 to-blue-100", textColor: "text-blue-600", positive: true },
-    { icon: Briefcase, label: "Active Jobs", value: "342", change: "+8.2%", color: "from-yellow-50 to-yellow-100", textColor: "text-yellow-600", positive: true },
-    { icon: CheckCircle, label: "Completed Tasks", value: "482", change: "+23.1%", color: "from-emerald-50 to-emerald-100", textColor: "text-emerald-600", positive: true },
-    { icon: AlertTriangle, label: "Open Disputes", value: "12", change: "-3.5%", color: "from-red-50 to-red-100", textColor: "text-red-600", positive: false },
+    {
+      label: "Total Users",
+      value: data.users.toLocaleString(),
+      change: "0%",
+      positive: true,
+      icon: Users,
+      color: "from-blue-500/10 to-blue-600/10",
+      textColor: "text-blue-600"
+    },
+    {
+      label: "Total Jobs",
+      value: data.jobs.toLocaleString(),
+      change: "0%",
+      positive: true,
+      icon: Briefcase,
+      color: "from-emerald-500/10 to-emerald-600/10",
+      textColor: "text-emerald-600"
+    },
+    {
+      label: "Total Revenue",
+      value: formatCurrency(data.revenue),
+      change: "0%",
+      positive: true,
+      icon: DollarSign,
+      color: "from-amber-500/10 to-amber-600/10",
+      textColor: "text-amber-600"
+    },
+    {
+      label: "Pending Actions",
+      value: data.pending.toLocaleString(),
+      change: "0%",
+      positive: false,
+      icon: AlertTriangle,
+      color: "from-rose-500/10 to-rose-600/10",
+      textColor: "text-rose-600"
+    }
   ]
 
-  const recentActivities = [
-    { icon: Users, label: "New user registered", detail: "John D.", time: "2 minutes ago", type: "user" },
-    { icon: Briefcase, label: "Job posted", detail: "Web Design Project", time: "5 minutes ago", type: "job" },
-    { icon: CheckCircle, label: "Task completed", detail: "Mobile App Development", time: "12 minutes ago", type: "completed" },
-    { icon: AlertTriangle, label: "Dispute raised", detail: "Payment dispute - Order #2547", time: "18 minutes ago", type: "dispute" },
-  ]
+  const recentActivities: any[] = []
 
-  const topPerformers = [
-    { name: "Alex Johnson", earnings: 125000, status: "Active", tasks: 42 },
-    { name: "Maria Garcia", earnings: 98500, status: "Active", tasks: 38 },
-    { name: "James Wilson", earnings: 87200, status: "Active", tasks: 35 },
-    { name: "Emma Brown", earnings: 76000, status: "Inactive", tasks: 22 },
-  ]
+  const topPerformers: any[] = []
 
   return (
     <div className="space-y-8">
@@ -117,18 +150,18 @@ export default function AdminDashboard() {
           <div className="mb-6 grid grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">KES 335,000</p>
-              <p className="text-xs text-emerald-600 mt-1">+12.5% from last week</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{formatCurrency(data.revenue)}</p>
+              <p className="text-xs text-emerald-600 mt-1">0% from last week</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Commission</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">KES 18,391</p>
-              <p className="text-xs text-emerald-600 mt-1">+8.2% from last week</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{formatCurrency(data.revenue * 0.1)}</p>
+              <p className="text-xs text-emerald-600 mt-1">0% from last week</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Avg. Transaction</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">KES 4,786</p>
-              <p className="text-xs text-red-600 mt-1">-2.3% from last week</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{formatCurrency(data.jobs > 0 ? data.revenue / data.jobs : 0)}</p>
+              <p className="text-xs text-red-600 mt-1">0% from last week</p>
             </div>
           </div>
 

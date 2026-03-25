@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/server/db"
 import { getSessionActor } from "@/lib/server/api-auth"
 import { createInAppNotification } from "@/lib/server/in-app-notifications"
+import { initiateStkPush } from "@/lib/server/mpesa"
 
 const prismaDb: any = db
 
@@ -46,13 +47,23 @@ export async function GET(request: Request) {
     const [walletTransactions, bookingTransactions] = await Promise.all([
       prismaDb.paymentTransaction.findMany({
         where: {
-          provider: "wallet",
-          reference: { startsWith: walletReferencePrefix(actor.id) },
+          OR: [
+            {
+              provider: "wallet",
+              reference: { startsWith: walletReferencePrefix(actor.id) },
+            },
+            {
+              provider: "mpesa",
+              kind: "stkpush",
+              reference: { startsWith: walletReferencePrefix(actor.id) },
+            },
+          ],
         },
         orderBy: { createdAt: "desc" },
         take: 100,
         select: {
           id: true,
+          provider: true,
           kind: true,
           amount: true,
           status: true,
@@ -82,15 +93,23 @@ export async function GET(request: Request) {
     ])
 
     const walletRows = walletTransactions.map((tx: any) => {
-      const action = tx.kind === "withdraw" ? "withdrawal" : "deposit"
-      const signedAmount = tx.kind === "withdraw" ? -Math.abs(Number(tx.amount || 0)) : Math.abs(Number(tx.amount || 0))
+      const provider = String(tx.provider || "wallet").toLowerCase()
+      const isWithdrawal = provider === "wallet" && tx.kind === "withdraw"
+      const action = isWithdrawal ? "withdrawal" : "deposit"
+      const signedAmount = isWithdrawal ? -Math.abs(Number(tx.amount || 0)) : Math.abs(Number(tx.amount || 0))
+      const normalizedStatus = String(tx.status || "PENDING").toUpperCase()
       return {
         id: tx.id,
         type: action,
-        description: tx.kind === "withdraw" ? "Withdrawal" : "Wallet deposit",
+        description:
+          provider === "mpesa"
+            ? "M-Pesa wallet top-up"
+            : tx.kind === "withdraw"
+              ? "Withdrawal"
+              : "Wallet deposit",
         amount: signedAmount,
         date: formatRelativeDate(new Date(tx.createdAt)),
-        status: String(tx.status || "PENDING").toLowerCase() === "success" ? "completed" : "pending",
+        status: normalizedStatus === "SUCCESS" || normalizedStatus === "COMPLETED" ? "completed" : "pending",
         createdAt: tx.createdAt,
       }
     })
@@ -117,12 +136,15 @@ export async function GET(request: Request) {
       .filter((tx) => tx.amount < 0)
       .reduce((sum, tx) => sum + Math.abs(tx.amount), 0)
 
+    const totalServices = bookingRows.filter((row: any) => row.status === "completed").length
+
     return NextResponse.json({
       ok: true,
       data: {
         balance: Number(wallet.balance || 0),
         currency: wallet.currency || "KES",
         totalSpent,
+        totalServices,
         transactions,
       },
     })
@@ -148,6 +170,77 @@ export async function POST(request: Request) {
 
     if (!["deposit", "withdraw"].includes(action)) {
       return NextResponse.json({ ok: false, error: "action must be deposit or withdraw" }, { status: 400 })
+    }
+
+    if (action === "deposit" && method === "mpesa") {
+      const phone = String(body?.phone || "").trim()
+      if (!phone) {
+        return NextResponse.json({ ok: false, error: "phone is required for M-Pesa deposits" }, { status: 400 })
+      }
+
+      const accountReference = `${walletReferencePrefix(actor.id)}${Date.now()}`
+      let stkResult: any = null
+      try {
+        stkResult = await initiateStkPush({
+          phone,
+          amount,
+          accountReference,
+          transactionDesc: "Wallet top-up",
+        })
+
+        await prismaDb.paymentTransaction.create({
+          data: {
+            provider: "mpesa",
+            kind: "stkpush",
+            reference: accountReference,
+            externalId: stkResult?.CheckoutRequestID || null,
+            amount,
+            currency: "KES",
+            status: stkResult?.ResponseCode === "0" ? "PENDING" : "FAILED",
+            request: JSON.stringify({ action, amount, method, phone }),
+            response: JSON.stringify(stkResult),
+          },
+        })
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Failed to initiate STK push"
+        try {
+          await prismaDb.paymentTransaction.create({
+            data: {
+              provider: "mpesa",
+              kind: "stkpush",
+              reference: accountReference,
+              amount,
+              currency: "KES",
+              status: "FAILED",
+              request: JSON.stringify({ action, amount, method, phone }),
+              error: message,
+            },
+          })
+        } catch {
+          // Avoid shadowing initiation error if transaction logging fails.
+        }
+
+        return NextResponse.json({ ok: false, error: message }, { status: 502 })
+      }
+
+      await createInAppNotification({
+        userId: actor.id,
+        type: "payment",
+        title: "M-Pesa prompt sent",
+        message: `Authorize KES ${amount.toLocaleString()} on your phone to complete wallet top-up.`,
+        actionHref: "/customer/wallet",
+        metadata: { action, amount, method, phone },
+      })
+
+      return NextResponse.json({
+        ok: true,
+        data: {
+          pending: true,
+          checkoutRequestId: stkResult?.CheckoutRequestID || null,
+          merchantRequestId: stkResult?.MerchantRequestID || null,
+          message: "STK push sent. Complete the prompt on your phone to fund wallet.",
+        },
+      })
     }
 
     const result = await prismaDb.$transaction(async (tx: any) => {
