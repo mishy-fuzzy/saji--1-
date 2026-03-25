@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent } from "@/components/ui/tabs"
 import { useLocalization } from "@/lib/hooks/useLocalization"
 import { formatCurrency, convertCurrency, currencies, type CurrencyCode } from "@/lib/currency"
@@ -10,7 +10,7 @@ import { PaymentMethodSelector } from "./payment-method-selector"
 import { CurrencySelector } from "./currency-selector"
 import { PriceBreakdown } from "./price-breakdown"
 import { PaymentForm } from "./payment-form"
-import { ShieldCheck, Zap, RotateCcw } from "lucide-react"
+import { ShieldCheck } from "lucide-react"
 
 import { useSearchParams } from "next/navigation"
 import { useAuthContext } from "@/lib/auth-context"
@@ -18,10 +18,11 @@ import { useAuthContext } from "@/lib/auth-context"
 export function PaymentPage() {
   const { t, currency, setCurrency } = useLocalization()
   const { user } = useAuthContext()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<string>("mpesa")
   const [selectedCurrency, setSelectedCurrency] = useState<CurrencyCode>(currency as CurrencyCode)
-  const [paymentStep, setPaymentStep] = useState<"method" | "details" | "confirmation">("method")
+  const [paymentStep, setPaymentStep] = useState<"method" | "details">("method")
   const [bookingId, setBookingId] = useState<string | null>(null)
 
   const serviceId = searchParams.get("serviceId")
@@ -98,56 +99,14 @@ export function PaymentPage() {
                   amountKES={Math.round(servicePrice)}
                   accountReference={bookingId ? `BO-${bookingId.slice(-6).toUpperCase()}` : "SAJI-BOOKING"}
                   bookingId={bookingId || undefined}
-                  onSubmit={() => setPaymentStep("confirmation")}
+                  onSubmit={() => {
+                    if (bookingId) {
+                      router.push(`/customer/booking-confirmation?bookingId=${encodeURIComponent(bookingId)}`)
+                      return
+                    }
+                    setPaymentStep("method")
+                  }}
                 />
-              </Card>
-            </TabsContent>
-
-            {/* Step 3: Confirmation */}
-            <TabsContent value="confirmation" className="space-y-6">
-              <Card className="p-6 space-y-6">
-                <div>
-                  <h3 className="font-semibold text-foreground text-lg mb-4">Review Your Payment</h3>
-                  <div className="space-y-3 p-4 bg-muted/50 rounded-lg">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Service</span>
-                      <span className="font-semibold text-foreground">Professional Electrical Installation</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Payment Method</span>
-                      <span className="font-semibold text-foreground capitalize">{selectedPaymentMethod}</span>
-                    </div>
-                    <div className="border-t border-border pt-3 flex justify-between">
-                      <span className="font-semibold text-foreground">Total Amount</span>
-                      <span className="text-2xl font-bold text-primary">
-                        {formatCurrency(convertedPrice, selectedCurrency)}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3">
-                  {[
-                    { icon: ShieldCheck, text: "Your payment is secure and encrypted" },
-                    { icon: Zap, text: "Instant confirmation after payment" },
-                    { icon: RotateCcw, text: "30-day money-back guarantee" },
-                  ].map((item, idx) => {
-                    const Icon = item.icon
-                    return (
-                      <div key={idx} className="flex items-center gap-3">
-                        <Icon className="w-5 h-5 text-primary flex-shrink-0" />
-                        <span className="text-sm text-muted-foreground">{item.text}</span>
-                      </div>
-                    )
-                  })}
-                </div>
-
-                <Button
-                  onClick={() => alert("Payment processed!")}
-                  className="w-full h-12 rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold"
-                >
-                  Confirm & Pay {formatCurrency(convertedPrice, selectedCurrency)}
-                </Button>
               </Card>
             </TabsContent>
           </Tabs>

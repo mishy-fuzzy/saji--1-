@@ -414,7 +414,7 @@ export function PaymentForm({ paymentMethod, amountKES = 1, accountReference = "
           {isProcessing ? "Processing..." : 
            paymentMethod === "bank" ? 
             (bankTransferStep === "details" ? "Generate Instructions" : bankTransferStep === "instructions" ? "See Steps Above" : "Verify Payment") 
-           : "Continue to Confirmation"}
+           : "Submit Payment"}
         </Button>
       </div>
     </form>
