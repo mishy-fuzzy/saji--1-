@@ -49,8 +49,17 @@ export async function GET(request: Request) {
         where: {
           OR: [
             {
-              provider: "wallet",
-              reference: { startsWith: walletReferencePrefix(actor.id) },
+              AND: [
+                {
+                  provider: "wallet",
+                  reference: { startsWith: walletReferencePrefix(actor.id) },
+                },
+                {
+                  NOT: {
+                    reference: { contains: ":CREDIT:" },
+                  },
+                },
+              ],
             },
             {
               provider: "mpesa",
@@ -170,6 +179,13 @@ export async function POST(request: Request) {
 
     if (!["deposit", "withdraw"].includes(action)) {
       return NextResponse.json({ ok: false, error: "action must be deposit or withdraw" }, { status: 400 })
+    }
+
+    if (action === "deposit" && method !== "mpesa") {
+      return NextResponse.json(
+        { ok: false, error: "Only M-Pesa deposits are supported for wallet top-up" },
+        { status: 400 },
+      )
     }
 
     if (action === "deposit" && method === "mpesa") {
