@@ -20,6 +20,15 @@ interface MpesaConfig {
   callbackUrl: string
 }
 
+export function getMpesaMissingConfigKeys(): string[] {
+  return [
+    !process.env.MPESA_CONSUMER_KEY ? "MPESA_CONSUMER_KEY" : null,
+    !process.env.MPESA_CONSUMER_SECRET ? "MPESA_CONSUMER_SECRET" : null,
+    !process.env.MPESA_SHORTCODE ? "MPESA_SHORTCODE" : null,
+    !process.env.MPESA_PASSKEY ? "MPESA_PASSKEY" : null,
+  ].filter(Boolean) as string[]
+}
+
 function normalizeBaseUrl(value: string | null | undefined): string {
   const raw = String(value || "").trim()
   if (!raw) return ""
@@ -50,12 +59,7 @@ function getMpesaConfig(): MpesaConfig {
     process.env.MPESA_CALLBACK_URL ||
     `${resolveAppBaseUrl()}/api/payments/mpesa/callback`
 
-  const missingKeys = [
-    !consumerKey ? "MPESA_CONSUMER_KEY" : null,
-    !consumerSecret ? "MPESA_CONSUMER_SECRET" : null,
-    !shortCode ? "MPESA_SHORTCODE" : null,
-    !passkey ? "MPESA_PASSKEY" : null,
-  ].filter(Boolean) as string[]
+  const missingKeys = getMpesaMissingConfigKeys()
 
   if (missingKeys.length > 0) {
     throw new Error(`Missing M-Pesa environment configuration: ${missingKeys.join(", ")}`)

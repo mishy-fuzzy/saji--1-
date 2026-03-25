@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { db } from "@/lib/server/db"
 import { getSessionActor } from "@/lib/server/api-auth"
 import { createInAppNotification } from "@/lib/server/in-app-notifications"
-import { initiateStkPush } from "@/lib/server/mpesa"
+import { getMpesaMissingConfigKeys, initiateStkPush } from "@/lib/server/mpesa"
 
 const prismaDb: any = db
 
@@ -189,6 +189,19 @@ export async function POST(request: Request) {
     }
 
     if (action === "deposit" && method === "mpesa") {
+      const missingKeys = getMpesaMissingConfigKeys()
+      if (missingKeys.length > 0) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error: `M-Pesa is not configured on server. Missing: ${missingKeys.join(", ")}`,
+            code: "MPESA_CONFIG_MISSING",
+            missingEnvKeys: missingKeys,
+          },
+          { status: 503 },
+        )
+      }
+
       const phone = String(body?.phone || "").trim()
       if (!phone) {
         return NextResponse.json({ ok: false, error: "phone is required for M-Pesa deposits" }, { status: 400 })

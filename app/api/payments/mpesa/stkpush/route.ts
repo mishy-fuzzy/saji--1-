@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server"
-import { initiateStkPush } from "@/lib/server/mpesa"
+import { getMpesaMissingConfigKeys, initiateStkPush } from "@/lib/server/mpesa"
 import { db, serializePayload } from "@/lib/server/db"
 
 export async function POST(request: Request) {
   let requestBody: unknown = null
   try {
+    const missingKeys = getMpesaMissingConfigKeys()
+    if (missingKeys.length > 0) {
+      return NextResponse.json(
+        {
+          error: `M-Pesa is not configured on server. Missing: ${missingKeys.join(", ")}`,
+          code: "MPESA_CONFIG_MISSING",
+          missingEnvKeys: missingKeys,
+        },
+        { status: 503 },
+      )
+    }
+
     const body = await request.json()
     requestBody = body
     const phone = String(body?.phone || "").trim()

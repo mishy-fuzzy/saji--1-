@@ -62,6 +62,9 @@ export function PaymentForm({ paymentMethod, amountKES = 1, accountReference = "
 
         const payload = await response.json()
         if (!response.ok) {
+          if (payload?.code === "MPESA_CONFIG_MISSING" && Array.isArray(payload?.missingEnvKeys)) {
+            throw new Error(`M-Pesa is not configured: ${payload.missingEnvKeys.join(", ")}`)
+          }
           throw new Error(payload?.error || "M-Pesa request failed")
         }
 
