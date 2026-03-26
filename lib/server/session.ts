@@ -10,6 +10,12 @@ type SessionPayload = {
   exp: number
 }
 
+export type SessionUser = {
+  userId: string
+  role: string
+  email: string
+}
+
 function base64UrlEncode(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url")
 }
@@ -60,13 +66,11 @@ export function clearSessionCookie(): string {
   return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`
 }
 
-export function getSessionFromRequest(request: Request): SessionPayload | null {
-  const cookieHeader = request.headers.get("cookie")
-  const cookies = parseCookieHeader(cookieHeader)
-  const token = cookies[COOKIE_NAME]
+export function getSessionCookieName(): string {
+  return COOKIE_NAME
+}
 
-  if (!token) return null
-
+export function verifySessionToken(token: string): SessionUser | null {
   const [encoded, signature] = token.split(".")
   if (!encoded || !signature) return null
 
@@ -83,7 +87,31 @@ export function getSessionFromRequest(request: Request): SessionPayload | null {
       return null
     }
 
-    return payload
+    return {
+      userId: payload.userId,
+      role: payload.role,
+      email: payload.email,
+    }
+  } catch {
+    return null
+  }
+}
+
+export function getSessionFromRequest(request: Request): SessionPayload | null {
+  const cookieHeader = request.headers.get("cookie")
+  const cookies = parseCookieHeader(cookieHeader)
+  const token = cookies[COOKIE_NAME]
+
+  if (!token) return null
+
+  const verified = verifySessionToken(token)
+  if (!verified) return null
+
+  const [encoded] = token.split(".")
+  if (!encoded) return null
+
+  try {
+    return JSON.parse(base64UrlDecode(encoded)) as SessionPayload
   } catch {
     return null
   }
