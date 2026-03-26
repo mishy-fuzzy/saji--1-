@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { exchangeCodeForToken, fetchGoogleUserInfo } from "@/lib/server/google-oauth"
 import { db, serializePayload } from "@/lib/server/db"
+import { setSessionCookie } from "@/lib/server/session"
+import type { User } from "@/lib/types"
 
 function decodeState(state: string | null): { mode: string; role: string } {
   if (!state) {
@@ -66,7 +68,20 @@ export async function GET(request: Request) {
     redirectUrl.searchParams.set("name", user.name)
     redirectUrl.searchParams.set("role", parsedState.role)
 
-    return NextResponse.redirect(redirectUrl)
+    const response = NextResponse.redirect(redirectUrl)
+
+    const sessionUser: User = {
+      id: `google_${user.id}`,
+      name: user.name,
+      email: user.email,
+      phone: "+254700000000",
+      role: parsedState.role === "provider" ? "provider" : "customer",
+      createdAt: new Date().toISOString(),
+      avatar: user.picture,
+    }
+
+    setSessionCookie(response, sessionUser)
+    return response
   } catch (err) {
     const message = err instanceof Error ? err.message : "Google authentication failed"
     const { origin } = new URL(request.url)

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { useAuthContext } from "@/lib/auth-context"
 import { Mail, Lock, ArrowRight, Eye, EyeOff, Apple, Phone, CheckCircle2, Shield, Users, Zap } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
-import type { UserRole } from "@/lib/types"
+import { loginWithCredentials } from "@/lib/services/auth-service"
 
 function LoginContent() {
   const router = useRouter()
@@ -76,24 +76,29 @@ function LoginContent() {
     if (!captchaVerified) { setError("Please verify the CAPTCHA"); return }
     if (loginMethod === "email" ? !email || !password : !phone || !password) { setError("Please fill in all fields"); return }
     setIsLoading(true)
-    setTimeout(() => {
-      let role: UserRole = "customer"
-      const identifier = loginMethod === "email" ? email : phone
-      if (loginMethod === "email" && email === "admin@gmail.com" && password === "Admin@123") { role = "admin" }
-      else if (loginMethod === "email" && email === "secretary@gmail.com" && password === "Secretary@123") { role = "secretary" }
-      else if (loginMethod === "email" && email === "subadmin@gmail.com" && password === "SubAdmin@123") { role = "sub-admin" }
-      else if (identifier.includes("provider")) { role = "provider" }
-      else if (identifier.includes("shopkeeper")) { role = "shopkeeper" }
-      const user = { id: "user_" + Date.now(), name: loginMethod === "email" ? email.split("@")[0] : "User", email: email || "user@example.com", phone: phone || "+254700000000", role, createdAt: new Date().toISOString() }
-      login(user)
-      if (role === "customer") router.push("/customer/home")
-      else if (role === "provider") router.push("/provider")
-      else if (role === "shopkeeper") router.push("/shopkeeper")
-      else if (role === "admin") router.push("/admin")
-      else if (role === "secretary") router.push("/secretary")
-      else if (role === "sub-admin") router.push("/sub-admin")
+
+    try {
+      const payload = await loginWithCredentials({
+        email: loginMethod === "email" ? email : undefined,
+        phone: loginMethod === "phone" ? phone : undefined,
+        password,
+      })
+
+      login(payload.user)
+      const routeRole = payload.routeRole || payload.user.role
+
+      if (routeRole === "customer" || payload.user.role === "customer") router.push("/customer/home")
+      else if (routeRole === "provider" || payload.user.role === "provider") router.push("/provider")
+      else if (routeRole === "shopkeeper") router.push("/shopkeeper")
+      else if (routeRole === "admin" || payload.user.role === "admin") router.push("/admin")
+      else if (routeRole === "secretary" || payload.user.role === "secretary") router.push("/secretary")
+      else if (routeRole === "sub-admin" || payload.user.role === "sub-admin") router.push("/sub-admin")
+      else router.push("/customer/home")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to sign in")
+    } finally {
       setIsLoading(false)
-    }, 1000)
+    }
   }
 
   const handleGoogleLogin = () => {

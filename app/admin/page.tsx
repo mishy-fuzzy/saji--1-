@@ -1,56 +1,94 @@
 "use client"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { useLocalization } from "@/lib/hooks/useLocalization"
 import { 
   Users, Briefcase, CheckCircle, AlertTriangle, TrendingUp, TrendingDown,
-  ArrowRight, Activity, Clock, Shield, DollarSign, Eye, ArrowUpRight, ArrowDownLeft
+  ArrowRight
 } from "lucide-react"
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { fetchAdminDashboard } from "@/lib/services/admin-dashboard-service"
+import type { AdminDashboardResponse } from "@/lib/contracts/admin-dashboard"
 
-const chartData = [
-  { day: "Mon", earnings: 40000, commission: 2400, users: 240 },
-  { day: "Tue", earnings: 35000, commission: 2210, users: 221 },
-  { day: "Wed", earnings: 50000, commission: 2290, users: 229 },
-  { day: "Thu", earnings: 45000, commission: 2000, users: 200 },
-  { day: "Fri", earnings: 52000, commission: 2181, users: 218 },
-  { day: "Sat", earnings: 48000, commission: 2500, users: 250 },
-  { day: "Sun", earnings: 55000, commission: 2100, users: 210 },
-]
-
-const pieData = [
-  { name: "Completed", value: 65, color: "#10b981" },
-  { name: "Pending", value: 25, color: "#f59e0b" },
-  { name: "Disputed", value: 10, color: "#ef4444" },
-]
+const FALLBACK_DATA: AdminDashboardResponse = {
+  ok: true,
+  summary: {
+    totalUsers: 0,
+    activeJobs: 0,
+    completedTasks: 0,
+    openDisputes: 0,
+    totalRevenue: 0,
+    totalCommission: 0,
+    averageTransaction: 0,
+  },
+  chartData: [
+    { day: "Mon", earnings: 0, commission: 0, users: 0 },
+    { day: "Tue", earnings: 0, commission: 0, users: 0 },
+    { day: "Wed", earnings: 0, commission: 0, users: 0 },
+    { day: "Thu", earnings: 0, commission: 0, users: 0 },
+    { day: "Fri", earnings: 0, commission: 0, users: 0 },
+    { day: "Sat", earnings: 0, commission: 0, users: 0 },
+    { day: "Sun", earnings: 0, commission: 0, users: 0 },
+  ],
+  pieData: [
+    { name: "Completed", value: 0, color: "#10b981" },
+    { name: "Pending", value: 0, color: "#f59e0b" },
+    { name: "Disputed", value: 0, color: "#ef4444" },
+  ],
+  recentActivities: [],
+  topPerformers: [],
+}
 
 export default function AdminDashboard() {
-  const { currency, convertPrice } = useLocalization()
   const router = useRouter()
-  const [selectedMetric, setSelectedMetric] = useState("revenue")
+  const [selectedMetric, setSelectedMetric] = useState("7d")
+  const [data, setData] = useState<AdminDashboardResponse>(FALLBACK_DATA)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
-  const stats = [
-    { icon: Users, label: "Total Users", value: "1,238", change: "+12.5%", color: "from-blue-50 to-blue-100", textColor: "text-blue-600", positive: true },
-    { icon: Briefcase, label: "Active Jobs", value: "342", change: "+8.2%", color: "from-yellow-50 to-yellow-100", textColor: "text-yellow-600", positive: true },
-    { icon: CheckCircle, label: "Completed Tasks", value: "482", change: "+23.1%", color: "from-emerald-50 to-emerald-100", textColor: "text-emerald-600", positive: true },
-    { icon: AlertTriangle, label: "Open Disputes", value: "12", change: "-3.5%", color: "from-red-50 to-red-100", textColor: "text-red-600", positive: false },
-  ]
+  useEffect(() => {
+    let mounted = true
 
-  const recentActivities = [
-    { icon: Users, label: "New user registered", detail: "John D.", time: "2 minutes ago", type: "user" },
-    { icon: Briefcase, label: "Job posted", detail: "Web Design Project", time: "5 minutes ago", type: "job" },
-    { icon: CheckCircle, label: "Task completed", detail: "Mobile App Development", time: "12 minutes ago", type: "completed" },
-    { icon: AlertTriangle, label: "Dispute raised", detail: "Payment dispute - Order #2547", time: "18 minutes ago", type: "dispute" },
-  ]
+    const load = async () => {
+      try {
+        setIsLoading(true)
+        const payload = await fetchAdminDashboard()
+        if (!mounted) return
+        setData(payload)
+        setLoadError("")
+      } catch (error) {
+        if (!mounted) return
+        setLoadError(error instanceof Error ? error.message : "Failed to load dashboard")
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }
 
-  const topPerformers = [
-    { name: "Alex Johnson", earnings: 125000, status: "Active", tasks: 42 },
-    { name: "Maria Garcia", earnings: 98500, status: "Active", tasks: 38 },
-    { name: "James Wilson", earnings: 87200, status: "Active", tasks: 35 },
-    { name: "Emma Brown", earnings: 76000, status: "Inactive", tasks: 22 },
-  ]
+    load()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const stats = useMemo(
+    () => [
+      { icon: Users, label: "Total Users", value: data.summary.totalUsers.toLocaleString(), change: "Live", color: "from-blue-50 to-blue-100", textColor: "text-blue-600", positive: true },
+      { icon: Briefcase, label: "Active Jobs", value: data.summary.activeJobs.toLocaleString(), change: "Live", color: "from-yellow-50 to-yellow-100", textColor: "text-yellow-600", positive: true },
+      { icon: CheckCircle, label: "Completed Tasks", value: data.summary.completedTasks.toLocaleString(), change: "Live", color: "from-emerald-50 to-emerald-100", textColor: "text-emerald-600", positive: true },
+      { icon: AlertTriangle, label: "Open Disputes", value: data.summary.openDisputes.toLocaleString(), change: "Live", color: "from-red-50 to-red-100", textColor: "text-red-600", positive: false },
+    ],
+    [data],
+  )
+
+  const formatKes = (value: number) => `KES ${value.toLocaleString()}`
+
+  const getActivityIcon = (type: "user" | "job" | "completed" | "dispute") => {
+    if (type === "user") return Users
+    if (type === "job") return Briefcase
+    if (type === "completed") return CheckCircle
+    return AlertTriangle
+  }
 
   return (
     <div className="space-y-8">
@@ -70,6 +108,12 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {loadError && (
+        <Card className="p-4 border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 text-red-700 dark:text-red-300">
+          {loadError}
+        </Card>
+      )}
+
       {/* KPI Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat, i) => {
@@ -86,7 +130,7 @@ export default function AdminDashboard() {
                 </div>
               </div>
               <p className="text-gray-600 dark:text-gray-400 text-sm font-medium">{stat.label}</p>
-              <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{stat.value}</p>
+              <p className="text-3xl font-bold text-gray-900 dark:text-white mt-2">{isLoading ? "..." : stat.value}</p>
             </Card>
           )
         })}
@@ -117,23 +161,23 @@ export default function AdminDashboard() {
           <div className="mb-6 grid grid-cols-3 gap-4">
             <div>
               <p className="text-sm text-muted-foreground">Total Revenue</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">KES 335,000</p>
-              <p className="text-xs text-emerald-600 mt-1">+12.5% from last week</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{isLoading ? "..." : formatKes(data.summary.totalRevenue)}</p>
+              <p className="text-xs text-emerald-600 mt-1">Live</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Commission</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">KES 18,391</p>
-              <p className="text-xs text-emerald-600 mt-1">+8.2% from last week</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{isLoading ? "..." : formatKes(data.summary.totalCommission)}</p>
+              <p className="text-xs text-emerald-600 mt-1">Live</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Avg. Transaction</p>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">KES 4,786</p>
-              <p className="text-xs text-red-600 mt-1">-2.3% from last week</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{isLoading ? "..." : formatKes(data.summary.averageTransaction)}</p>
+              <p className="text-xs text-blue-600 mt-1">Live</p>
             </div>
           </div>
 
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData}>
+            <BarChart data={data.chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="day" stroke="#9ca3af" />
               <YAxis stroke="#9ca3af" />
@@ -153,7 +197,7 @@ export default function AdminDashboard() {
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
                 <Pie
-                  data={pieData}
+                  data={data.pieData}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -161,7 +205,7 @@ export default function AdminDashboard() {
                   paddingAngle={2}
                   dataKey="value"
                 >
-                  {pieData.map((entry, index) => (
+                  {data.pieData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -170,7 +214,7 @@ export default function AdminDashboard() {
             </ResponsiveContainer>
 
             <div className="space-y-3 mt-6">
-              {pieData.map((item) => (
+              {data.pieData.map((item) => (
                 <div key={item.name} className="flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
@@ -194,8 +238,11 @@ export default function AdminDashboard() {
           </div>
 
           <div className="space-y-4">
-            {recentActivities.map((activity, i) => {
-              const Icon = activity.icon
+            {data.recentActivities.length === 0 && !isLoading && (
+              <p className="text-sm text-gray-500">No recent activities found.</p>
+            )}
+            {data.recentActivities.map((activity, i) => {
+              const Icon = getActivityIcon(activity.type)
               return (
                 <div key={i} className="flex items-center gap-4 p-3 hover:bg-gray-50 dark:hover:bg-gray-800/50 rounded-lg transition-colors">
                   <div className={`p-2 rounded-lg ${
@@ -230,12 +277,15 @@ export default function AdminDashboard() {
           </div>
 
           <div className="space-y-3">
-            {topPerformers.map((performer, i) => (
+            {data.topPerformers.length === 0 && !isLoading && (
+              <p className="text-sm text-gray-500">No top performers yet.</p>
+            )}
+            {data.topPerformers.map((performer, i) => (
               <div key={i} className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm">
-                      {performer.name.split(" ")[0][0]}
+                      {(performer.name.split(" ")[0] || "U")[0]}
                     </div>
                     <div>
                       <p className="font-semibold text-gray-900 dark:text-white text-sm">{performer.name}</p>
@@ -253,7 +303,7 @@ export default function AdminDashboard() {
                 <div className="flex items-center justify-between">
                   <div className="text-sm">
                     <p className="text-gray-600 dark:text-gray-400">Earnings</p>
-                    <p className="font-bold text-gray-900 dark:text-white">KES {performer.earnings.toLocaleString()}</p>
+                    <p className="font-bold text-gray-900 dark:text-white">{formatKes(performer.earnings)}</p>
                   </div>
                   <ArrowRight className="w-5 h-5 text-blue-600" />
                 </div>

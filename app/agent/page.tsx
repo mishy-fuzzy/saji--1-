@@ -1,49 +1,64 @@
 "use client"
 
-import { useState } from "react"
-import { useLocalization } from "@/lib/hooks/useLocalization"
+import { useEffect, useMemo, useState } from "react"
 import { AlertTriangle, Users, MessageSquare, CheckCircle, TrendingUp, Calendar, Download, Filter, Eye, X } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { fetchAgentDashboard } from "@/lib/services/agent-dashboard-service"
+import type { AgentDashboardResponse, AgentDisputeItem } from "@/lib/contracts/agent-dashboard"
 
 export default function AgentDashboard() {
-  const { currency } = useLocalization()
   const [selectedPeriod, setSelectedPeriod] = useState("week")
-  const [selectedDispute, setSelectedDispute] = useState<any>(null)
+  const [selectedDispute, setSelectedDispute] = useState<AgentDisputeItem | null>(null)
   const [showDisputeModal, setShowDisputeModal] = useState(false)
   const [showOpenOnly, setShowOpenOnly] = useState(false)
-  const [disputes, setDisputes] = useState([
-    { id: "DSP-001", provider: "John Smith", customer: "Alice Johnson", status: "Open", severity: "High", amount: "KES 5,000", date: "Jan 15", description: "Payment mismatch issue", resolution: "Pending" },
-    { id: "DSP-002", provider: "Emma Davis", customer: "Bob Wilson", status: "In Progress", severity: "Medium", amount: "KES 3,500", date: "Jan 14", description: "Service quality complaint", resolution: "In Review" },
-    { id: "DSP-003", provider: "Michael Brown", customer: "Charlie Lee", status: "Resolved", severity: "Low", amount: "KES 2,000", date: "Jan 13", description: "Transaction delay", resolution: "Resolved Successfully" },
-  ])
+  const [disputes, setDisputes] = useState<AgentDisputeItem[]>([])
+  const [dashboard, setDashboard] = useState<AgentDashboardResponse | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
-  const stats = [
-    { icon: AlertTriangle, label: "Open Disputes", value: "18", color: "bg-red-100 dark:bg-red-900", trend: "+2" },
-    { icon: Users, label: "Customers Helped", value: "342", color: "bg-blue-100 dark:bg-blue-900", trend: "+45" },
-    { icon: MessageSquare, label: "Pending Queries", value: "12", color: "bg-yellow-100 dark:bg-yellow-900", trend: "-3" },
-    { icon: CheckCircle, label: "Resolved Today", value: "8", color: "bg-green-100 dark:bg-green-900", trend: "+1" },
-  ]
+  useEffect(() => {
+    let mounted = true
 
-  const performanceMetrics = [
-    { label: "Resolution Rate", value: "94%", benchmark: "90%" },
-    { label: "Avg Response Time", value: "2.3h", benchmark: "4h" },
-    { label: "Customer Satisfaction", value: "4.8/5", benchmark: "4.5/5" },
-    { label: "Cases Handled", value: "127", benchmark: "100" },
-  ]
+    const load = async () => {
+      try {
+        setIsLoading(true)
+        const payload = await fetchAgentDashboard()
+        if (!mounted) return
+        setDashboard(payload)
+        setDisputes(payload.disputes)
+        setLoadError("")
+      } catch (error) {
+        if (!mounted) return
+        setLoadError(error instanceof Error ? error.message : "Failed to load agent dashboard")
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }
 
-  const recentActivity = [
-    { type: "dispute_resolved", description: "Dispute DSP-023 resolved successfully", time: "2 hours ago" },
-    { type: "query_answered", description: "Customer query from Sarah answered", time: "4 hours ago" },
-    { type: "escalation", description: "Dispute DSP-025 escalated to senior", time: "6 hours ago" },
-    { type: "assignment", description: "New dispute DSP-026 assigned", time: "8 hours ago" },
-  ]
+    load()
+    return () => {
+      mounted = false
+    }
+  }, [])
 
-  const handleViewDispute = (dispute: any) => {
+  const stats = useMemo(
+    () => [
+      { icon: AlertTriangle, label: "Open Disputes", value: String(dashboard?.stats.openDisputes ?? 0), color: "bg-red-100 dark:bg-red-900", trend: "Live" },
+      { icon: Users, label: "Customers Helped", value: String(dashboard?.stats.customersHelped ?? 0), color: "bg-blue-100 dark:bg-blue-900", trend: "Live" },
+      { icon: MessageSquare, label: "Pending Queries", value: String(dashboard?.stats.pendingQueries ?? 0), color: "bg-yellow-100 dark:bg-yellow-900", trend: "Live" },
+      { icon: CheckCircle, label: "Resolved Today", value: String(dashboard?.stats.resolvedToday ?? 0), color: "bg-green-100 dark:bg-green-900", trend: "Live" },
+    ],
+    [dashboard],
+  )
+
+  const performanceMetrics = dashboard?.performanceMetrics ?? []
+  const recentActivity = dashboard?.recentActivity ?? []
+
+  const handleViewDispute = (dispute: AgentDisputeItem) => {
     setSelectedDispute(dispute)
     setShowDisputeModal(true)
-    console.log("[v0] Viewing dispute:", dispute.id)
   }
 
   const handleExportReport = () => {
@@ -52,22 +67,21 @@ export default function AgentDashboard() {
       agentId: "AGT-001",
       period: selectedPeriod,
       stats: {
-        openDisputes: 18,
-        customersHelped: 342,
-        pendingQueries: 12,
-        resolvedToday: 8,
+        openDisputes: Number(stats[0].value),
+        customersHelped: Number(stats[1].value),
+        pendingQueries: Number(stats[2].value),
+        resolvedToday: Number(stats[3].value),
       },
       performance: performanceMetrics,
-      disputes: disputes,
+      disputes,
     }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
     const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
+    const a = document.createElement("a")
     a.href = url
-    a.download = `agent-report-${new Date().toISOString().split('T')[0]}.json`
+    a.download = `agent-report-${new Date().toISOString().split("T")[0]}.json`
     a.click()
     window.URL.revokeObjectURL(url)
-    console.log("[v0] Report exported successfully")
   }
 
   const handleUpdateDisputeStatus = () => {
@@ -85,7 +99,7 @@ export default function AgentDashboard() {
       ),
     )
 
-    setSelectedDispute((prev: any) => {
+    setSelectedDispute((prev) => {
       if (!prev) return prev
       return {
         ...prev,
@@ -113,6 +127,12 @@ export default function AgentDashboard() {
         </div>
       </div>
 
+      {loadError && (
+        <Card className="p-4 border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 text-red-700 dark:text-red-300">
+          {loadError}
+        </Card>
+      )}
+
       {/* Period Selector */}
       <div className="flex gap-2">
         {['day', 'week', 'month'].map(period => (
@@ -136,8 +156,8 @@ export default function AgentDashboard() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground mb-2">{stat.label}</p>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">{stat.value}</p>
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">{stat.trend} from last period</p>
+                  <p className="text-3xl font-bold text-gray-900 dark:text-white">{isLoading ? "..." : stat.value}</p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">{stat.trend}</p>
                 </div>
                 <div className={`${stat.color} p-3 rounded-lg`}>
                   <Icon className="w-6 h-6 text-gray-700 dark:text-gray-300" />
@@ -180,6 +200,11 @@ export default function AgentDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {visibleDisputes.length === 0 && !isLoading && (
+                    <tr>
+                      <td className="px-6 py-4 text-sm text-gray-500" colSpan={7}>No disputes found.</td>
+                    </tr>
+                  )}
                   {visibleDisputes.map(dispute => (
                     <tr key={dispute.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
                       <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{dispute.id}</td>
@@ -243,6 +268,9 @@ export default function AgentDashboard() {
           <Card className="p-6">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Recent Activity</h2>
             <div className="space-y-4">
+              {recentActivity.length === 0 && !isLoading && (
+                <p className="text-sm text-gray-500">No recent activity yet.</p>
+              )}
               {recentActivity.map((activity, idx) => (
                 <div key={idx} className="flex items-start gap-4 pb-4 border-b border-gray-200 dark:border-gray-700 last:border-0">
                   <div className={`w-3 h-3 rounded-full mt-2 ${

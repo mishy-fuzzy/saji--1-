@@ -2,48 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { Search, Send, ArrowLeft } from "lucide-react"
-
-type ThreadItem = {
-  sender: string
-  text: string
-  time: string
-  type: "sent" | "received"
-}
-
-type ExternalInboxItem = {
-  id: number
-  from: string
-  message: string
-  time: string
-  unread: boolean
-  replies: number
-  category: string
-  thread: ThreadItem[]
-}
-
-const ADMIN_INBOX_STORAGE_KEY = "saji-admin-inbox"
-const AGENT_FROM = "Agent"
-
-function readExternalInbox(): ExternalInboxItem[] {
-  if (typeof window === "undefined") return []
-  try {
-    const raw = window.localStorage.getItem(ADMIN_INBOX_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? (parsed as ExternalInboxItem[]) : []
-  } catch {
-    return []
-  }
-}
-
-function writeExternalInbox(items: ExternalInboxItem[]) {
-  if (typeof window === "undefined") return
-  try {
-    window.localStorage.setItem(ADMIN_INBOX_STORAGE_KEY, JSON.stringify(items))
-  } catch {
-    // Keep UI responsive even if storage write fails.
-  }
-}
+import { useAuthContext } from "@/lib/auth-context"
+import { fetchMessageThreads } from "@/lib/services/messages-service"
 
 const conversations = [
   { id: 1, name: "John Smith", role: "Provider", lastMsg: "The customer hasn't paid yet", time: "5m", unread: 2, avatar: "J" },
@@ -53,6 +13,7 @@ const conversations = [
 ]
 
 export default function AgentMessagesPage() {
+  const { user } = useAuthContext()
   const [activeChat, setActiveChat] = useState<number | null>(null)
   const [msg, setMsg] = useState("")
   const [search, setSearch] = useState("")
@@ -76,41 +37,58 @@ export default function AgentMessagesPage() {
   }
 
   useEffect(() => {
-    const syncAgentThread = () => {
-      const inbox = readExternalInbox()
-      const agentEntry = inbox.find((item) => item.from === AGENT_FROM)
-      if (!agentEntry) return
+    let mounted = true
 
-      const thread = Array.isArray(agentEntry.thread)
-        ? agentEntry.thread.map((item) => ({
-            text: item.text,
-            from: item.sender === AGENT_FROM ? "me" : "them",
-            time: item.time,
+    const hydrateFromThreads = async () => {
+      if (!user?.id) return
+      try {
+        const payload = await fetchMessageThreads(user.id)
+        if (!mounted) return
+
+        const adminThread = payload.threads.find((thread) =>
+          thread.members.some((member) => /admin/i.test(member.user.name) || /admin/i.test(member.user.email)),
+        )
+
+        if (!adminThread) return
+
+        const latest = adminThread.messages[0]
+        const lastMessage = latest?.body || "No messages yet"
+
+        const threadMessages = adminThread.messages
+          .slice()
+          .reverse()
+          .map((message) => ({
+            text: message.body,
+            from: message.senderId === user.id ? "me" : "them",
+            time: message.createdAt ? new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "Now",
           }))
-        : []
 
-      setMessages((prev) => ({
-        ...prev,
-        3: thread,
-      }))
+        setMessages((prev) => ({
+          ...prev,
+          3: threadMessages,
+        }))
 
-      setConversationState((prev) =>
-        prev.map((conv) =>
-          conv.id === 3
-            ? {
-                ...conv,
-                lastMsg: agentEntry.message || conv.lastMsg,
-                time: agentEntry.time || conv.time,
-              }
-            : conv,
-        ),
-      )
+        setConversationState((prev) =>
+          prev.map((conv) =>
+            conv.id === 3
+              ? {
+                  ...conv,
+                  lastMsg: lastMessage,
+                  time: "Now",
+                }
+              : conv,
+          ),
+        )
+      } catch {
+        // Keep current UI data when thread hydration fails.
+      }
     }
 
-    syncAgentThread()
-    window.addEventListener("storage", syncAgentThread)
-    return () => window.removeEventListener("storage", syncAgentThread)
-  }, [])
+    hydrateFromThreads()
+    return () => {
+      mounted = false
+    }
+  }, [user?.id])
 
   const handleSend = () => {
     if (!msg.trim()||!activeChat) return
@@ -123,47 +101,6 @@ export default function AgentMessagesPage() {
     setConversationState((prev) => prev.map((conv) => conv.id === activeChat ? { ...conv, lastMsg: outgoingText, time: "Just now" } : conv))
 
     if (activeChat === 3) {
-      const inbox = readExternalInbox()
-      const targetIndex = inbox.findIndex((item) => item.from === AGENT_FROM)
-      const currentThread = messages[3] || []
-      const nextThread: ThreadItem[] = [...currentThread.map((item) => ({
-        sender: item.from === "me" ? AGENT_FROM : "Admin",
-        text: item.text,
-        time: item.time,
-        type: (item.from === "me" ? "received" : "sent") as "received" | "sent",
-      })), {
-        sender: AGENT_FROM,
-        text: msg,
-        time: now,
-        type: "received" as "received",
-      }]
-
-      const nextInbox = [...inbox]
-      if (targetIndex >= 0) {
-        const current = nextInbox[targetIndex]
-        nextInbox[targetIndex] = {
-          ...current,
-          message: msg,
-          time: "Just now",
-          unread: true,
-          replies: (current.replies || 0) + 1,
-          category: current.category || "Internal",
-          thread: nextThread,
-        }
-      } else {
-        nextInbox.unshift({
-          id: Date.now(),
-          from: AGENT_FROM,
-          message: msg,
-          time: "Just now",
-          unread: true,
-          replies: 1,
-          category: "Internal",
-          thread: nextThread,
-        })
-      }
-
-      writeExternalInbox(nextInbox)
       setConversationState((prev) => prev.map((conv) => conv.id === 3 ? { ...conv, lastMsg: outgoingText, time: "Just now" } : conv))
     } else {
       const targetConversation = conversationState.find((conv) => conv.id === activeChat)

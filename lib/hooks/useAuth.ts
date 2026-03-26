@@ -2,8 +2,10 @@
 
 import { useCallback, useEffect, useState } from "react"
 import type { User, UserRole } from "@/lib/types"
+import { fetchSession, logoutSession } from "@/lib/services/auth-service"
 
 const STORAGE_KEY = "saji_user"
+const MOCK_AUTH_ENABLED = process.env.NEXT_PUBLIC_ENABLE_MOCK_AUTH === "true"
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
@@ -12,17 +14,48 @@ export function useAuth() {
 
   // Initialize auth on mount
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
+    let isMounted = true
+
+    const initializeAuth = async () => {
       try {
-        const parsedUser = JSON.parse(stored)
-        setUser(parsedUser)
-        setIsAuthenticated(true)
+        const serverSession = await fetchSession()
+
+        if (serverSession?.ok && serverSession.user) {
+          if (!isMounted) return
+          setUser(serverSession.user)
+          setIsAuthenticated(true)
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(serverSession.user))
+          setIsLoading(false)
+          return
+        }
       } catch {
-        localStorage.removeItem(STORAGE_KEY)
+        // Fall through to local storage compatibility mode.
+      }
+
+      if (MOCK_AUTH_ENABLED) {
+        const stored = localStorage.getItem(STORAGE_KEY)
+        if (stored) {
+          try {
+            const parsedUser = JSON.parse(stored)
+            if (!isMounted) return
+            setUser(parsedUser)
+            setIsAuthenticated(true)
+          } catch {
+            localStorage.removeItem(STORAGE_KEY)
+          }
+        }
+      }
+
+      if (isMounted) {
+        setIsLoading(false)
       }
     }
-    setIsLoading(false)
+
+    initializeAuth()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   const login = useCallback((userData: User) => {
@@ -32,6 +65,7 @@ export function useAuth() {
   }, [])
 
   const logout = useCallback(() => {
+    void logoutSession()
     localStorage.removeItem(STORAGE_KEY)
     setUser(null)
     setIsAuthenticated(false)

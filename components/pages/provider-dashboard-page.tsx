@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useMemo, useState } from "react"
 import { useAuthContext } from "@/lib/auth-context"
 import { useLocalization } from "@/lib/hooks/useLocalization"
 import { Card } from "@/components/ui/card"
@@ -7,44 +8,62 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { LogOut, TrendingUp, Clock, DollarSign, CheckCircle } from "lucide-react"
 import Link from "next/link"
+import { fetchProviderDashboard } from "@/lib/services/provider-dashboard-service"
+import type { ProviderDashboardResponse } from "@/lib/contracts/provider-dashboard"
 
 export function ProviderDashboardPage() {
   const { user, logout } = useAuthContext()
   const { currency } = useLocalization()
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState("")
+  const [data, setData] = useState<ProviderDashboardResponse>({
+    ok: true,
+    stats: {
+      activeJobs: 0,
+      completedJobs: 0,
+      totalEarnings: 0,
+      rating: "0.0★",
+    },
+    jobs: [],
+  })
 
-  const mockJobs = [
-    {
-      id: 1,
-      title: "House Cleaning",
-      customer: "Sarah M.",
-      status: "in-progress",
-      amount: 150,
-      date: "Today, 10:00 AM",
-    },
-    {
-      id: 2,
-      title: "Plumbing Repair",
-      customer: "John D.",
-      status: "pending",
-      amount: 200,
-      date: "Tomorrow, 2:00 PM",
-    },
-    {
-      id: 3,
-      title: "Electrical Installation",
-      customer: "Emma L.",
-      status: "completed",
-      amount: 350,
-      date: "Yesterday",
-    },
-  ]
+  useEffect(() => {
+    let mounted = true
 
-  const stats = [
-    { label: "Active Jobs", value: 2, icon: Clock, color: "bg-blue-500" },
-    { label: "Completed", value: 42, icon: CheckCircle, color: "bg-green-500" },
-    { label: "Total Earnings", value: `${currency} 12,450`, icon: DollarSign, color: "bg-emerald-500" },
-    { label: "Rating", value: "4.9★", icon: TrendingUp, color: "bg-yellow-500" },
-  ]
+    const loadDashboard = async () => {
+      try {
+        setIsLoading(true)
+        const payload = await fetchProviderDashboard()
+        if (!mounted) return
+        setData(payload)
+        setError("")
+      } catch (err) {
+        if (!mounted) return
+        setError(err instanceof Error ? err.message : "Failed to load provider dashboard")
+      } finally {
+        if (mounted) setIsLoading(false)
+      }
+    }
+
+    loadDashboard()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  const stats = useMemo(
+    () => [
+      { label: "Active Jobs", value: data.stats.activeJobs, icon: Clock, color: "bg-blue-500" },
+      { label: "Completed", value: data.stats.completedJobs, icon: CheckCircle, color: "bg-green-500" },
+      { label: "Total Earnings", value: `${currency} ${data.stats.totalEarnings.toLocaleString()}`, icon: DollarSign, color: "bg-emerald-500" },
+      { label: "Rating", value: data.stats.rating, icon: TrendingUp, color: "bg-yellow-500" },
+    ],
+    [data.stats, currency],
+  )
+
+  const inProgressJobs = data.jobs.filter((j) => j.status === "in-progress")
+  const completedJobs = data.jobs.filter((j) => j.status === "completed")
+  const pendingJobs = data.jobs.filter((j) => j.status === "pending")
 
   return (
     <div className="space-y-8 pb-8">
@@ -67,6 +86,12 @@ export function ProviderDashboardPage() {
         </Button>
       </div>
 
+      {error && (
+        <Card className="p-4 border border-red-200 bg-red-50 dark:bg-red-950/20 dark:border-red-900 text-red-700 dark:text-red-300">
+          {error}
+        </Card>
+      )}
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {stats.map((stat, idx) => {
@@ -76,7 +101,7 @@ export function ProviderDashboardPage() {
               <div className="flex items-start justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground mb-1">{stat.label}</p>
-                  <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+                  <p className="text-2xl font-bold text-foreground">{isLoading ? "..." : stat.value}</p>
                 </div>
                 <div className={`${stat.color} p-3 rounded-lg`}>
                   <Icon className="w-6 h-6 text-white" />
@@ -96,9 +121,10 @@ export function ProviderDashboardPage() {
         </TabsList>
 
         <TabsContent value="active" className="space-y-4 mt-6">
-          {mockJobs
-            .filter((j) => j.status === "in-progress")
-            .map((job) => (
+          {inProgressJobs.length === 0 && !isLoading && (
+            <Card className="p-6 text-sm text-muted-foreground">No active jobs right now.</Card>
+          )}
+          {inProgressJobs.map((job) => (
               <Card key={job.id} className="p-6">
                 <div className="flex justify-between items-start">
                   <div>
@@ -120,9 +146,10 @@ export function ProviderDashboardPage() {
         </TabsContent>
 
         <TabsContent value="completed" className="space-y-4 mt-6">
-          {mockJobs
-            .filter((j) => j.status === "completed")
-            .map((job) => (
+          {completedJobs.length === 0 && !isLoading && (
+            <Card className="p-6 text-sm text-muted-foreground">No completed jobs yet.</Card>
+          )}
+          {completedJobs.map((job) => (
               <Card key={job.id} className="p-6">
                 <div className="flex justify-between items-start">
                   <div>
@@ -144,9 +171,10 @@ export function ProviderDashboardPage() {
         </TabsContent>
 
         <TabsContent value="pending" className="space-y-4 mt-6">
-          {mockJobs
-            .filter((j) => j.status === "pending")
-            .map((job) => (
+          {pendingJobs.length === 0 && !isLoading && (
+            <Card className="p-6 text-sm text-muted-foreground">No pending jobs at the moment.</Card>
+          )}
+          {pendingJobs.map((job) => (
               <Card key={job.id} className="p-6">
                 <div className="flex justify-between items-start">
                   <div>

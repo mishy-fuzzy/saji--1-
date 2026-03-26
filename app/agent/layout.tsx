@@ -10,6 +10,8 @@ import {
   LayoutDashboard, AlertTriangle, User, LogOut, Menu, X, Shield, Bell, Search,
   BarChart3, DollarSign, Wallet, MessageCircle, Trophy, ChevronDown, Settings
 } from "lucide-react"
+import { fetchAgentNotifications } from "@/lib/services/agent-notifications-service"
+import type { AgentNotificationItem } from "@/lib/contracts/agent-notifications"
 
 export default function AgentLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user, logout } = useAuthContext()
@@ -19,11 +21,34 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [showMore, setShowMore] = useState(false)
+  const [notifications, setNotifications] = useState<AgentNotificationItem[]>([])
 
   useEffect(() => { setMounted(true) }, [])
   useEffect(() => {
     if (mounted && !isLoading && (!isAuthenticated || user?.role !== "agent")) router.push("/")
   }, [isAuthenticated, isLoading, user, router, mounted])
+
+  useEffect(() => {
+    let alive = true
+
+    const loadNotifications = async () => {
+      try {
+        const payload = await fetchAgentNotifications()
+        if (!alive) return
+        setNotifications(payload.notifications || [])
+      } catch {
+        // Keep layout stable when notification endpoint is unavailable.
+      }
+    }
+
+    if (!isLoading && isAuthenticated && user?.role === "agent") {
+      loadNotifications()
+    }
+
+    return () => {
+      alive = false
+    }
+  }, [isAuthenticated, isLoading, user])
 
   if (isLoading || !mounted) return <LoadingScreen />
   if (!isAuthenticated || user?.role !== "agent") return null
@@ -43,12 +68,6 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   const isActive = (href: string) => href === "/agent" ? pathname === "/agent" : pathname.startsWith(href)
   const bottomNav = menuItems.slice(0, 4)
   const moreItems = menuItems.slice(4)
-
-  const notifications = [
-    { text: "New dispute DSP-048 assigned to you", time: "5m ago" },
-    { text: "Commission payment of KES 45,500 processed", time: "2h ago" },
-    { text: "Customer Sarah rated you 5 stars", time: "4h ago" },
-  ]
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
@@ -77,10 +96,10 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
-              <button onClick={()=>setNotifOpen(!notifOpen)} className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"><Bell size={20} className="text-gray-600 dark:text-gray-300"/><span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"/></button>
+              <button onClick={()=>setNotifOpen(!notifOpen)} className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"><Bell size={20} className="text-gray-600 dark:text-gray-300"/>{notifications.length > 0 && <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"/>}</button>
               {notifOpen && <div className="absolute right-0 top-12 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50">
                 <div className="p-3 border-b border-gray-200 dark:border-gray-700"><h3 className="font-semibold text-sm text-gray-900 dark:text-white">Notifications</h3></div>
-                <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">{notifications.map((n,i)=>(
+                <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">{notifications.length === 0 ? <div className="px-3 py-2 text-xs text-gray-500">No notifications yet.</div> : notifications.map((n,i)=>(
                   <div key={i} className="px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50"><p className="text-xs text-gray-900 dark:text-white">{n.text}</p><p className="text-[10px] text-gray-500 mt-0.5">{n.time}</p></div>
                 ))}</div>
               </div>}

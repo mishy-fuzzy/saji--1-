@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import {
@@ -22,17 +22,47 @@ import {
   Percent,
   BarChart3,
 } from "lucide-react"
+import { fetchAdminDashboard } from "@/lib/services/admin-dashboard-service"
+import { logoutSession } from "@/lib/services/auth-service"
 
 export function AdminSidebar() {
   const [isOpen, setIsOpen] = useState(false)
+  const [badgeData, setBadgeData] = useState({
+    totalUsers: "-",
+    activeJobs: "-",
+    openDisputes: "-",
+  })
   const pathname = usePathname()
   const router = useRouter()
 
+  useEffect(() => {
+    let mounted = true
+
+    const loadBadges = async () => {
+      try {
+        const payload = await fetchAdminDashboard()
+        if (!mounted) return
+        setBadgeData({
+          totalUsers: payload.summary.totalUsers.toLocaleString(),
+          activeJobs: payload.summary.activeJobs.toLocaleString(),
+          openDisputes: payload.summary.openDisputes.toLocaleString(),
+        })
+      } catch {
+        // Keep graceful defaults when dashboard summary is unavailable.
+      }
+    }
+
+    loadBadges()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/admin", badge: null },
-    { icon: Users, label: "Users", href: "/admin/users", badge: "1.2K" },
-    { icon: Briefcase, label: "Jobs", href: "/admin/jobs", badge: "342" },
-    { icon: AlertTriangle, label: "Disputes", href: "/admin/disputes", badge: "12" },
+    { icon: Users, label: "Users", href: "/admin/users", badge: badgeData.totalUsers },
+    { icon: Briefcase, label: "Jobs", href: "/admin/jobs", badge: badgeData.activeJobs },
+    { icon: AlertTriangle, label: "Disputes", href: "/admin/disputes", badge: badgeData.openDisputes },
     { icon: CreditCard, label: "Payments", href: "/admin/payments", badge: null },
     { icon: CheckCircle, label: "Verifications", href: "/admin/verifications", badge: "42" },
     { icon: BarChart3, label: "Analytics", href: "/admin/analytics", badge: null },
@@ -124,8 +154,9 @@ export function AdminSidebar() {
             <p className="text-sm font-semibold text-white mt-1">Online</p>
           </div>
           <button
-            onClick={() => {
-              localStorage.removeItem("auth-token")
+            onClick={async () => {
+              await logoutSession()
+              localStorage.removeItem("saji_user")
               router.push("/")
               setIsOpen(false)
             }}
