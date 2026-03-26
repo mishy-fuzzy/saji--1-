@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server"
+import { compare } from "bcryptjs"
 import type { User, UserRole } from "@/lib/types"
+import { db } from "@/lib/server/db"
 import { setSessionCookie } from "@/lib/server/session"
 
 type LoginBody = {
@@ -8,43 +10,58 @@ type LoginBody = {
   password?: string
 }
 
-function getRoleFromCredentials(body: LoginBody): UserRole | "shopkeeper" {
-  const email = String(body.email || "").toLowerCase().trim()
-  const phone = String(body.phone || "").trim()
-  const password = String(body.password || "")
-
-  if (email === "admin@gmail.com" && password === "Admin@123") return "admin"
-  if (email === "secretary@gmail.com" && password === "Secretary@123") return "secretary"
-  if (email === "subadmin@gmail.com" && password === "SubAdmin@123") return "sub-admin"
-
-  const identifier = email || phone
-  if (identifier.includes("provider")) return "provider"
-  if (identifier.includes("shopkeeper")) return "shopkeeper"
-  return "customer"
+function mapDbRole(role: string): UserRole {
+  if (role === "sub_admin") return "sub-admin"
+  if (role === "shopkeeper") return "provider"
+  return role as UserRole
 }
 
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as LoginBody
+    const email = String(body.email || "").toLowerCase().trim()
+    const phone = String(body.phone || "").trim()
     const password = String(body.password || "")
 
-    if (!password || (!body.email && !body.phone)) {
+    if (!password || (!email && !phone)) {
       return NextResponse.json({ error: "Missing credentials" }, { status: 400 })
     }
 
-    const role = getRoleFromCredentials(body)
-    const nameFromEmail = body.email ? String(body.email).split("@")[0] : "User"
+    const record = await db.user.findFirst({
+      where: email
+        ? {
+            email: {
+              equals: email,
+              mode: "insensitive",
+            },
+          }
+        : {
+            phone,
+          },
+    })
 
-    const user: User = {
-      id: `user_${Date.now()}`,
-      name: nameFromEmail,
-      email: String(body.email || "user@example.com"),
-      phone: String(body.phone || "+254700000000"),
-      role: (role === "shopkeeper" ? "provider" : role) as UserRole,
-      createdAt: new Date().toISOString(),
+    if (!record?.passwordHash) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
     }
 
-    const response = NextResponse.json({ ok: true, user, routeRole: role })
+    const isValid = await compare(password, record.passwordHash)
+    if (!isValid) {
+      return NextResponse.json({ error: "Invalid credentials" }, { status: 401 })
+    }
+
+    const routeRole = record.role === "shopkeeper" ? "shopkeeper" : mapDbRole(record.role)
+
+    const user: User = {
+      id: record.id,
+      name: record.name,
+      email: record.email,
+      phone: record.phone || "",
+      role: mapDbRole(record.role),
+      createdAt: record.createdAt.toISOString(),
+      avatar: record.avatar || undefined,
+    }
+
+    const response = NextResponse.json({ ok: true, user, routeRole })
     setSessionCookie(response, user)
     return response
   } catch (error) {

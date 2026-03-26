@@ -22,15 +22,18 @@ import {
   Percent,
   BarChart3,
 } from "lucide-react"
+import { apiRequest } from "@/lib/api/client"
 import { fetchAdminDashboard } from "@/lib/services/admin-dashboard-service"
 import { logoutSession } from "@/lib/services/auth-service"
 
 export function AdminSidebar() {
   const [isOpen, setIsOpen] = useState(false)
   const [badgeData, setBadgeData] = useState({
-    totalUsers: "-",
-    activeJobs: "-",
-    openDisputes: "-",
+    totalUsers: null as string | null,
+    activeJobs: null as string | null,
+    openDisputes: null as string | null,
+    pendingVerifications: null as string | null,
+    moderationQueue: null as string | null,
   })
   const pathname = usePathname()
   const router = useRouter()
@@ -40,12 +43,18 @@ export function AdminSidebar() {
 
     const loadBadges = async () => {
       try {
-        const payload = await fetchAdminDashboard()
+        const [dashboard, verifications, moderation] = await Promise.all([
+          fetchAdminDashboard(),
+          apiRequest<{ ok: boolean; verifications: unknown[] }>("/api/admin/verifications", { method: "GET" }),
+          apiRequest<{ ok: boolean; items: unknown[] }>("/api/admin/moderation", { method: "GET" }),
+        ])
         if (!mounted) return
         setBadgeData({
-          totalUsers: payload.summary.totalUsers.toLocaleString(),
-          activeJobs: payload.summary.activeJobs.toLocaleString(),
-          openDisputes: payload.summary.openDisputes.toLocaleString(),
+          totalUsers: dashboard.summary.totalUsers.toLocaleString(),
+          activeJobs: dashboard.summary.activeJobs.toLocaleString(),
+          openDisputes: dashboard.summary.openDisputes.toLocaleString(),
+          pendingVerifications: verifications.verifications.length.toLocaleString(),
+          moderationQueue: moderation.items.length.toLocaleString(),
         })
       } catch {
         // Keep graceful defaults when dashboard summary is unavailable.
@@ -64,11 +73,11 @@ export function AdminSidebar() {
     { icon: Briefcase, label: "Jobs", href: "/admin/jobs", badge: badgeData.activeJobs },
     { icon: AlertTriangle, label: "Disputes", href: "/admin/disputes", badge: badgeData.openDisputes },
     { icon: CreditCard, label: "Payments", href: "/admin/payments", badge: null },
-    { icon: CheckCircle, label: "Verifications", href: "/admin/verifications", badge: "42" },
+    { icon: CheckCircle, label: "Verifications", href: "/admin/verifications", badge: badgeData.pendingVerifications },
     { icon: BarChart3, label: "Analytics", href: "/admin/analytics", badge: null },
     { icon: DollarSign, label: "Pricing", href: "/admin/pricing", badge: null },
     { icon: Percent, label: "Commissions", href: "/admin/commissions", badge: null },
-    { icon: Shield, label: "Moderation", href: "/admin/moderation", badge: "8" },
+    { icon: Shield, label: "Moderation", href: "/admin/moderation", badge: badgeData.moderationQueue },
     { icon: Megaphone, label: "Announcements", href: "/admin/announcements", badge: null },
     { icon: ScrollText, label: "Audit Log", href: "/admin/audit-log", badge: null },
     { icon: Users, label: "Team", href: "/admin/team", badge: null },

@@ -1,34 +1,86 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Search, Download, Filter, Eye, CheckCircle, Clock, UserCheck, AlertCircle } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { apiRequest } from "@/lib/api/client"
 
-const verificationsData = [
-  { id: "VF-001", name: "Sarah K.", email: "sarah@example.com", role: "Developer", documents: "ID + Portfolio", status: "Pending", submittedDate: "Feb 05, 2026" },
-  { id: "VF-002", name: "John M.", email: "john@example.com", role: "Designer", documents: "ID + Certificates", status: "Approved", submittedDate: "Feb 03, 2026" },
-  { id: "VF-003", name: "Martin M.", email: "martin@example.com", role: "Consultant", documents: "ID + Experience Proof", status: "Rejected", submittedDate: "Feb 01, 2026" },
-  { id: "VF-004", name: "Betty N.", email: "betty@example.com", role: "Electrician", documents: "License + Portfolio", status: "Pending", submittedDate: "Jan 31, 2026" },
-  { id: "VF-005", name: "Alice T.", email: "alice@example.com", role: "Gardener", documents: "ID + Experience", status: "Under Review", submittedDate: "Jan 29, 2026" },
-  { id: "VF-006", name: "Josh F.", email: "josh@example.com", role: "Installer", documents: "ID + Certificates", status: "Approved", submittedDate: "Jan 27, 2026" },
-]
+type VerificationRow = {
+  id: string
+  name: string
+  email: string
+  role: string
+  documents: string
+  status: "Pending" | "Approved" | "Rejected"
+  submittedDate: string
+}
+
+type VerificationsResponse = {
+  ok: boolean
+  verifications: Array<{
+    id: string
+    status: "pending" | "approved" | "rejected"
+    notes: string | null
+    createdAt: string
+    documentUrl: string | null
+    user: {
+      id: string
+      name: string
+      email: string
+      role: string
+    }
+  }>
+}
+
+function toTitleStatus(status: "pending" | "approved" | "rejected"): VerificationRow["status"] {
+  if (status === "approved") return "Approved"
+  if (status === "rejected") return "Rejected"
+  return "Pending"
+}
 
 export default function VerificationsPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [activeFilter, setActiveFilter] = useState("All")
-  const [verifications, setVerifications] = useState(verificationsData)
-  const [selectedVerification, setSelectedVerification] = useState<any>(null)
+  const [verifications, setVerifications] = useState<VerificationRow[]>([])
+  const [selectedVerification, setSelectedVerification] = useState<VerificationRow | null>(null)
   const [showModal, setShowModal] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
 
-  const filters = [
+  const loadVerifications = async () => {
+    try {
+      setLoadError("")
+      const payload = await apiRequest<VerificationsResponse>("/api/admin/verifications", { method: "GET" })
+      const mapped = payload.verifications.map((item) => ({
+        id: item.id,
+        name: item.user.name,
+        email: item.user.email,
+        role: item.user.role.replace("_", "-"),
+        documents: item.documentUrl || item.notes || "Verification documents submitted",
+        status: toTitleStatus(item.status),
+        submittedDate: new Date(item.createdAt).toLocaleDateString(),
+      }))
+      setVerifications(mapped)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load verifications"
+      setLoadError(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadVerifications()
+  }, [])
+
+  const filters = useMemo(() => [
     { label: "All", type: "All", count: verifications.length },
     { label: "Pending", type: "Pending", count: verifications.filter(v => v.status === "Pending").length },
-    { label: "Under Review", type: "Under Review", count: verifications.filter(v => v.status === "Under Review").length },
     { label: "Approved", type: "Approved", count: verifications.filter(v => v.status === "Approved").length },
     { label: "Rejected", type: "Rejected", count: verifications.filter(v => v.status === "Rejected").length },
-  ]
+  ], [verifications])
 
   const filteredVerifications = verifications.filter(v => {
     const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) || v.id.includes(searchTerm.toUpperCase())
@@ -40,25 +92,32 @@ export default function VerificationsPage() {
     switch(status) {
       case "Approved": return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
       case "Pending": return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
-      case "Under Review": return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
       case "Rejected": return "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
       default: return "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
     }
   }
 
-  const stats = [
+  const stats = useMemo(() => [
     { label: "Total Submissions", value: verifications.length, icon: UserCheck, color: "from-blue-50 to-blue-100" },
     { label: "Approved", value: verifications.filter(v => v.status === "Approved").length, icon: CheckCircle, color: "from-emerald-50 to-emerald-100" },
-    { label: "Pending Review", value: verifications.filter(v => v.status === "Pending" || v.status === "Under Review").length, icon: Clock, color: "from-yellow-50 to-yellow-100" },
+    { label: "Pending Review", value: verifications.filter(v => v.status === "Pending").length, icon: Clock, color: "from-yellow-50 to-yellow-100" },
     { label: "Rejected", value: verifications.filter(v => v.status === "Rejected").length, icon: AlertCircle, color: "from-red-50 to-red-100" },
-  ]
+  ], [verifications])
 
-  const handleApprove = (id: string) => {
+  const handleApprove = async (id: string) => {
+    await apiRequest(`/api/admin/verifications/${id}`, {
+      method: "PATCH",
+      body: { status: "approved" },
+    })
     setVerifications(verifications.map(v => v.id === id ? { ...v, status: "Approved" } : v))
     setShowModal(false)
   }
 
-  const handleReject = (id: string) => {
+  const handleReject = async (id: string) => {
+    await apiRequest(`/api/admin/verifications/${id}`, {
+      method: "PATCH",
+      body: { status: "rejected" },
+    })
     setVerifications(verifications.map(v => v.id === id ? { ...v, status: "Rejected" } : v))
     setShowModal(false)
   }
@@ -150,6 +209,8 @@ export default function VerificationsPage() {
         ))}
       </div>
 
+      {loadError && <Card className="p-4 text-sm text-red-600">{loadError}</Card>}
+
       {/* Verifications Table */}
       <Card className="border-0 shadow-lg overflow-hidden">
         <div className="overflow-x-auto">
@@ -166,6 +227,13 @@ export default function VerificationsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+              {isLoading && (
+                <tr>
+                  <td colSpan={7} className="px-6 py-6 text-sm text-gray-500 dark:text-gray-400">
+                    Loading verifications...
+                  </td>
+                </tr>
+              )}
               {filteredVerifications.map((verification) => (
                 <tr key={verification.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                   <td className="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-white">{verification.id}</td>
@@ -188,6 +256,13 @@ export default function VerificationsPage() {
                   </td>
                 </tr>
               ))}
+              {!isLoading && filteredVerifications.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-6 py-6 text-sm text-gray-500 dark:text-gray-400">
+                    No verification records found.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

@@ -1,25 +1,69 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Shield, Eye, Trash2, CheckCircle2, XCircle, AlertTriangle, Flag, Search, ImageIcon, MessageSquare, FileText } from "lucide-react"
+import { apiRequest } from "@/lib/api/client"
 
-const flaggedContent = [
-  { id: 1, type: "post", user: "Provider - Mike Ochieng", content: "Offering 'special services' at discounted rates tonight...", reason: "Potentially inappropriate", severity: "high", time: "10 min ago", reports: 5 },
-  { id: 2, type: "image", user: "Shopkeeper - Quick Mart", content: "Product image with misleading pricing overlay", reason: "Misleading content", severity: "medium", time: "25 min ago", reports: 3 },
-  { id: 3, type: "review", user: "Customer - Anonymous", content: "This provider is a SCAM!!! Dont use them they will steal your money!!!", reason: "Hate speech / defamation", severity: "high", time: "1h ago", reports: 8 },
-  { id: 4, type: "post", user: "Provider - Jane Wambui", content: "Copy of competitor's before/after photos used as own work", reason: "Copyright / stolen content", severity: "medium", time: "2h ago", reports: 2 },
-  { id: 5, type: "message", user: "Customer - John Doe", content: "Sending repeated unsolicited messages to multiple providers", reason: "Spam / harassment", severity: "high", time: "3h ago", reports: 12 },
-  { id: 6, type: "post", user: "Provider - Alex Kamau", content: "Live stream with background music (copyrighted)", reason: "Copyright violation", severity: "low", time: "5h ago", reports: 1 },
-  { id: 7, type: "review", user: "Customer - Mary K.", content: "Fake 5-star review (user never booked this service)", reason: "Fake review", severity: "medium", time: "6h ago", reports: 4 },
-  { id: 8, type: "image", user: "Shopkeeper - CBD Electronics", content: "Product listing using stock photos not matching actual product", reason: "Misleading product imagery", severity: "low", time: "8h ago", reports: 2 },
-]
+type ModerationItem = {
+  id: string
+  kind: "verification" | "dispute"
+  type: string
+  user: string
+  content: string
+  reason: string
+  severity: "high" | "medium" | "low"
+  time: string
+  reports: number
+  createdAt: string
+}
+
+type ModerationResponse = {
+  ok: boolean
+  items: ModerationItem[]
+  metrics: {
+    pendingReview: number
+    resolvedToday: number
+    autoFlagged: number
+    userReports: number
+    urgent: number
+    total: number
+  }
+}
 
 export default function AdminModerationPage() {
-  const [items, setItems] = useState(flaggedContent)
+  const [items, setItems] = useState<ModerationItem[]>([])
   const [filter, setFilter] = useState("all")
   const [search, setSearch] = useState("")
+  const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState("")
+  const [metrics, setMetrics] = useState<ModerationResponse["metrics"]>({
+    pendingReview: 0,
+    resolvedToday: 0,
+    autoFlagged: 0,
+    userReports: 0,
+    urgent: 0,
+    total: 0,
+  })
+
+  const loadQueue = async () => {
+    try {
+      setLoadError("")
+      const payload = await apiRequest<ModerationResponse>("/api/admin/moderation", { method: "GET" })
+      setItems(payload.items)
+      setMetrics(payload.metrics)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load moderation queue"
+      setLoadError(message)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadQueue()
+  }, [])
 
   const filtered = items.filter(i => {
     if (filter !== "all" && i.severity !== filter) return false
@@ -27,8 +71,25 @@ export default function AdminModerationPage() {
     return true
   })
 
-  const handleApprove = (id: number) => setItems(prev => prev.filter(i => i.id !== id))
-  const handleRemove = (id: number) => setItems(prev => prev.filter(i => i.id !== id))
+  const handleAction = async (item: ModerationItem, action: "approve" | "remove") => {
+    await apiRequest("/api/admin/moderation", {
+      method: "PATCH",
+      body: {
+        kind: item.kind,
+        id: item.id,
+        action,
+      },
+    })
+
+    setItems((prev) => prev.filter((current) => current.id !== item.id))
+    setMetrics((prev) => ({
+      ...prev,
+      pendingReview: Math.max(0, prev.pendingReview - 1),
+      total: Math.max(0, prev.total - 1),
+      urgent: item.severity === "high" ? Math.max(0, prev.urgent - 1) : prev.urgent,
+      resolvedToday: prev.resolvedToday + 1,
+    }))
+  }
 
   const sevColor = (s: string) => {
     switch (s) {
@@ -55,18 +116,20 @@ export default function AdminModerationPage() {
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Review and act on flagged content across the platform</p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="px-2.5 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-xs font-semibold">{items.filter(i => i.severity === "high").length} urgent</span>
-          <span className="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full text-xs font-semibold">{items.length} total</span>
+          <span className="px-2.5 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-xs font-semibold">{metrics.urgent} urgent</span>
+          <span className="px-2.5 py-1 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 rounded-full text-xs font-semibold">{metrics.total} total</span>
         </div>
       </div>
+
+      {loadError && <Card className="p-4 text-sm text-red-600">{loadError}</Card>}
 
       {/* Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: "Pending Review", value: items.length.toString(), icon: Shield, color: "text-blue-600" },
-          { label: "Resolved Today", value: "23", icon: CheckCircle2, color: "text-emerald-600" },
-          { label: "Auto-Flagged", value: "5", icon: AlertTriangle, color: "text-amber-600" },
-          { label: "User Reports", value: "37", icon: Flag, color: "text-red-600" },
+          { label: "Pending Review", value: String(metrics.pendingReview), icon: Shield, color: "text-blue-600" },
+          { label: "Resolved Today", value: String(metrics.resolvedToday), icon: CheckCircle2, color: "text-emerald-600" },
+          { label: "Auto-Flagged", value: String(metrics.autoFlagged), icon: AlertTriangle, color: "text-amber-600" },
+          { label: "User Reports", value: String(metrics.userReports), icon: Flag, color: "text-red-600" },
         ].map((s, i) => (
           <Card key={i} className="p-4 flex items-start gap-3">
             <div className={`w-9 h-9 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center ${s.color} flex-shrink-0`}><s.icon size={18} /></div>
@@ -95,6 +158,11 @@ export default function AdminModerationPage() {
 
       {/* Content Items */}
       <div className="space-y-3">
+        {isLoading && (
+          <Card className="p-8 text-center">
+            <p className="text-sm text-gray-500 dark:text-gray-400">Loading moderation queue...</p>
+          </Card>
+        )}
         {filtered.map(item => (
           <Card key={item.id} className={`p-4 ${item.severity === "high" ? "border-l-3 border-l-red-500" : ""}`}>
             <div className="flex flex-col sm:flex-row sm:items-start gap-3">
@@ -115,13 +183,13 @@ export default function AdminModerationPage() {
                 </div>
               </div>
               <div className="flex sm:flex-col gap-2 flex-shrink-0">
-                <Button size="sm" variant="outline" onClick={() => handleApprove(item.id)} className="gap-1 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:border-emerald-800 dark:hover:bg-emerald-900/20"><CheckCircle2 size={14} />Approve</Button>
-                <Button size="sm" variant="outline" onClick={() => handleRemove(item.id)} className="gap-1 text-xs text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"><Trash2 size={14} />Remove</Button>
+                <Button size="sm" variant="outline" onClick={() => handleAction(item, "approve")} className="gap-1 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50 dark:border-emerald-800 dark:hover:bg-emerald-900/20"><CheckCircle2 size={14} />Approve</Button>
+                <Button size="sm" variant="outline" onClick={() => handleAction(item, "remove")} className="gap-1 text-xs text-red-600 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20"><Trash2 size={14} />Remove</Button>
               </div>
             </div>
           </Card>
         ))}
-        {filtered.length === 0 && (
+        {!isLoading && filtered.length === 0 && (
           <Card className="p-8 text-center">
             <CheckCircle2 size={32} className="text-emerald-500 mx-auto mb-2" />
             <p className="text-sm text-gray-500 dark:text-gray-400">All content has been reviewed</p>
