@@ -14,6 +14,7 @@ function LoginContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { login } = useAuthContext()
+  const googleEnabled = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED === "true"
   const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
@@ -104,11 +105,15 @@ function LoginContent() {
   }
 
   const handleGoogleLogin = () => {
+    if (!googleEnabled) {
+      setError("Google sign-in is not configured yet. Please use email/password login.")
+      return
+    }
     window.location.href = "/api/auth/google/start?mode=login"
   }
 
   const handleAppleLogin = () => {
-    setError("Apple sign-in is not configured yet. Use email/password or Google sign-in.")
+    setError("Apple sign-in is not configured yet. Please use email/password login.")
   }
 
   return (
@@ -267,13 +272,13 @@ function LoginContent() {
           {/* Divider */}
           <div className="my-5 flex items-center gap-3">
             <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-muted-foreground font-medium">or continue with</span>
+            <span className="text-xs text-muted-foreground font-medium">optional social sign-in</span>
             <div className="flex-1 h-px bg-border" />
           </div>
 
           {/* Social */}
           <div className="grid grid-cols-2 gap-3">
-            <Button type="button" onClick={handleGoogleLogin} disabled={isLoading} variant="outline" className="h-10 rounded-xl bg-card gap-2 text-sm font-medium">
+            <Button type="button" onClick={handleGoogleLogin} disabled={isLoading || !googleEnabled} variant="outline" className="h-10 rounded-xl bg-card gap-2 text-sm font-medium">
               <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.64-.15-3.21-.43-4.73H24v9.01h12.4c-.54 2.91-2.18 5.38-4.65 7.04l7.2 5.59c4.21-3.88 6.65-9.6 6.65-16.91z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.81l-7.2-5.59c-2 1.35-4.56 2.15-8.7 2.15-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
               Google
             </Button>
