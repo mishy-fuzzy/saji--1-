@@ -77,7 +77,7 @@ export function SystemSettings() {
             ))}
           </div>
 
-          <Button className="rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold">
+          <Button onClick={() => alert(\"Save commission rates\")} className=\"rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold\">
             Save Commission Rates
           </Button>
         </Card>
@@ -110,7 +110,7 @@ export function SystemSettings() {
             ))}
           </div>
 
-          <Button className="rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold">
+          <Button onClick={() => alert("Save settings")} className="rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold">
             Save Settings
           </Button>
         </Card>
@@ -162,7 +162,7 @@ export function SystemSettings() {
             </div>
           </div>
 
-          <Button className="rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold">
+          <Button onClick={() => alert("Update payment settings")} className="rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold">
             Update Payment Settings
           </Button>
         </Card>
