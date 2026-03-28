@@ -1,46 +1,72 @@
-"use client"
+"use client";
 
-import React from "react"
+import React from "react";
 
-import { useEffect, useState } from "react"
-import Link from "next/link"
-import { usePathname } from "next/navigation"
-import { useAuthContext } from "@/lib/auth-context"
-import { 
-  Home, Store, Briefcase, Users, MessageCircle, UserSearch, Settings,
-  Bell, User, Menu, X, LogOut, ChevronRight, Wallet, Heart, MapPin,
-  HelpCircle, Gift
-} from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import Image from "next/image"
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { useAuthContext } from "@/lib/auth-context";
+import {
+  Home,
+  Store,
+  Briefcase,
+  Users,
+  MessageCircle,
+  UserSearch,
+  Settings,
+  Bell,
+  User,
+  Menu,
+  X,
+  LogOut,
+  ChevronRight,
+  Wallet,
+  Heart,
+  MapPin,
+  HelpCircle,
+  Gift,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import Image from "next/image";
 
 type CustomerNotification = {
-  id: string
-  title: string
-  message: string
-  time: string
-  unread: boolean
-}
+  id: string;
+  title: string;
+  message: string;
+  time: string;
+  unread: boolean;
+};
 
 function formatRelativeTime(value?: string) {
-  if (!value) return "now"
-  const date = new Date(value)
-  const diffMs = Date.now() - date.getTime()
-  const mins = Math.max(1, Math.floor(diffMs / 60000))
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
+  if (!value) return "now";
+  const date = new Date(value);
+  const diffMs = Date.now() - date.getTime();
+  const mins = Math.max(1, Math.floor(diffMs / 60000));
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
-export default function CustomerLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname()
-  const { user, logout } = useAuthContext()
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [showNotifications, setShowNotifications] = useState(false)
-  const [notifications, setNotifications] = useState<CustomerNotification[]>([])
+export default function CustomerLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const pathname = usePathname();
+  const { user, logout } = useAuthContext();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<CustomerNotification[]>(
+    [],
+  );
 
   const navItems = [
     { icon: Home, label: "Home", href: "/customer/home" },
@@ -48,27 +74,37 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
     { icon: Briefcase, label: "My Jobs", href: "/customer/jobs" },
     { icon: Users, label: "Community", href: "/customer/community" },
     { icon: MessageCircle, label: "Chat", href: "/customer/messages" },
-  ]
+  ];
 
   const sidebarItems = [
     ...navItems,
-    { icon: UserSearch, label: "Find Specialists", href: "/customer/find-specialists" },
+    {
+      icon: UserSearch,
+      label: "Find Specialists",
+      href: "/customer/find-specialists",
+    },
     { icon: Heart, label: "Favorites", href: "/customer/favorites" },
-    { icon: MapPin, label: "Saved Addresses", href: "/customer/saved-addresses" },
+    {
+      icon: MapPin,
+      label: "Saved Addresses",
+      href: "/customer/saved-addresses",
+    },
     { icon: Wallet, label: "Wallet", href: "/customer/wallet" },
     { icon: Gift, label: "Refer & Earn", href: "/customer/referrals" },
     { icon: HelpCircle, label: "Help & Support", href: "/customer/help" },
     { icon: Settings, label: "Settings", href: "/customer/settings" },
-  ]
+  ];
 
   useEffect(() => {
     const loadNotifications = async () => {
       try {
-        const response = await fetch("/api/notifications", { cache: "no-store" })
-        const payload = await response.json()
+        const response = await fetch("/api/notifications", {
+          cache: "no-store",
+        });
+        const payload = await response.json();
         if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
-          setNotifications([])
-          return
+          setNotifications([]);
+          return;
         }
 
         const items: CustomerNotification[] = payload.data.map((item: any) => ({
@@ -77,18 +113,18 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
           message: String(item?.message || ""),
           time: formatRelativeTime(String(item?.createdAt || "")),
           unread: !Boolean(item?.read),
-        }))
+        }));
 
-        setNotifications(items)
+        setNotifications(items);
       } catch {
-        setNotifications([])
+        setNotifications([]);
       }
-    }
+    };
 
-    loadNotifications()
-    const intervalId = window.setInterval(loadNotifications, 3000)
-    return () => window.clearInterval(intervalId)
-  }, [])
+    loadNotifications();
+    const intervalId = window.setInterval(loadNotifications, 3000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   const markAllNotificationsRead = async () => {
     try {
@@ -96,14 +132,16 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ markAllRead: true }),
-      })
-      setNotifications((prev) => prev.map((item) => ({ ...item, unread: false })))
+      });
+      setNotifications((prev) =>
+        prev.map((item) => ({ ...item, unread: false })),
+      );
     } catch {
       // no-op
     }
-  }
+  };
 
-  const unreadCount = notifications.filter(n => n.unread).length
+  const unreadCount = notifications.filter((n) => n.unread).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,7 +151,9 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
         <div className="flex items-center h-16 px-6 border-b border-border">
           <Link href="/customer/home" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">S</span>
+              <span className="text-primary-foreground font-bold text-lg">
+                S
+              </span>
             </div>
             <span className="font-bold text-xl text-foreground">SAJI</span>
           </Link>
@@ -121,17 +161,30 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
 
         {/* User Profile Quick View */}
         <div className="p-4 border-b border-border">
-          <Link href="/customer/profile" className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors">
+          <Link
+            href="/customer/profile"
+            className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
+          >
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
               {user?.avatar ? (
-                <Image src={user.avatar || "/placeholder.svg"} alt="" width={40} height={40} className="object-cover" />
+                <Image
+                  src={user.avatar || "/placeholder.svg"}
+                  alt=""
+                  width={40}
+                  height={40}
+                  className="object-cover"
+                />
               ) : (
                 <User className="w-5 h-5 text-primary" />
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm text-foreground truncate">{user?.name || "Guest User"}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.email || "guest@example.com"}</p>
+              <p className="font-semibold text-sm text-foreground truncate">
+                {user?.name || "Guest User"}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {user?.email || "guest@example.com"}
+              </p>
             </div>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </Link>
@@ -140,28 +193,29 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
         {/* Navigation */}
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
           {sidebarItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+            const isActive =
+              pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-md" 
+                  isActive
+                    ? "bg-primary text-primary-foreground shadow-md"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
                 <item.icon className="w-5 h-5" />
                 {item.label}
               </Link>
-            )
+            );
           })}
         </nav>
 
         {/* Logout Button */}
         <div className="p-4 border-t border-border">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             onClick={logout}
             className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           >
@@ -184,52 +238,75 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-0">
+                <SheetTitle className="sr-only">
+                  Customer Navigation Menu
+                </SheetTitle>
                 <div className="flex items-center h-16 px-6 border-b border-border">
-                  <Link href="/customer/home" className="flex items-center gap-2">
+                  <Link
+                    href="/customer/home"
+                    className="flex items-center gap-2"
+                  >
                     <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                      <span className="text-primary-foreground font-bold text-lg">S</span>
+                      <span className="text-primary-foreground font-bold text-lg">
+                        S
+                      </span>
                     </div>
-                    <span className="font-bold text-xl text-foreground">SAJI</span>
+                    <span className="font-bold text-xl text-foreground">
+                      SAJI
+                    </span>
                   </Link>
                 </div>
                 <div className="p-4 border-b border-border">
-                  <Link href="/customer/profile" className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors">
+                  <Link
+                    href="/customer/profile"
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
+                  >
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
                       {user?.avatar ? (
-                        <Image src={user.avatar || "/placeholder.svg"} alt="" width={40} height={40} className="object-cover" />
+                        <Image
+                          src={user.avatar || "/placeholder.svg"}
+                          alt=""
+                          width={40}
+                          height={40}
+                          className="object-cover"
+                        />
                       ) : (
                         <User className="w-5 h-5 text-primary" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm text-foreground truncate">{user?.name || "Guest User"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{user?.email || "guest@example.com"}</p>
+                      <p className="font-semibold text-sm text-foreground truncate">
+                        {user?.name || "Guest User"}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {user?.email || "guest@example.com"}
+                      </p>
                     </div>
                   </Link>
                 </div>
                 <nav className="flex-1 px-4 py-4 space-y-1">
                   {sidebarItems.map((item) => {
-                    const isActive = pathname === item.href
+                    const isActive = pathname === item.href;
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
                         onClick={() => setSidebarOpen(false)}
                         className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                          isActive 
-                            ? "bg-primary text-primary-foreground" 
+                          isActive
+                            ? "bg-primary text-primary-foreground"
                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
                         }`}
                       >
                         <item.icon className="w-5 h-5" />
                         {item.label}
                       </Link>
-                    )
+                    );
                   })}
                 </nav>
                 <div className="p-4 border-t border-border">
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     onClick={logout}
                     className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive"
                   >
@@ -243,15 +320,26 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
             {/* Page Title - Desktop Only */}
             <div className="hidden lg:block">
               <h1 className="text-lg font-semibold text-foreground">
-                {sidebarItems.find(item => pathname === item.href || pathname.startsWith(item.href + "/"))?.label 
-                  || (pathname.includes("/notifications") ? "Notifications" : "Dashboard")}
+                {sidebarItems.find(
+                  (item) =>
+                    pathname === item.href ||
+                    pathname.startsWith(item.href + "/"),
+                )?.label ||
+                  (pathname.includes("/notifications")
+                    ? "Notifications"
+                    : "Dashboard")}
               </h1>
             </div>
 
             {/* Mobile Logo */}
-            <Link href="/customer/home" className="lg:hidden flex items-center gap-2">
+            <Link
+              href="/customer/home"
+              className="lg:hidden flex items-center gap-2"
+            >
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-lg">S</span>
+                <span className="text-primary-foreground font-bold text-lg">
+                  S
+                </span>
               </div>
               <span className="font-bold text-lg text-foreground">SAJI</span>
             </Link>
@@ -260,8 +348,8 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
             <div className="flex items-center gap-2">
               {/* Notifications */}
               <div className="relative">
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   size="icon"
                   onClick={() => setShowNotifications(!showNotifications)}
                   className="relative"
@@ -277,20 +365,27 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                 {/* Notifications Dropdown */}
                 {showNotifications && (
                   <>
-                    <div 
-                      className="fixed inset-0 z-40" 
-                      onClick={() => setShowNotifications(false)} 
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowNotifications(false)}
                     />
                     <div className="absolute right-0 top-12 w-80 bg-card rounded-xl shadow-xl border border-border z-50 overflow-hidden">
                       <div className="p-4 border-b border-border flex items-center justify-between">
-                        <h3 className="font-semibold text-foreground">Notifications</h3>
-                        <Button variant="ghost" size="sm" className="text-xs text-primary" onClick={markAllNotificationsRead}>
+                        <h3 className="font-semibold text-foreground">
+                          Notifications
+                        </h3>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs text-primary"
+                          onClick={markAllNotificationsRead}
+                        >
                           Mark all read
                         </Button>
                       </div>
                       <div className="max-h-80 overflow-y-auto">
                         {notifications.map((notification) => (
-                          <div 
+                          <div
                             key={notification.id}
                             className={`p-4 border-b border-border last:border-0 hover:bg-muted transition-colors cursor-pointer ${
                               notification.unread ? "bg-primary/5" : ""
@@ -300,16 +395,24 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                               {notification.unread && (
                                 <div className="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0" />
                               )}
-                              <div className={notification.unread ? "" : "ml-5"}>
-                                <p className="font-medium text-sm text-foreground">{notification.title}</p>
-                                <p className="text-xs text-muted-foreground mt-1">{notification.message}</p>
-                                <p className="text-xs text-muted-foreground mt-1">{notification.time}</p>
+                              <div
+                                className={notification.unread ? "" : "ml-5"}
+                              >
+                                <p className="font-medium text-sm text-foreground">
+                                  {notification.title}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {notification.message}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {notification.time}
+                                </p>
                               </div>
                             </div>
                           </div>
                         ))}
                       </div>
-                      <Link 
+                      <Link
                         href="/customer/notifications"
                         className="block p-3 text-center text-sm text-primary font-medium hover:bg-muted transition-colors"
                         onClick={() => setShowNotifications(false)}
@@ -326,7 +429,13 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                 <Button variant="ghost" size="icon" className="rounded-full">
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
                     {user?.avatar ? (
-                      <Image src={user.avatar || "/placeholder.svg"} alt="" width={32} height={32} className="object-cover" />
+                      <Image
+                        src={user.avatar || "/placeholder.svg"}
+                        alt=""
+                        width={32}
+                        height={32}
+                        className="object-cover"
+                      />
                     ) : (
                       <User className="w-4 h-4 text-primary" />
                     )}
@@ -338,15 +447,14 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
         </header>
 
         {/* Page Content */}
-        <main className="pb-20 lg:pb-6">
-          {children}
-        </main>
+        <main className="pb-20 lg:pb-6">{children}</main>
 
         {/* Mobile Bottom Navigation */}
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40">
           <div className="flex items-center justify-around h-16 px-2">
             {navItems.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+              const isActive =
+                pathname === item.href || pathname.startsWith(item.href + "/");
               return (
                 <Link
                   key={item.href}
@@ -355,14 +463,18 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                     isActive ? "text-primary" : "text-muted-foreground"
                   }`}
                 >
-                  <item.icon className={`w-5 h-5 ${isActive ? "text-primary" : ""}`} />
-                  <span className="text-[10px] mt-1 font-medium">{item.label}</span>
+                  <item.icon
+                    className={`w-5 h-5 ${isActive ? "text-primary" : ""}`}
+                  />
+                  <span className="text-[10px] mt-1 font-medium">
+                    {item.label}
+                  </span>
                 </Link>
-              )
+              );
             })}
           </div>
         </nav>
       </div>
     </div>
-  )
+  );
 }
