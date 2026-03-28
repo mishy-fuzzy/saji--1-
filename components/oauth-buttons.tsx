@@ -1,21 +1,18 @@
-"use client"
+"use client";
 
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
 
 export function OAuthButtons() {
   const handleGoogleSignIn = () => {
-    // Simulate Google OAuth - in production, integrate with actual OAuth provider
-    console.log("Google sign in clicked")
-    // Redirect to Google OAuth
-    window.location.href = "https://accounts.google.com/o/oauth2/v2/auth"
-  }
+    window.location.href = "/api/auth/google/start?mode=login";
+  };
 
   const handleAppleSignIn = () => {
     // Simulate Apple OAuth - in production, integrate with actual OAuth provider
-    console.log("Apple sign in clicked")
+    console.log("Apple sign in clicked");
     // Redirect to Apple OAuth
-    window.location.href = "https://appleid.apple.com/auth"
-  }
+    window.location.href = "https://appleid.apple.com/auth";
+  };
 
   return (
     <div className="space-y-3 w-full">
@@ -54,5 +51,5 @@ export function OAuthButtons() {
         Continue with Apple
       </Button>
     </div>
-  )
+  );
 }

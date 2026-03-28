@@ -1,19 +1,24 @@
-import { NextResponse } from "next/server"
-import { db } from "@/lib/server/db"
-import { verifyPassword } from "@/lib/server/password"
-import { createSessionCookie } from "@/lib/server/session"
+import { NextResponse } from "next/server";
+import { db } from "@/lib/server/db";
+import { verifyPassword } from "@/lib/server/password";
+import { createSessionCookie } from "@/lib/server/session";
 
-const prismaDb: any = db
+const prismaDb: any = db;
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    const email = String(body?.email || "").trim().toLowerCase()
-    const phone = String(body?.phone || "").trim()
-    const password = String(body?.password || "")
+    const body = await request.json();
+    const email = String(body?.email || "")
+      .trim()
+      .toLowerCase();
+    const phone = String(body?.phone || "").trim();
+    const password = String(body?.password || "");
 
     if ((!email && !phone) || !password) {
-      return NextResponse.json({ ok: false, error: "credentials are required" }, { status: 400 })
+      return NextResponse.json(
+        { ok: false, error: "credentials are required" },
+        { status: 400 },
+      );
     }
 
     const user = await prismaDb.user.findFirst({
@@ -31,14 +36,38 @@ export async function POST(request: Request) {
         isSuspended: true,
         createdAt: true,
       },
-    })
+    });
+
+    if (!user && email) {
+      const archived = await prismaDb.user.findUnique({
+        where: { email },
+        select: { id: true, deletedAt: true },
+      });
+
+      if (archived?.deletedAt) {
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              "account is deactivated. Use Reactivate account to restore access",
+          },
+          { status: 403 },
+        );
+      }
+    }
 
     if (!user?.passwordHash || !verifyPassword(password, user.passwordHash)) {
-      return NextResponse.json({ ok: false, error: "invalid credentials" }, { status: 401 })
+      return NextResponse.json(
+        { ok: false, error: "invalid credentials" },
+        { status: 401 },
+      );
     }
 
     if (user.isSuspended) {
-      return NextResponse.json({ ok: false, error: "account is suspended" }, { status: 403 })
+      return NextResponse.json(
+        { ok: false, error: "account is suspended" },
+        { status: 403 },
+      );
     }
 
     await prismaDb.authLog.create({
@@ -49,7 +78,7 @@ export async function POST(request: Request) {
         status: "SUCCESS",
         response: JSON.stringify({ role: user.role }),
       },
-    })
+    });
 
     const response = NextResponse.json({
       ok: true,
@@ -61,7 +90,7 @@ export async function POST(request: Request) {
         role: user.role,
         createdAt: user.createdAt,
       },
-    })
+    });
 
     response.headers.append(
       "Set-Cookie",
@@ -70,11 +99,11 @@ export async function POST(request: Request) {
         role: user.role,
         email: user.email,
       }),
-    )
+    );
 
-    return response
+    return response;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Login failed"
-    return NextResponse.json({ ok: false, error: message }, { status: 500 })
+    const message = error instanceof Error ? error.message : "Login failed";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

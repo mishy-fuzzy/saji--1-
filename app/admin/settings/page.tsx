@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Download,
   Save,
@@ -77,35 +77,175 @@ const paymentRules = [
   },
 ];
 
+type PaymentRule = (typeof paymentRules)[number];
+
+const defaultPreferences = {
+  platformFee: 5,
+  autoApprove: true,
+  requireVerification: true,
+  enableDisputeResolution: true,
+};
+
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState("payment-rules");
   const [saved, setSaved] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [exportMessage, setExportMessage] = useState("");
+  const [rules, setRules] = useState<PaymentRule[]>(paymentRules);
 
-  const [preferences, setPreferences] = useState({
-    platformFee: 5,
-    autoApprove: true,
-    requireVerification: true,
-    enableDisputeResolution: true,
-  });
+  const [preferences, setPreferences] = useState(defaultPreferences);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 3000);
+  useEffect(() => {
+    async function loadSettings() {
+      setIsLoading(true);
+      setError("");
+      try {
+        const response = await fetch("/api/admin/settings", {
+          cache: "no-store",
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || "Failed to load admin settings");
+        }
+
+        if (payload.data?.preferences) {
+          setPreferences({
+            ...defaultPreferences,
+            ...payload.data.preferences,
+          });
+        }
+
+        if (
+          Array.isArray(payload.data?.rules) &&
+          payload.data.rules.length > 0
+        ) {
+          setRules(payload.data.rules);
+        }
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to load admin settings";
+        setError(message);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadSettings();
+  }, []);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setError("");
+    setExportMessage("");
+    try {
+      const response = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferences }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to save preferences");
+      }
+
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to save preferences";
+      setError(message);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleNewRule = () => {
-    console.log("New Rule button clicked");
-    alert("Create new payment rule functionality would be implemented here");
+  const handleNewRule = async () => {
+    setError("");
+    setExportMessage("");
+    try {
+      const response = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ruleAction: "create",
+          rule: {
+            service: "New Service",
+            level: "Skilled",
+            jobSize: "Various",
+            paymentType: "Deposit + Balance",
+            rule: "Pending",
+          },
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok || !payload?.data?.rule) {
+        throw new Error(payload?.error || "Failed to create payment rule");
+      }
+
+      setRules((prev) => [payload.data.rule, ...prev]);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to create payment rule";
+      setError(message);
+    }
   };
 
-  const handleEditRule = (ruleId: number) => {
-    console.log("Edit rule clicked:", ruleId);
-    alert("Edit payment rule functionality would be implemented here");
+  const handleEditRule = async (ruleId: number) => {
+    setError("");
+    setExportMessage("");
+    const current = rules.find((item) => item.id === ruleId);
+    if (!current) return;
+
+    const nextStatus = current.rule === "Active" ? "Pending" : "Active";
+    try {
+      const response = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ruleAction: "update",
+          rule: { ...current, rule: nextStatus },
+        }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok || !payload?.data?.rule) {
+        throw new Error(payload?.error || "Failed to update payment rule");
+      }
+
+      setRules((prev) =>
+        prev.map((item) => (item.id === ruleId ? payload.data.rule : item)),
+      );
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to update payment rule";
+      setError(message);
+    }
   };
 
   const handleExport = () => {
-    console.log("Export button clicked");
-    alert("Export settings functionality would be implemented here");
+    const lines = [
+      "type,id,service,level,jobSize,paymentType,status",
+      ...rules.map(
+        (rule) =>
+          `rule,${rule.id},${rule.service},${rule.level},${rule.jobSize},${rule.paymentType},${rule.rule}`,
+      ),
+      `preference,platformFee,,,,,${preferences.platformFee}`,
+      `preference,autoApprove,,,,,${preferences.autoApprove}`,
+      `preference,requireVerification,,,,,${preferences.requireVerification}`,
+      `preference,enableDisputeResolution,,,,,${preferences.enableDisputeResolution}`,
+    ];
+
+    const blob = new Blob([lines.join("\n")], {
+      type: "text/csv;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `admin-settings-${new Date().toISOString().slice(0, 10)}.csv`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+    setExportMessage("Export generated successfully.");
   };
 
   const tabs = [
@@ -138,6 +278,24 @@ export default function SettingsPage() {
           Export
         </Button>
       </div>
+
+      {isLoading && (
+        <Card className="p-4 text-sm text-gray-600 dark:text-gray-300">
+          Loading settings...
+        </Card>
+      )}
+
+      {error && (
+        <Card className="p-4 text-sm border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+          {error}
+        </Card>
+      )}
+
+      {exportMessage && (
+        <Card className="p-4 text-sm border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+          {exportMessage}
+        </Card>
+      )}
 
       {/* Tabs */}
       <div className="border-b border-gray-200 dark:border-gray-700">
@@ -211,7 +369,7 @@ export default function SettingsPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {paymentRules.map((rule) => (
+                    {rules.map((rule) => (
                       <tr
                         key={rule.id}
                         className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors"
@@ -259,7 +417,9 @@ export default function SettingsPage() {
             </div>
 
             <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-              <span>Showing 1-7 of 7 rules</span>
+              <span>
+                Showing 1-{rules.length} of {rules.length} rules
+              </span>
               <div className="flex gap-1">
                 {[1, 2].map((page) => (
                   <Button
@@ -376,10 +536,11 @@ export default function SettingsPage() {
 
             <Button
               onClick={handleSave}
+              disabled={isSaving}
               className="bg-blue-600 hover:bg-blue-700 gap-2"
             >
               <Save size={18} />
-              Save Preferences
+              {isSaving ? "Saving..." : "Save Preferences"}
             </Button>
             {saved && (
               <div className="flex items-center gap-2 text-emerald-600 font-medium">

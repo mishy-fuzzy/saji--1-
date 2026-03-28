@@ -49,6 +49,8 @@ model User {
   agentProfile           Agent?
   bookings               Booking[]        @relation("CustomerBookings")
   jobs                   Booking[]        @relation("ProviderJobs")
+  postedJobs             Job[]            @relation("JobPostedBy")
+  assignedJobs           Job[]            @relation("JobProvider")
   customerProfile        Customer?
   messages               Message[]
   referralsGot           Referral?        @relation("Referred")
@@ -58,6 +60,9 @@ model User {
   services               Service[]        @relation("ProviderServices")
   serviceProviderProfile ServiceProvider?
   wallet                 Wallet?
+  verifications          Verification[]   @relation("UserVerifications")
+  createdDisputes        Dispute[]        @relation("DisputeCreatedBy")
+  assignedDisputes       Dispute[]        @relation("DisputeAssignedTo")
 
   @@index([role, isSuspended])
 }
@@ -113,9 +118,35 @@ model Service {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   bookings    Booking[]
+  jobs        Job[]
   provider    User      @relation("ProviderServices", fields: [providerId], references: [id])
 
   @@index([category])
+}
+
+model Job {
+  id         String   @id @default(cuid())
+  title      String
+  description String
+  status     String   @default("pending")
+  price      Int
+  currency   String   @default("KES")
+  location   String?
+  postedById String
+  providerId String?
+  serviceId  String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  postedBy   User     @relation("JobPostedBy", fields: [postedById], references: [id])
+  provider   User?    @relation("JobProvider", fields: [providerId], references: [id])
+  service    Service? @relation(fields: [serviceId], references: [id])
+  disputes   Dispute[]
+
+  @@index([status])
+  @@index([postedById])
+  @@index([providerId])
+  @@index([serviceId])
 }
 
 model Booking {
@@ -163,6 +194,42 @@ model Wallet {
   userId    String   @unique
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id])
+}
+
+model Dispute {
+  id          String   @id @default(cuid())
+  jobId       String?
+  createdById String
+  assignedToId String?
+  reason      String
+  details     String?
+  status      String   @default("open")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  job         Job?     @relation(fields: [jobId], references: [id])
+  createdBy   User     @relation("DisputeCreatedBy", fields: [createdById], references: [id])
+  assignedTo  User?    @relation("DisputeAssignedTo", fields: [assignedToId], references: [id])
+
+  @@index([status])
+  @@index([createdById])
+  @@index([assignedToId])
+  @@index([jobId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  userId     String
+  documentUrl String?
+  notes      String?
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation("UserVerifications", fields: [userId], references: [id])
+
+  @@index([status])
+  @@index([userId])
 }
 
 model Message {

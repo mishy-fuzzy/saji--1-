@@ -1,54 +1,70 @@
-import { NextResponse } from "next/server"
-import { db, serializePayload } from "@/lib/server/db"
-import { getSessionActor } from "@/lib/server/api-auth"
-import { queryStkPushStatus } from "@/lib/server/mpesa"
-import { createInAppNotification } from "@/lib/server/in-app-notifications"
+import { NextResponse } from "next/server";
+import { db, serializePayload } from "@/lib/server/db";
+import { getSessionActor } from "@/lib/server/api-auth";
+import { queryStkPushStatus } from "@/lib/server/mpesa";
+import { createInAppNotification } from "@/lib/server/in-app-notifications";
 
-const prismaDb: any = db
+const prismaDb: any = db;
+const STK_FAILURE_DELAY_MS = 90_000;
 
 function walletReferencePrefix(userId: string): string {
-  return `WALLET:${userId}:`
+  return `WALLET:${userId}:`;
 }
 
-function toUiStatus(value: string | null | undefined): "pending" | "completed" | "failed" {
-  const normalized = String(value || "PENDING").toUpperCase()
-  if (normalized === "SUCCESS" || normalized === "COMPLETED") return "completed"
-  if (normalized === "FAILED") return "failed"
-  return "pending"
+function toUiStatus(
+  value: string | null | undefined,
+): "pending" | "completed" | "failed" {
+  const normalized = String(value || "PENDING").toUpperCase();
+  if (normalized === "SUCCESS" || normalized === "COMPLETED")
+    return "completed";
+  if (normalized === "FAILED") return "failed";
+  return "pending";
 }
 
-function resolveQueryResultStatus(queryPayload: any): "SUCCESS" | "FAILED" | "PENDING" {
-  const rawCode = queryPayload?.ResultCode
+function resolveQueryResultStatus(
+  queryPayload: any,
+): "SUCCESS" | "FAILED" | "PENDING" {
+  const rawCode = queryPayload?.ResultCode;
   if (rawCode === undefined || rawCode === null || rawCode === "") {
-    return "PENDING"
+    return "PENDING";
   }
 
-  const resultCode = Number(rawCode)
+  const resultCode = Number(rawCode);
   if (Number.isNaN(resultCode)) {
-    return "PENDING"
+    return "PENDING";
   }
 
-  return resultCode === 0 ? "SUCCESS" : "FAILED"
+  return resultCode === 0 ? "SUCCESS" : "FAILED";
 }
 
-function getWalletUserIdFromReference(reference: string | null | undefined): string | null {
-  const value = String(reference || "")
-  if (!value.startsWith("WALLET:")) return null
-  const segments = value.split(":")
-  return segments[1] || null
+function getWalletUserIdFromReference(
+  reference: string | null | undefined,
+): string | null {
+  const value = String(reference || "");
+  if (!value.startsWith("WALLET:")) return null;
+  const segments = value.split(":");
+  return segments[1] || null;
 }
 
-async function ensureWalletCreditFromStk(sourceTx: any, checkoutRequestId: string): Promise<boolean> {
-  const walletSourceReference = sourceTx?.reference ? String(sourceTx.reference) : null
-  const walletUserId = getWalletUserIdFromReference(walletSourceReference)
-  const walletTopUpAmount = Math.max(0, Math.round(Number(sourceTx?.amount || 0)))
+async function ensureWalletCreditFromStk(
+  sourceTx: any,
+  checkoutRequestId: string,
+): Promise<boolean> {
+  const walletSourceReference = sourceTx?.reference
+    ? String(sourceTx.reference)
+    : null;
+  const walletUserId = getWalletUserIdFromReference(walletSourceReference);
+  const walletTopUpAmount = Math.max(
+    0,
+    Math.round(Number(sourceTx?.amount || 0)),
+  );
 
   if (!walletUserId || !walletSourceReference || walletTopUpAmount <= 0) {
-    return false
+    return false;
   }
 
   const credited = await prismaDb.$transaction(async (prisma: any) => {
-    const creditReference = `${walletSourceReference}:CREDIT:${checkoutRequestId}`
+    const creditReference = `${walletSourceReference}:CREDIT:${checkoutRequestId}`;
     const existingCredit = await prisma.paymentTransaction.findFirst({
       where: {
         provider: "wallet",
@@ -56,10 +72,10 @@ async function ensureWalletCreditFromStk(sourceTx: any, checkoutRequestId: strin
         reference: creditReference,
       },
       select: { id: true },
-    })
+    });
 
     if (existingCredit) {
-      return false
+      return false;
     }
 
     const wallet = await prisma.wallet.upsert({
@@ -71,15 +87,15 @@ async function ensureWalletCreditFromStk(sourceTx: any, checkoutRequestId: strin
         balance: 0,
       },
       select: { balance: true, currency: true },
-    })
+    });
 
-    const currentBalance = Number(wallet.balance || 0)
-    const newBalance = currentBalance + walletTopUpAmount
+    const currentBalance = Number(wallet.balance || 0);
+    const newBalance = currentBalance + walletTopUpAmount;
 
     await prisma.wallet.update({
       where: { userId: walletUserId },
       data: { balance: newBalance },
-    })
+    });
 
     await prisma.paymentTransaction.create({
       data: {
@@ -97,10 +113,10 @@ async function ensureWalletCreditFromStk(sourceTx: any, checkoutRequestId: strin
           balanceAfter: newBalance,
         }),
       },
-    })
+    });
 
-    return true
-  })
+    return true;
+  });
 
   if (credited) {
     await createInAppNotification({
@@ -110,22 +126,27 @@ async function ensureWalletCreditFromStk(sourceTx: any, checkoutRequestId: strin
       message: `KES ${walletTopUpAmount.toLocaleString()} has been added to your wallet.`,
       actionHref: "/customer/wallet",
       metadata: { provider: "mpesa", checkoutRequestId },
-    })
+    });
   }
 
-  return credited
+  return credited;
 }
 
 export async function GET(request: Request) {
   try {
-    const { actor, error } = await getSessionActor(request)
-    if (error || !actor) return error
+    const { actor, error } = await getSessionActor(request);
+    if (error || !actor) return error;
 
-    const { searchParams } = new URL(request.url)
-    const checkoutRequestId = String(searchParams.get("checkoutRequestId") || "").trim()
+    const { searchParams } = new URL(request.url);
+    const checkoutRequestId = String(
+      searchParams.get("checkoutRequestId") || "",
+    ).trim();
 
     if (!checkoutRequestId) {
-      return NextResponse.json({ ok: false, error: "checkoutRequestId is required" }, { status: 400 })
+      return NextResponse.json(
+        { ok: false, error: "checkoutRequestId is required" },
+        { status: 400 },
+      );
     }
 
     let sourceTx = await prismaDb.paymentTransaction.findFirst({
@@ -145,24 +166,40 @@ export async function GET(request: Request) {
         response: true,
         error: true,
         externalId: true,
+        createdAt: true,
       },
-    })
+    });
 
     if (!sourceTx) {
-      return NextResponse.json({ ok: false, error: "Transaction not found" }, { status: 404 })
+      return NextResponse.json(
+        { ok: false, error: "Transaction not found" },
+        { status: 404 },
+      );
     }
 
-    let sourceStatus = toUiStatus(sourceTx.status)
+    const createdAtValue = new Date(sourceTx.createdAt).getTime();
+    const elapsedMs = Number.isFinite(createdAtValue)
+      ? Date.now() - createdAtValue
+      : STK_FAILURE_DELAY_MS;
+    const hasTimedOut = elapsedMs >= STK_FAILURE_DELAY_MS;
+
+    let sourceStatus = toUiStatus(sourceTx.status);
+    if (sourceStatus === "failed" && !hasTimedOut) {
+      sourceStatus = "pending";
+    }
+
     if (sourceStatus === "pending" && sourceTx.externalId) {
       try {
-        const queryPayload = await queryStkPushStatus({ checkoutRequestId })
-        const resultStatus = resolveQueryResultStatus(queryPayload)
+        const queryPayload = await queryStkPushStatus({ checkoutRequestId });
+        const resultStatus = resolveQueryResultStatus(queryPayload);
         const nextError =
           resultStatus === "FAILED"
             ? String(queryPayload?.ResultDesc || "M-Pesa payment failed")
-            : null
+            : null;
 
-        if (resultStatus !== "PENDING") {
+        if (resultStatus === "FAILED" && !hasTimedOut) {
+          sourceStatus = "pending";
+        } else if (resultStatus !== "PENDING") {
           sourceTx = await prismaDb.paymentTransaction.update({
             where: { id: sourceTx.id },
             data: {
@@ -180,9 +217,12 @@ export async function GET(request: Request) {
               error: true,
               externalId: true,
             },
-          })
+          });
 
-          sourceStatus = toUiStatus(sourceTx.status)
+          sourceStatus = toUiStatus(sourceTx.status);
+          if (sourceStatus === "failed" && !hasTimedOut) {
+            sourceStatus = "pending";
+          }
         }
       } catch {
         // Keep pending state when provider query is temporarily unavailable.
@@ -190,10 +230,10 @@ export async function GET(request: Request) {
     }
 
     if (sourceStatus === "completed") {
-      await ensureWalletCreditFromStk(sourceTx, checkoutRequestId)
+      await ensureWalletCreditFromStk(sourceTx, checkoutRequestId);
     }
 
-    const creditReference = `${String(sourceTx.reference || "")}:CREDIT:${checkoutRequestId}`
+    const creditReference = `${String(sourceTx.reference || "")}:CREDIT:${checkoutRequestId}`;
     const creditTx = await prismaDb.paymentTransaction.findFirst({
       where: {
         provider: "wallet",
@@ -204,10 +244,13 @@ export async function GET(request: Request) {
       select: {
         status: true,
       },
-    })
+    });
 
-    const credited = Boolean(creditTx && toUiStatus(creditTx.status) === "completed")
-    const status = sourceStatus === "completed" && credited ? "completed" : sourceStatus
+    const credited = Boolean(
+      creditTx && toUiStatus(creditTx.status) === "completed",
+    );
+    const status =
+      sourceStatus === "completed" && credited ? "completed" : sourceStatus;
 
     return NextResponse.json({
       ok: true,
@@ -216,9 +259,10 @@ export async function GET(request: Request) {
         status,
         credited,
       },
-    })
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to fetch STK status"
-    return NextResponse.json({ ok: false, error: message }, { status: 500 })
+    const message =
+      error instanceof Error ? error.message : "Failed to fetch STK status";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

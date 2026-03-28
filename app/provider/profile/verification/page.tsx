@@ -1,16 +1,52 @@
-"use client"
+"use client";
 
-import { ArrowLeft, Check, Clock } from "lucide-react"
-import Link from "next/link"
-import { useState } from "react"
+import { ArrowLeft, Check, Clock } from "lucide-react";
+import Link from "next/link";
+import { useEffect, useState } from "react";
+
+type VerificationItem = {
+  id: string;
+  type: string;
+  status: "verified" | "pending";
+  date: string;
+};
 
 export default function VerificationPage() {
-  const [verifications] = useState([
-    { id: 1, type: "Email", status: "verified", date: "2024-01-15" },
-    { id: 2, type: "Phone", status: "verified", date: "2024-01-15" },
-    { id: 3, type: "ID Verification", status: "pending", date: "2024-01-20" },
-    { id: 4, type: "Background Check", status: "pending", date: "2024-02-01" },
-  ])
+  const [verifications, setVerifications] = useState<VerificationItem[]>([]);
+
+  useEffect(() => {
+    const loadVerification = async () => {
+      try {
+        const response = await fetch("/api/users/me", { cache: "no-store" });
+        const payload = await response.json();
+        const user = payload?.user || {};
+        const createdDate = user?.createdAt
+          ? new Date(user.createdAt).toLocaleDateString()
+          : "-";
+
+        const items: VerificationItem[] = [
+          {
+            id: "email",
+            type: "Email",
+            status: user?.emailVerified ? "verified" : "pending",
+            date: createdDate,
+          },
+          {
+            id: "phone",
+            type: "Phone",
+            status: user?.phone ? "verified" : "pending",
+            date: createdDate,
+          },
+        ];
+
+        setVerifications(items);
+      } catch {
+        setVerifications([]);
+      }
+    };
+
+    loadVerification();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20 lg:pb-0">
@@ -44,8 +80,12 @@ export default function VerificationPage() {
                     </div>
                   )}
                   <div>
-                    <p className="font-medium text-gray-900 dark:text-white">{verification.type}</p>
-                    <p className="text-xs text-gray-600 dark:text-gray-400">{verification.date}</p>
+                    <p className="font-medium text-gray-900 dark:text-white">
+                      {verification.type}
+                    </p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
+                      {verification.date}
+                    </p>
                   </div>
                 </div>
                 <span
@@ -63,5 +103,5 @@ export default function VerificationPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -17,6 +17,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAuthContext } from "@/lib/auth-context";
 
 type Client = {
   id: number;
@@ -42,150 +43,9 @@ type Client = {
 };
 
 export default function ClientsPage() {
+  const { user } = useAuthContext();
   const [providerCount, setProviderCount] = useState(0);
-  const [clients, setClients] = useState<Client[]>([
-    {
-      id: 1,
-      name: "Sarah Wanjiku",
-      phone: "+254 712 345 678",
-      location: "Westlands, Nairobi",
-      avatar: "S",
-      totalJobs: 8,
-      totalSpent: 68000,
-      avgRating: 4.9,
-      lastJobDate: "2026-02-18",
-      lastService: "Kitchen Plumbing",
-      isFavorite: true,
-      joinedDate: "2025-06-10",
-      jobs: [
-        {
-          id: 1,
-          service: "Kitchen Plumbing Repair",
-          date: "2026-02-18",
-          amount: 8500,
-          rating: 5,
-          status: "Completed",
-        },
-        {
-          id: 2,
-          service: "Bathroom Pipe Fix",
-          date: "2026-01-22",
-          amount: 5500,
-          rating: 5,
-          status: "Completed",
-        },
-        {
-          id: 3,
-          service: "Water Heater Install",
-          date: "2025-12-05",
-          amount: 12000,
-          rating: 4,
-          status: "Completed",
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: "John Kamau",
-      phone: "+254 723 456 789",
-      location: "Kilimani, Nairobi",
-      avatar: "J",
-      totalJobs: 6,
-      totalSpent: 52000,
-      avgRating: 4.7,
-      lastJobDate: "2026-02-12",
-      lastService: "Electrical Wiring",
-      isFavorite: false,
-      joinedDate: "2025-08-15",
-      jobs: [
-        {
-          id: 4,
-          service: "Electrical Wiring",
-          date: "2026-02-12",
-          amount: 15000,
-          rating: 5,
-          status: "Completed",
-        },
-        {
-          id: 5,
-          service: "Socket Installation",
-          date: "2026-01-05",
-          amount: 3000,
-          rating: 4,
-          status: "Completed",
-        },
-      ],
-    },
-    {
-      id: 3,
-      name: "Grace Muthoni",
-      phone: "+254 734 567 890",
-      location: "Karen, Nairobi",
-      avatar: "G",
-      totalJobs: 5,
-      totalSpent: 43000,
-      avgRating: 4.8,
-      lastJobDate: "2026-02-17",
-      lastService: "Full Bathroom Install",
-      isFavorite: true,
-      joinedDate: "2025-05-20",
-      jobs: [
-        {
-          id: 6,
-          service: "Full Bathroom Install",
-          date: "2026-02-17",
-          amount: 25000,
-          rating: 5,
-          status: "Completed",
-        },
-      ],
-    },
-    {
-      id: 4,
-      name: "Peter Odhiambo",
-      phone: "+254 745 678 901",
-      location: "South B, Nairobi",
-      avatar: "P",
-      totalJobs: 4,
-      totalSpent: 38000,
-      avgRating: 4.5,
-      lastJobDate: "2026-02-10",
-      lastService: "Pipe Replacement",
-      isFavorite: false,
-      joinedDate: "2025-09-01",
-      jobs: [],
-    },
-    {
-      id: 5,
-      name: "Mary Njeri",
-      phone: "+254 756 789 012",
-      location: "Lavington, Nairobi",
-      avatar: "M",
-      totalJobs: 4,
-      totalSpent: 31000,
-      avgRating: 4.6,
-      lastJobDate: "2026-02-05",
-      lastService: "Water Tank Install",
-      isFavorite: false,
-      joinedDate: "2025-07-12",
-      jobs: [],
-    },
-    {
-      id: 6,
-      name: "David Mwangi",
-      phone: "+254 767 890 123",
-      location: "Langata, Nairobi",
-      avatar: "D",
-      totalJobs: 3,
-      totalSpent: 24000,
-      avgRating: 4.8,
-      lastJobDate: "2026-01-28",
-      lastService: "Drain Clearing",
-      isFavorite: false,
-      joinedDate: "2025-10-05",
-      jobs: [],
-    },
-  ]);
+  const [clients, setClients] = useState<Client[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterType, setFilterType] = useState("All");
   const [expandedClient, setExpandedClient] = useState<number | null>(null);
@@ -213,6 +73,78 @@ export default function ClientsPage() {
 
     fetchProviders();
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadClients = async () => {
+      if (!user?.id) return;
+
+      try {
+        const response = await fetch(
+          `/api/bookings?providerId=${encodeURIComponent(user.id)}`,
+          {
+            cache: "no-store",
+          },
+        );
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data) ? payload.data : [];
+
+        const grouped = new Map<string, any[]>();
+        rows.forEach((booking: any) => {
+          const customerId = String(booking?.customerId || "");
+          if (!customerId) return;
+          const current = grouped.get(customerId) || [];
+          current.push(booking);
+          grouped.set(customerId, current);
+        });
+
+        const mapped: Client[] = Array.from(grouped.entries()).map(
+          ([, bookings], index) => {
+            const first = bookings[0] || {};
+            const customerName = String(first?.customer?.name || "Customer");
+            const totalSpent = bookings.reduce(
+              (sum, booking) => sum + Number(booking?.amount || 0),
+              0,
+            );
+            const jobs = bookings.slice(0, 5).map((booking, jobIndex) => ({
+              id: jobIndex + 1,
+              service: String(booking?.service?.name || "Service"),
+              date: String(booking?.createdAt || "").slice(0, 10),
+              amount: Number(booking?.amount || 0),
+              rating: 5,
+              status: String(booking?.status || "Completed"),
+            }));
+
+            return {
+              id: index + 1,
+              name: customerName,
+              phone: String(first?.customer?.phone || "Not provided"),
+              location: "Kenya",
+              avatar: customerName.charAt(0).toUpperCase(),
+              totalJobs: bookings.length,
+              totalSpent,
+              avgRating: 5,
+              lastJobDate: String(first?.createdAt || "").slice(0, 10),
+              lastService: String(first?.service?.name || "Service"),
+              isFavorite: false,
+              joinedDate: String(first?.createdAt || "").slice(0, 10),
+              jobs,
+            };
+          },
+        );
+
+        if (active) setClients(mapped);
+      } catch {
+        if (active) setClients([]);
+      }
+    };
+
+    loadClients();
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const filtered = clients
     .filter(
@@ -262,9 +194,11 @@ export default function ClientsPage() {
         <Card className="p-3 border border-border rounded-xl text-center">
           <Star className="w-4 h-4 text-amber-500 mx-auto mb-1" />
           <p className="text-xl font-bold text-foreground">
-            {(
-              clients.reduce((a, c) => a + c.avgRating, 0) / clients.length
-            ).toFixed(1)}
+            {clients.length
+              ? (
+                  clients.reduce((a, c) => a + c.avgRating, 0) / clients.length
+                ).toFixed(1)
+              : "0.0"}
           </p>
           <p className="text-[10px] text-muted-foreground">Avg Rating</p>
         </Card>

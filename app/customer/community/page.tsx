@@ -1,180 +1,164 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
-import { Textarea } from "@/components/ui/textarea"
-import { 
-  Search, Heart, MessageCircle, Share2, Bookmark, MoreHorizontal,
-  ImageIcon, Video, Users, TrendingUp, X, Send, MapPin, CheckCircle, 
-  Play, Plus, Camera, Smile, Hash, UserPlus, Bell, Settings
-} from "lucide-react"
-import Image from "next/image"
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Search,
+  Heart,
+  MessageCircle,
+  Share2,
+  Bookmark,
+  MoreHorizontal,
+  ImageIcon,
+  Video,
+  Users,
+  TrendingUp,
+  X,
+  Send,
+  MapPin,
+  CheckCircle,
+  Play,
+  Plus,
+  Camera,
+  Smile,
+  Hash,
+  UserPlus,
+  Bell,
+  Settings,
+} from "lucide-react";
+import Image from "next/image";
 
 export default function CommunityPage() {
-  const [activeTab, setActiveTab] = useState<"feed" | "trending" | "following" | "groups">("feed")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedPost, setSelectedPost] = useState<any>(null)
-  const [showComments, setShowComments] = useState(false)
-  const [showCreatePost, setShowCreatePost] = useState(false)
-  const [commentText, setCommentText] = useState("")
-  const [newPostText, setNewPostText] = useState("")
-  const [likedPosts, setLikedPosts] = useState<number[]>([])
-  const [savedPosts, setSavedPosts] = useState<number[]>([])
-  const [followingUsers, setFollowingUsers] = useState<number[]>([1, 4])
-  const [joinedGroups, setJoinedGroups] = useState<number[]>([])
+  const [activeTab, setActiveTab] = useState<
+    "feed" | "trending" | "following" | "groups"
+  >("feed");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedPost, setSelectedPost] = useState<any>(null);
+  const [showComments, setShowComments] = useState(false);
+  const [showCreatePost, setShowCreatePost] = useState(false);
+  const [commentText, setCommentText] = useState("");
+  const [newPostText, setNewPostText] = useState("");
+  const [likedPosts, setLikedPosts] = useState<number[]>([]);
+  const [savedPosts, setSavedPosts] = useState<number[]>([]);
+  const [followingUsers, setFollowingUsers] = useState<number[]>([1, 4]);
+  const [joinedGroups, setJoinedGroups] = useState<number[]>([]);
+  const [posts, setPosts] = useState<any[]>([]);
+  const [trendingTopics, setTrendingTopics] = useState<any[]>([]);
+  const [suggestedGroups, setSuggestedGroups] = useState<any[]>([]);
+  const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
 
-  const posts = [
-    {
-      id: 1,
-      author: {
-        id: 1,
-        name: "Sarah Chen",
-        avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
-        verified: true,
-        role: "Interior Designer",
-        followers: 12500
-      },
-      content: "Just finished this amazing kitchen renovation project! The client wanted a modern minimalist look with warm accents. What do you think?",
-      images: [
-        "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=600&h=400&fit=crop",
-        "https://images.unsplash.com/photo-1556909172-54557c7e4fb7?w=600&h=400&fit=crop"
-      ],
-      likes: 234,
-      comments: 45,
-      shares: 12,
-      timestamp: "2 hours ago",
-      location: "Nairobi, Kenya"
-    },
-    {
-      id: 2,
-      author: {
-        id: 2,
-        name: "John Peters",
-        avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop",
-        verified: true,
-        role: "Master Plumber",
-        followers: 8900
-      },
-      content: "Quick tip: Always check your water heater's pressure relief valve annually. It's a simple maintenance task that can prevent major issues! #PlumbingTips #HomeMaintenance",
-      video: "https://images.unsplash.com/photo-1585704032915-c3400ca199e7?w=600&h=400&fit=crop",
-      likes: 189,
-      comments: 32,
-      shares: 28,
-      timestamp: "4 hours ago",
-      location: "Mombasa, Kenya"
-    },
-    {
-      id: 3,
-      author: {
-        id: 3,
-        name: "Emma Wilson",
-        avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop",
-        verified: false,
-        role: "Electrician",
-        followers: 4200
-      },
-      content: "Before and after of a complete electrical panel upgrade. Safety first! Always hire a licensed electrician for this kind of work.",
-      images: ["https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=600&h=400&fit=crop"],
-      likes: 156,
-      comments: 23,
-      shares: 8,
-      timestamp: "6 hours ago",
-      location: "Kisumu, Kenya"
-    },
-    {
-      id: 4,
-      author: {
-        id: 4,
-        name: "David Kimani",
-        avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop",
-        verified: true,
-        role: "Landscaper",
-        followers: 15600
-      },
-      content: "Transformed this backyard into a beautiful garden oasis. The homeowner wanted a low-maintenance design with native plants. 3 weeks of work but so worth it!",
-      images: [
-        "https://images.unsplash.com/photo-1558904541-efa843a96f01?w=600&h=400&fit=crop",
-        "https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?w=600&h=400&fit=crop",
-        "https://images.unsplash.com/photo-1598902108854-10e335adac99?w=600&h=400&fit=crop"
-      ],
-      likes: 312,
-      comments: 67,
-      shares: 45,
-      timestamp: "1 day ago",
-      location: "Nakuru, Kenya"
-    }
-  ]
+  useEffect(() => {
+    const loadCommunity = async () => {
+      try {
+        const response = await fetch("/api/community/posts", {
+          cache: "no-store",
+        });
+        const payload = await response.json();
+        const data = payload?.data || {};
+        setPosts(Array.isArray(data.posts) ? data.posts : []);
+        setTrendingTopics(
+          Array.isArray(data.trendingTopics) ? data.trendingTopics : [],
+        );
+        setSuggestedGroups(
+          Array.isArray(data.suggestedGroups) ? data.suggestedGroups : [],
+        );
+        setSuggestedUsers(
+          Array.isArray(data.suggestedUsers) ? data.suggestedUsers : [],
+        );
+      } catch {
+        setPosts([]);
+        setTrendingTopics([]);
+        setSuggestedGroups([]);
+        setSuggestedUsers([]);
+      }
+    };
 
-  const trendingTopics = [
-    { tag: "#HomeRenovation", posts: 1234, growth: "+15%" },
-    { tag: "#DIYTips", posts: 987, growth: "+23%" },
-    { tag: "#PlumbingHacks", posts: 756, growth: "+8%" },
-    { tag: "#InteriorDesign", posts: 654, growth: "+31%" },
-    { tag: "#GardenDesign", posts: 543, growth: "+12%" }
-  ]
+    loadCommunity();
+    const intervalId = window.setInterval(loadCommunity, 25000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
-  const trendingPosts = posts.filter(p => p.likes > 200)
+  const trendingPosts = posts.filter((p) => p.likes > 200);
 
-  const followingPosts = posts.filter(p => followingUsers.includes(p.author.id))
-
-  const suggestedGroups = [
-    { id: 1, name: "Kenya Home Improvement", members: 5420, image: "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=100&h=100&fit=crop", description: "Tips and projects for home improvement enthusiasts" },
-    { id: 2, name: "DIY Enthusiasts", members: 3210, image: "https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=100&h=100&fit=crop", description: "Share your DIY projects and get inspired" },
-    { id: 3, name: "Professional Electricians", members: 2150, image: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=100&h=100&fit=crop", description: "For licensed electricians and apprentices" },
-    { id: 4, name: "Garden Lovers Kenya", members: 4870, image: "https://images.unsplash.com/photo-1558904541-efa843a96f01?w=100&h=100&fit=crop", description: "Everything about gardening in Kenya" },
-    { id: 5, name: "Interior Design Ideas", members: 6320, image: "https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=100&h=100&fit=crop", description: "Inspiration for your next interior project" },
-  ]
-
-  const suggestedUsers = [
-    { id: 5, name: "Grace Njeri", avatar: "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=100&h=100&fit=crop", role: "Professional Cleaner", followers: 3200 },
-    { id: 6, name: "Mike Thompson", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop", role: "AC Technician", followers: 2100 },
-    { id: 7, name: "Lucy Wambui", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop", role: "Painter", followers: 4500 },
-  ]
+  const followingPosts = posts.filter((p) =>
+    followingUsers.includes(p.author.id),
+  );
 
   const toggleLike = (postId: number) => {
-    setLikedPosts(prev => prev.includes(postId) ? prev.filter(id => id !== postId) : [...prev, postId])
-  }
+    setLikedPosts((prev) =>
+      prev.includes(postId)
+        ? prev.filter((id) => id !== postId)
+        : [...prev, postId],
+    );
+  };
 
   const toggleSave = (postId: number) => {
-    setSavedPosts(prev => prev.includes(postId) ? prev.filter(id => id !== postId) : [...prev, postId])
-  }
+    setSavedPosts((prev) =>
+      prev.includes(postId)
+        ? prev.filter((id) => id !== postId)
+        : [...prev, postId],
+    );
+  };
 
   const toggleFollow = (userId: number) => {
-    setFollowingUsers(prev => prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId])
-  }
+    setFollowingUsers((prev) =>
+      prev.includes(userId)
+        ? prev.filter((id) => id !== userId)
+        : [...prev, userId],
+    );
+  };
 
   const toggleJoinGroup = (groupId: number) => {
-    setJoinedGroups(prev => prev.includes(groupId) ? prev.filter(id => id !== groupId) : [...prev, groupId])
-  }
+    setJoinedGroups((prev) =>
+      prev.includes(groupId)
+        ? prev.filter((id) => id !== groupId)
+        : [...prev, groupId],
+    );
+  };
 
-  const filteredPosts = posts.filter(post => 
-    post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    post.author.name.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredPosts = posts.filter(
+    (post) =>
+      post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.author.name.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
   const getDisplayPosts = () => {
     switch (activeTab) {
-      case "trending": return trendingPosts
-      case "following": return followingPosts
-      default: return filteredPosts
+      case "trending":
+        return trendingPosts;
+      case "following":
+        return followingPosts;
+      default:
+        return filteredPosts;
     }
-  }
+  };
 
-  const PostCard = ({ post }: { post: typeof posts[0] }) => (
+  const PostCard = ({ post }: { post: any }) => (
     <Card className="overflow-hidden">
       {/* Post Header */}
       <div className="p-4 flex items-start justify-between">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full overflow-hidden">
-            <Image src={post.author.avatar || "/placeholder.svg"} alt={post.author.name} width={48} height={48} className="object-cover" />
+            <Image
+              src={post.author.avatar || "/placeholder.svg"}
+              alt={post.author.name}
+              width={48}
+              height={48}
+              className="object-cover"
+            />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-foreground">{post.author.name}</span>
-              {post.author.verified && <CheckCircle className="w-4 h-4 text-blue-500 fill-blue-500" />}
+              <span className="font-semibold text-foreground">
+                {post.author.name}
+              </span>
+              {post.author.verified && (
+                <CheckCircle className="w-4 h-4 text-blue-500 fill-blue-500" />
+              )}
             </div>
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span>{post.author.role}</span>
@@ -185,7 +169,12 @@ export default function CommunityPage() {
         </div>
         <div className="flex items-center gap-2">
           {!followingUsers.includes(post.author.id) && (
-            <Button size="sm" variant="outline" onClick={() => toggleFollow(post.author.id)} className="text-xs bg-transparent">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => toggleFollow(post.author.id)}
+              className="text-xs bg-transparent"
+            >
               Follow
             </Button>
           )}
@@ -208,17 +197,26 @@ export default function CommunityPage() {
 
       {/* Post Media */}
       {post.images && (
-        <div className={`grid gap-1 ${post.images.length === 1 ? 'grid-cols-1' : 'grid-cols-2'}`}>
+        <div
+          className={`grid gap-1 ${post.images.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}
+        >
           {post.images.slice(0, 4).map((img, idx) => (
-            <button 
-              key={idx} 
+            <button
+              key={idx}
               onClick={() => setSelectedPost({ ...post, selectedImage: img })}
-              className={`relative overflow-hidden group ${post.images && post.images.length === 1 ? 'aspect-video' : 'aspect-square'}`}
+              className={`relative overflow-hidden group ${post.images && post.images.length === 1 ? "aspect-video" : "aspect-square"}`}
             >
-              <Image src={img || "/placeholder.svg"} alt="" fill className="object-cover group-hover:scale-105 transition-transform" />
+              <Image
+                src={img || "/placeholder.svg"}
+                alt=""
+                fill
+                className="object-cover group-hover:scale-105 transition-transform"
+              />
               {post.images && post.images.length > 4 && idx === 3 && (
                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                  <span className="text-white text-2xl font-bold">+{post.images.length - 4}</span>
+                  <span className="text-white text-2xl font-bold">
+                    +{post.images.length - 4}
+                  </span>
                 </div>
               )}
             </button>
@@ -227,11 +225,16 @@ export default function CommunityPage() {
       )}
 
       {post.video && (
-        <button 
+        <button
           onClick={() => setSelectedPost({ ...post, isVideo: true })}
           className="relative w-full aspect-video overflow-hidden group"
         >
-          <Image src={post.video || "/placeholder.svg"} alt="" fill className="object-cover" />
+          <Image
+            src={post.video || "/placeholder.svg"}
+            alt=""
+            fill
+            className="object-cover"
+          />
           <div className="absolute inset-0 bg-black/30 flex items-center justify-center group-hover:bg-black/40 transition-colors">
             <div className="w-16 h-16 rounded-full bg-white/90 flex items-center justify-center">
               <Play className="w-8 h-8 text-foreground fill-foreground ml-1" />
@@ -243,15 +246,22 @@ export default function CommunityPage() {
       {/* Post Actions */}
       <div className="p-4 flex items-center justify-between border-t border-border">
         <div className="flex items-center gap-6">
-          <button 
+          <button
             onClick={() => toggleLike(post.id)}
             className="flex items-center gap-2 text-muted-foreground hover:text-red-500 transition-colors"
           >
-            <Heart className={`w-5 h-5 ${likedPosts.includes(post.id) ? 'fill-red-500 text-red-500' : ''}`} />
-            <span className="text-sm">{likedPosts.includes(post.id) ? post.likes + 1 : post.likes}</span>
+            <Heart
+              className={`w-5 h-5 ${likedPosts.includes(post.id) ? "fill-red-500 text-red-500" : ""}`}
+            />
+            <span className="text-sm">
+              {likedPosts.includes(post.id) ? post.likes + 1 : post.likes}
+            </span>
           </button>
-          <button 
-            onClick={() => { setSelectedPost(post); setShowComments(true) }}
+          <button
+            onClick={() => {
+              setSelectedPost(post);
+              setShowComments(true);
+            }}
             className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors"
           >
             <MessageCircle className="w-5 h-5" />
@@ -262,23 +272,29 @@ export default function CommunityPage() {
             <span className="text-sm">{post.shares}</span>
           </button>
         </div>
-        <button 
+        <button
           onClick={() => toggleSave(post.id)}
           className="text-muted-foreground hover:text-primary transition-colors"
         >
-          <Bookmark className={`w-5 h-5 ${savedPosts.includes(post.id) ? 'fill-primary text-primary' : ''}`} />
+          <Bookmark
+            className={`w-5 h-5 ${savedPosts.includes(post.id) ? "fill-primary text-primary" : ""}`}
+          />
         </button>
       </div>
     </Card>
-  )
+  );
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Header */}
         <div className="mb-6">
-          <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-2">Community</h1>
-          <p className="text-muted-foreground">Connect with service providers and homeowners</p>
+          <h1 className="text-2xl lg:text-3xl font-bold text-foreground mb-2">
+            Community
+          </h1>
+          <p className="text-muted-foreground">
+            Connect with service providers and homeowners
+          </p>
         </div>
 
         {/* Tabs */}
@@ -287,9 +303,9 @@ export default function CommunityPage() {
             { id: "feed", label: "Feed", icon: Hash },
             { id: "trending", label: "Trending", icon: TrendingUp },
             { id: "following", label: "Following", icon: Users },
-            { id: "groups", label: "Groups", icon: Users }
-          ].map(tab => {
-            const Icon = tab.icon
+            { id: "groups", label: "Groups", icon: Users },
+          ].map((tab) => {
+            const Icon = tab.icon;
             return (
               <button
                 key={tab.id}
@@ -303,7 +319,7 @@ export default function CommunityPage() {
                 <Icon className="w-4 h-4" />
                 <span className="text-sm font-medium">{tab.label}</span>
               </button>
-            )
+            );
           })}
         </div>
 
@@ -316,7 +332,7 @@ export default function CommunityPage() {
                 <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
                   <span className="text-primary font-semibold">Y</span>
                 </div>
-                <button 
+                <button
                   onClick={() => setShowCreatePost(true)}
                   className="flex-1 text-left px-4 py-2.5 bg-muted rounded-full text-muted-foreground hover:bg-muted/80 transition-colors"
                 >
@@ -358,8 +374,14 @@ export default function CommunityPage() {
             {activeTab === "groups" ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-foreground">Suggested Groups</h2>
-                  <Button variant="outline" size="sm" className="gap-2 bg-transparent">
+                  <h2 className="text-lg font-semibold text-foreground">
+                    Suggested Groups
+                  </h2>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 bg-transparent"
+                  >
                     <Plus className="w-4 h-4" />
                     Create Group
                   </Button>
@@ -368,14 +390,28 @@ export default function CommunityPage() {
                   <Card key={group.id} className="p-4">
                     <div className="flex items-center gap-4">
                       <div className="w-16 h-16 rounded-xl overflow-hidden">
-                        <Image src={group.image || "/placeholder.svg"} alt={group.name} width={64} height={64} className="object-cover" />
+                        <Image
+                          src={group.image || "/placeholder.svg"}
+                          alt={group.name}
+                          width={64}
+                          height={64}
+                          className="object-cover"
+                        />
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-semibold text-foreground">{group.name}</h3>
-                        <p className="text-sm text-muted-foreground">{group.members.toLocaleString()} members</p>
-                        <p className="text-sm text-muted-foreground mt-1">{group.description}</p>
+                        <h3 className="font-semibold text-foreground">
+                          {group.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {group.members.toLocaleString()} members
+                        </p>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {group.description}
+                        </p>
                       </div>
-                      <Button onClick={() => toggleJoinGroup(group.id)}>{joinedGroups.includes(group.id) ? "Joined" : "Join"}</Button>
+                      <Button onClick={() => toggleJoinGroup(group.id)}>
+                        {joinedGroups.includes(group.id) ? "Joined" : "Join"}
+                      </Button>
                     </div>
                   </Card>
                 ))}
@@ -384,15 +420,21 @@ export default function CommunityPage() {
               /* Posts Feed */
               <div className="space-y-4">
                 {getDisplayPosts().length > 0 ? (
-                  getDisplayPosts().map(post => <PostCard key={post.id} post={post} />)
+                  getDisplayPosts().map((post) => (
+                    <PostCard key={post.id} post={post} />
+                  ))
                 ) : (
                   <Card className="p-12 text-center">
                     <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                     <p className="text-lg font-medium text-foreground mb-2">
-                      {activeTab === "following" ? "No posts from people you follow" : "No posts found"}
+                      {activeTab === "following"
+                        ? "No posts from people you follow"
+                        : "No posts found"}
                     </p>
                     <p className="text-muted-foreground">
-                      {activeTab === "following" ? "Follow more people to see their posts here" : "Try a different search term"}
+                      {activeTab === "following"
+                        ? "Follow more people to see their posts here"
+                        : "Try a different search term"}
                     </p>
                   </Card>
                 )}
@@ -410,12 +452,21 @@ export default function CommunityPage() {
               </h3>
               <div className="space-y-3">
                 {trendingTopics.map((topic, idx) => (
-                  <button key={idx} className="w-full flex items-center justify-between hover:bg-muted p-2 rounded-lg transition-colors">
+                  <button
+                    key={idx}
+                    className="w-full flex items-center justify-between hover:bg-muted p-2 rounded-lg transition-colors"
+                  >
                     <div>
-                      <span className="text-primary font-medium">{topic.tag}</span>
-                      <p className="text-xs text-muted-foreground">{topic.posts} posts</p>
+                      <span className="text-primary font-medium">
+                        {topic.tag}
+                      </span>
+                      <p className="text-xs text-muted-foreground">
+                        {topic.posts} posts
+                      </p>
                     </div>
-                    <span className="text-xs text-green-500 font-medium">{topic.growth}</span>
+                    <span className="text-xs text-green-500 font-medium">
+                      {topic.growth}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -431,14 +482,31 @@ export default function CommunityPage() {
                 {suggestedUsers.map((user) => (
                   <div key={user.id} className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full overflow-hidden">
-                      <Image src={user.avatar || "/placeholder.svg"} alt={user.name} width={40} height={40} className="object-cover" />
+                      <Image
+                        src={user.avatar || "/placeholder.svg"}
+                        alt={user.name}
+                        width={40}
+                        height={40}
+                        className="object-cover"
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-foreground text-sm truncate">{user.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{user.role}</p>
+                      <p className="font-medium text-foreground text-sm truncate">
+                        {user.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {user.role}
+                      </p>
                     </div>
-                    <Button size="sm" variant="outline" className="text-xs bg-transparent" onClick={() => toggleFollow(user.id)}>
-                      {followingUsers.includes(user.id) ? "Following" : "Follow"}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs bg-transparent"
+                      onClick={() => toggleFollow(user.id)}
+                    >
+                      {followingUsers.includes(user.id)
+                        ? "Following"
+                        : "Follow"}
                     </Button>
                   </div>
                 ))}
@@ -455,13 +523,30 @@ export default function CommunityPage() {
                 {suggestedGroups.slice(0, 3).map((group) => (
                   <div key={group.id} className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-lg overflow-hidden">
-                      <Image src={group.image || "/placeholder.svg"} alt={group.name} width={48} height={48} className="object-cover" />
+                      <Image
+                        src={group.image || "/placeholder.svg"}
+                        alt={group.name}
+                        width={48}
+                        height={48}
+                        className="object-cover"
+                      />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-foreground text-sm truncate">{group.name}</p>
-                      <p className="text-xs text-muted-foreground">{group.members.toLocaleString()} members</p>
+                      <p className="font-medium text-foreground text-sm truncate">
+                        {group.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {group.members.toLocaleString()} members
+                      </p>
                     </div>
-                    <Button size="sm" variant="outline" className="text-xs bg-transparent" onClick={() => toggleJoinGroup(group.id)}>{joinedGroups.includes(group.id) ? "Joined" : "Join"}</Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-xs bg-transparent"
+                      onClick={() => toggleJoinGroup(group.id)}
+                    >
+                      {joinedGroups.includes(group.id) ? "Joined" : "Join"}
+                    </Button>
                   </div>
                 ))}
               </div>
@@ -474,7 +559,9 @@ export default function CommunityPage() {
       <Dialog open={showCreatePost} onOpenChange={setShowCreatePost}>
         <DialogContent className="max-w-lg">
           <div className="flex items-center justify-between border-b border-border pb-4">
-            <h3 className="text-lg font-semibold text-foreground">Create Post</h3>
+            <h3 className="text-lg font-semibold text-foreground">
+              Create Post
+            </h3>
             <button onClick={() => setShowCreatePost(false)}>
               <X className="w-5 h-5 text-muted-foreground" />
             </button>
@@ -517,9 +604,12 @@ export default function CommunityPage() {
       </Dialog>
 
       {/* Image Preview Modal */}
-      <Dialog open={!!selectedPost && !showComments} onOpenChange={() => setSelectedPost(null)}>
+      <Dialog
+        open={!!selectedPost && !showComments}
+        onOpenChange={() => setSelectedPost(null)}
+      >
         <DialogContent className="max-w-4xl p-0 bg-black overflow-hidden">
-          <button 
+          <button
             onClick={() => setSelectedPost(null)}
             className="absolute top-4 right-4 z-10 p-2 bg-black/50 rounded-full hover:bg-black/70 transition-colors"
           >
@@ -527,17 +617,29 @@ export default function CommunityPage() {
           </button>
           {selectedPost?.isVideo ? (
             <div className="aspect-video bg-black flex items-center justify-center relative">
-              <Image src={selectedPost.video || "/placeholder.svg"} alt="" fill className="object-contain" />
+              <Image
+                src={selectedPost.video || "/placeholder.svg"}
+                alt=""
+                fill
+                className="object-contain"
+              />
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center">
                   <Play className="w-10 h-10 text-white fill-white ml-1" />
                 </div>
               </div>
             </div>
-          ) : selectedPost?.selectedImage && (
-            <div className="aspect-video relative">
-              <Image src={selectedPost.selectedImage || "/placeholder.svg"} alt="" fill className="object-contain" />
-            </div>
+          ) : (
+            selectedPost?.selectedImage && (
+              <div className="aspect-video relative">
+                <Image
+                  src={selectedPost.selectedImage || "/placeholder.svg"}
+                  alt=""
+                  fill
+                  className="object-contain"
+                />
+              </div>
+            )
           )}
         </DialogContent>
       </Dialog>
@@ -546,27 +648,45 @@ export default function CommunityPage() {
       <Dialog open={showComments} onOpenChange={setShowComments}>
         <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[80vh]">
           <div className="p-4 border-b border-border flex items-center justify-between">
-            <h3 className="font-semibold text-foreground">Comments ({selectedPost?.comments})</h3>
+            <h3 className="font-semibold text-foreground">
+              Comments ({selectedPost?.comments})
+            </h3>
             <button onClick={() => setShowComments(false)}>
               <X className="w-5 h-5 text-muted-foreground" />
             </button>
           </div>
-          
+
           <div className="p-4 space-y-4 max-h-96 overflow-y-auto">
-            {[1, 2, 3, 4, 5].map(i => (
+            {[1, 2, 3, 4, 5].map((i) => (
               <div key={i} className="flex gap-3">
                 <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0 overflow-hidden">
-                  <Image src={`https://images.unsplash.com/photo-150${i}003211169-0a1dd7228f2d?w=40&h=40&fit=crop`} alt="" width={40} height={40} className="object-cover" />
+                  <Image
+                    src={`https://images.unsplash.com/photo-150${i}003211169-0a1dd7228f2d?w=40&h=40&fit=crop`}
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="object-cover"
+                  />
                 </div>
                 <div className="flex-1">
                   <div className="bg-muted rounded-xl p-3">
-                    <p className="font-medium text-sm text-foreground">User {i}</p>
-                    <p className="text-sm text-muted-foreground mt-1">Great work! Love the attention to detail.</p>
+                    <p className="font-medium text-sm text-foreground">
+                      User {i}
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Great work! Love the attention to detail.
+                    </p>
                   </div>
                   <div className="flex items-center gap-4 mt-2 px-2">
-                    <button className="text-xs text-muted-foreground hover:text-foreground">Like</button>
-                    <button className="text-xs text-muted-foreground hover:text-foreground">Reply</button>
-                    <span className="text-xs text-muted-foreground">2h ago</span>
+                    <button className="text-xs text-muted-foreground hover:text-foreground">
+                      Like
+                    </button>
+                    <button className="text-xs text-muted-foreground hover:text-foreground">
+                      Reply
+                    </button>
+                    <span className="text-xs text-muted-foreground">
+                      2h ago
+                    </span>
                   </div>
                 </div>
               </div>
@@ -594,5 +714,5 @@ export default function CommunityPage() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }

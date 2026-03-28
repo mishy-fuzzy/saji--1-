@@ -1,81 +1,116 @@
-"use client"
+"use client";
 
-import React from "react"
-import { useState } from "react"
-import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { useAuthContext } from "@/lib/auth-context"
-import { Mail, Lock, ArrowRight, Eye, EyeOff, Apple, Phone, CheckCircle2, Shield, Users, Zap } from "lucide-react"
-import { Checkbox } from "@/components/ui/checkbox"
+import React from "react";
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useAuthContext } from "@/lib/auth-context";
+import {
+  Mail,
+  Lock,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Apple,
+  Phone,
+  CheckCircle2,
+  Shield,
+  Users,
+  Zap,
+} from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 function LoginContent() {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const { login } = useAuthContext()
-  const googleEnabled = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_ENABLED === "true"
-  const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email")
-  const [email, setEmail] = useState("")
-  const [phone, setPhone] = useState("")
-  const [password, setPassword] = useState("")
-  const [showPassword, setShowPassword] = useState(false)
-  const [rememberMe, setRememberMe] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [captchaText, setCaptchaText] = useState("")
-  const [captchaInput, setCaptchaInput] = useState("")
-  const [captchaVerified, setCaptchaVerified] = useState(false)
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { login } = useAuthContext();
+  const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [captchaText, setCaptchaText] = useState("");
+  const [captchaInput, setCaptchaInput] = useState("");
+  const [captchaVerified, setCaptchaVerified] = useState(false);
+  const [showReactivateModal, setShowReactivateModal] = useState(false);
+  const [reactivateName, setReactivateName] = useState("");
+  const [reactivatePhone, setReactivatePhone] = useState("");
+  const [reactivatePassword, setReactivatePassword] = useState("");
+  const [reactivatePasswordConfirm, setReactivatePasswordConfirm] =
+    useState("");
+  const [isReactivating, setIsReactivating] = useState(false);
+
+  const isDeactivatedError = error.toLowerCase().includes("deactivated");
 
   const navigateByRole = (role: string) => {
-    const normalized = String(role || "customer").toLowerCase()
-    if (normalized === "customer") router.push("/customer/home")
-    else if (normalized === "provider") router.push("/provider")
-    else if (normalized === "shopkeeper") router.push("/shopkeeper")
-    else if (normalized === "admin") router.push("/admin")
-    else if (normalized === "secretary") router.push("/secretary")
-    else if (normalized === "sub-admin" || normalized === "subadmin") router.push("/sub-admin")
-    else if (normalized === "agent") router.push("/agent")
-    else router.push("/")
-  }
+    const normalized = String(role || "customer").toLowerCase();
+    if (normalized === "customer") router.push("/customer/home");
+    else if (normalized === "provider") router.push("/provider");
+    else if (normalized === "shopkeeper") router.push("/shopkeeper");
+    else if (normalized === "admin") router.push("/admin");
+    else if (normalized === "secretary") router.push("/secretary");
+    else if (normalized === "sub-admin" || normalized === "subadmin")
+      router.push("/sub-admin");
+    else if (normalized === "agent") router.push("/agent");
+    else router.push("/");
+  };
 
   React.useEffect(() => {
-    const errorFromQuery = searchParams.get("error")
+    const errorFromQuery = searchParams.get("error");
     if (errorFromQuery) {
-      setError(errorFromQuery)
+      setError(errorFromQuery);
     }
-  }, [searchParams])
+  }, [searchParams]);
 
   const generateCaptcha = () => {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-    let result = ""
+    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let result = "";
     for (let i = 0; i < 6; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length))
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    setCaptchaText(result)
-  }
+    setCaptchaText(result);
+  };
 
   React.useEffect(() => {
-    generateCaptcha()
-  }, [])
+    generateCaptcha();
+  }, []);
 
   const verifyCaptcha = () => {
     if (captchaInput.toUpperCase() === captchaText) {
-      setCaptchaVerified(true)
-      setCaptchaInput("")
+      setCaptchaVerified(true);
+      setCaptchaInput("");
     } else {
-      setError("Incorrect CAPTCHA. Please try again.")
-      setCaptchaInput("")
-      generateCaptcha()
+      setError("Incorrect CAPTCHA. Please try again.");
+      setCaptchaInput("");
+      generateCaptcha();
     }
-  }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setError("")
-    if (!captchaVerified) { setError("Please verify the CAPTCHA"); return }
-    if (loginMethod === "email" ? !email || !password : !phone || !password) { setError("Please fill in all fields"); return }
-    setIsLoading(true)
+    e.preventDefault();
+    setError("");
+    if (!captchaVerified) {
+      setError("Please verify the CAPTCHA");
+      return;
+    }
+    if (loginMethod === "email" ? !email || !password : !phone || !password) {
+      setError("Please fill in all fields");
+      return;
+    }
+    setIsLoading(true);
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
@@ -87,34 +122,95 @@ function LoginContent() {
           phone: loginMethod === "phone" ? phone : undefined,
           password,
         }),
-      })
+      });
 
-      const payload = await response.json()
+      const payload = await response.json();
       if (!response.ok || !payload?.ok || !payload?.data) {
-        throw new Error(payload?.error || "Login failed")
+        throw new Error(payload?.error || "Login failed");
       }
 
-      login(payload.data)
-      navigateByRole(payload.data.role)
+      login(payload.data);
+      navigateByRole(payload.data.role);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Login failed"
-      setError(message)
+      const message = err instanceof Error ? err.message : "Login failed";
+      setError(message);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   const handleGoogleLogin = () => {
-    if (!googleEnabled) {
-      setError("Google sign-in is not configured yet. Please use email/password login.")
-      return
-    }
-    window.location.href = "/api/auth/google/start?mode=login"
-  }
+    window.location.href = "/api/auth/google/start?mode=login";
+  };
 
   const handleAppleLogin = () => {
-    setError("Apple sign-in is not configured yet. Please use email/password login.")
-  }
+    setError(
+      "Apple sign-in is not configured yet. Please use email/password login.",
+    );
+  };
+
+  const handleOpenReactivateModal = () => {
+    if (loginMethod !== "email") {
+      setError("Switch to Email login and enter your email to reactivate.");
+      return;
+    }
+
+    if (!email.trim()) {
+      setError("Enter your email first, then reactivate your account.");
+      return;
+    }
+
+    setShowReactivateModal(true);
+  };
+
+  const handleReactivate = async () => {
+    setError("");
+    if (!reactivatePhone.trim() || !reactivatePassword.trim()) {
+      setError("Phone and new password are required to reactivate.");
+      return;
+    }
+
+    if (reactivatePassword.length < 8) {
+      setError("New password must be at least 8 characters.");
+      return;
+    }
+
+    if (reactivatePassword !== reactivatePasswordConfirm) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    setIsReactivating(true);
+    try {
+      const response = await fetch("/api/auth/reactivate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email,
+          phone: reactivatePhone,
+          name: reactivateName,
+          password: reactivatePassword,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        throw new Error(payload?.error || "Account reactivation failed");
+      }
+
+      setShowReactivateModal(false);
+      login(payload.data);
+      navigateByRole(payload.data.role);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Account reactivation failed";
+      setError(message);
+    } finally {
+      setIsReactivating(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -132,16 +228,33 @@ function LoginContent() {
             </div>
             <span className="text-xl font-bold tracking-tight">SAJI</span>
           </div>
-          <h1 className="text-3xl font-bold leading-tight mb-3">Welcome back</h1>
-          <p className="text-white/70 text-sm leading-relaxed max-w-xs">Sign in to access your account and connect with trusted service professionals.</p>
+          <h1 className="text-3xl font-bold leading-tight mb-3">
+            Welcome back
+          </h1>
+          <p className="text-white/70 text-sm leading-relaxed max-w-xs">
+            Sign in to access your account and connect with trusted service
+            professionals.
+          </p>
         </div>
 
         {/* Features */}
         <div className="relative z-10 space-y-5">
           {[
-            { icon: Shield, title: "Verified Professionals", desc: "All providers are thoroughly vetted" },
-            { icon: Zap, title: "Instant Booking", desc: "Get matched and booked in minutes" },
-            { icon: Users, title: "24/7 Support", desc: "Our team is always here to help" },
+            {
+              icon: Shield,
+              title: "Verified Professionals",
+              desc: "All providers are thoroughly vetted",
+            },
+            {
+              icon: Zap,
+              title: "Instant Booking",
+              desc: "Get matched and booked in minutes",
+            },
+            {
+              icon: Users,
+              title: "24/7 Support",
+              desc: "Our team is always here to help",
+            },
           ].map((item) => (
             <div key={item.title} className="flex items-start gap-3">
               <div className="w-9 h-9 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0">
@@ -156,7 +269,9 @@ function LoginContent() {
         </div>
 
         {/* Footer */}
-        <p className="relative z-10 text-white/40 text-xs">&copy; {new Date().getFullYear()} SAJI. All rights reserved.</p>
+        <p className="relative z-10 text-white/40 text-xs">
+          &copy; {new Date().getFullYear()} SAJI. All rights reserved.
+        </p>
       </div>
 
       {/* Right Panel -- form */}
@@ -165,13 +280,17 @@ function LoginContent() {
           {/* Mobile logo */}
           <div className="flex items-center gap-2.5 mb-8 lg:hidden">
             <div className="w-9 h-9 rounded-xl bg-primary flex items-center justify-center">
-              <span className="text-base font-bold text-primary-foreground">S</span>
+              <span className="text-base font-bold text-primary-foreground">
+                S
+              </span>
             </div>
             <span className="text-lg font-bold text-foreground">SAJI</span>
           </div>
 
           <h2 className="text-2xl font-bold text-foreground mb-1">Sign In</h2>
-          <p className="text-sm text-muted-foreground mb-6">Access your SAJI account</p>
+          <p className="text-sm text-muted-foreground mb-6">
+            Access your SAJI account
+          </p>
 
           {/* Error */}
           {error && (
@@ -180,17 +299,39 @@ function LoginContent() {
             </div>
           )}
 
+          {isDeactivatedError && (
+            <div className="mb-5">
+              <Button
+                type="button"
+                onClick={handleOpenReactivateModal}
+                variant="outline"
+                className="w-full rounded-xl bg-transparent"
+              >
+                Reactivate account
+              </Button>
+            </div>
+          )}
+
           {/* Method tabs */}
           <div className="flex rounded-xl bg-muted/50 p-1 mb-5">
             {(["email", "phone"] as const).map((m) => (
               <button
                 key={m}
-                onClick={() => { setLoginMethod(m); setCaptchaVerified(false) }}
+                onClick={() => {
+                  setLoginMethod(m);
+                  setCaptchaVerified(false);
+                }}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-sm font-medium transition-all ${
-                  loginMethod === m ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                  loginMethod === m
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {m === "email" ? <Mail className="w-3.5 h-3.5" /> : <Phone className="w-3.5 h-3.5" />}
+                {m === "email" ? (
+                  <Mail className="w-3.5 h-3.5" />
+                ) : (
+                  <Phone className="w-3.5 h-3.5" />
+                )}
                 {m === "email" ? "Email" : "Phone"}
               </button>
             ))}
@@ -200,19 +341,38 @@ function LoginContent() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Credential */}
             <div>
-              <label htmlFor="credential" className="text-sm font-medium text-foreground mb-1.5 block">
+              <label
+                htmlFor="credential"
+                className="text-sm font-medium text-foreground mb-1.5 block"
+              >
                 {loginMethod === "email" ? "Email Address" : "Phone Number"}
               </label>
               <div className="relative">
                 {loginMethod === "email" ? (
                   <>
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input id="credential" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} className="pl-9 h-10 rounded-xl border-border bg-card" disabled={isLoading} />
+                    <Input
+                      id="credential"
+                      type="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      className="pl-9 h-10 rounded-xl border-border bg-card"
+                      disabled={isLoading}
+                    />
                   </>
                 ) : (
                   <>
                     <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input id="credential" type="tel" placeholder="+254700000000" value={phone} onChange={(e) => setPhone(e.target.value)} className="pl-9 h-10 rounded-xl border-border bg-card" disabled={isLoading} />
+                    <Input
+                      id="credential"
+                      type="tel"
+                      placeholder="+254700000000"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="pl-9 h-10 rounded-xl border-border bg-card"
+                      disabled={isLoading}
+                    />
                   </>
                 )}
               </div>
@@ -220,32 +380,72 @@ function LoginContent() {
 
             {/* Password */}
             <div>
-              <label htmlFor="password" className="text-sm font-medium text-foreground mb-1.5 block">Password</label>
+              <label
+                htmlFor="password"
+                className="text-sm font-medium text-foreground mb-1.5 block"
+              >
+                Password
+              </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input id="password" type={showPassword ? "text" : "password"} placeholder="Enter password" value={password} onChange={(e) => setPassword(e.target.value)} className="pl-9 pr-9 h-10 rounded-xl border-border bg-card" disabled={isLoading} />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors" disabled={isLoading}>
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-9 pr-9 h-10 rounded-xl border-border bg-card"
+                  disabled={isLoading}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  disabled={isLoading}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
                 </button>
               </div>
             </div>
 
             {/* CAPTCHA */}
             <div>
-              <label className="text-sm font-medium text-foreground mb-1.5 block">Verify you{"'"}re human</label>
+              <label className="text-sm font-medium text-foreground mb-1.5 block">
+                Verify you{"'"}re human
+              </label>
               <div className="rounded-xl border border-border bg-muted/30 p-3">
                 <div className="flex items-center gap-2.5">
                   <div className="px-3 py-1.5 rounded-lg bg-card border border-border font-mono text-base font-bold text-primary tracking-[0.2em] select-none flex-shrink-0">
                     {captchaText}
                   </div>
-                  <Input type="text" placeholder="Enter code" value={captchaInput} onChange={(e) => setCaptchaInput(e.target.value)} className="h-9 rounded-lg border-border bg-card text-sm flex-1" disabled={isLoading} maxLength={6} />
-                  <Button type="button" onClick={verifyCaptcha} size="sm" variant="secondary" className="rounded-lg h-9 px-3 flex-shrink-0" disabled={isLoading || !captchaInput}>
+                  <Input
+                    type="text"
+                    placeholder="Enter code"
+                    value={captchaInput}
+                    onChange={(e) => setCaptchaInput(e.target.value)}
+                    className="h-9 rounded-lg border-border bg-card text-sm flex-1"
+                    disabled={isLoading}
+                    maxLength={6}
+                  />
+                  <Button
+                    type="button"
+                    onClick={verifyCaptcha}
+                    size="sm"
+                    variant="secondary"
+                    className="rounded-lg h-9 px-3 flex-shrink-0"
+                    disabled={isLoading || !captchaInput}
+                  >
                     Verify
                   </Button>
                 </div>
                 {captchaVerified && (
                   <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> CAPTCHA verified successfully
+                    <CheckCircle2 className="w-3 h-3" /> CAPTCHA verified
+                    successfully
                   </p>
                 )}
               </div>
@@ -254,16 +454,29 @@ function LoginContent() {
             {/* Remember + Forgot */}
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 cursor-pointer">
-                <Checkbox checked={rememberMe} onCheckedChange={setRememberMe} disabled={isLoading} />
-                <span className="text-sm text-muted-foreground">Remember me</span>
+                <Checkbox
+                  checked={rememberMe}
+                  onCheckedChange={setRememberMe}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-muted-foreground">
+                  Remember me
+                </span>
               </label>
-              <Link href="/auth/forgot-password" className="text-sm font-medium text-primary hover:underline">
+              <Link
+                href="/auth/forgot-password"
+                className="text-sm font-medium text-primary hover:underline"
+              >
                 Forgot password?
               </Link>
             </div>
 
             {/* Submit */}
-            <Button type="submit" disabled={isLoading || !captchaVerified} className="w-full h-10 rounded-xl font-semibold gap-2">
+            <Button
+              type="submit"
+              disabled={isLoading || !captchaVerified}
+              className="w-full h-10 rounded-xl font-semibold gap-2"
+            >
               {isLoading ? "Signing in..." : "Sign In"}
               {!isLoading && <ArrowRight className="w-4 h-4" />}
             </Button>
@@ -272,17 +485,47 @@ function LoginContent() {
           {/* Divider */}
           <div className="my-5 flex items-center gap-3">
             <div className="flex-1 h-px bg-border" />
-            <span className="text-xs text-muted-foreground font-medium">optional social sign-in</span>
+            <span className="text-xs text-muted-foreground font-medium">
+              optional social sign-in
+            </span>
             <div className="flex-1 h-px bg-border" />
           </div>
 
           {/* Social */}
           <div className="grid grid-cols-2 gap-3">
-            <Button type="button" onClick={handleGoogleLogin} disabled={isLoading || !googleEnabled} variant="outline" className="h-10 rounded-xl bg-card gap-2 text-sm font-medium">
-              <svg width="16" height="16" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.64-.15-3.21-.43-4.73H24v9.01h12.4c-.54 2.91-2.18 5.38-4.65 7.04l7.2 5.59c4.21-3.88 6.65-9.6 6.65-16.91z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.81l-7.2-5.59c-2 1.35-4.56 2.15-8.7 2.15-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+            <Button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={isLoading}
+              variant="outline"
+              className="h-10 rounded-xl bg-card gap-2 text-sm font-medium"
+            >
+              <svg width="16" height="16" viewBox="0 0 48 48">
+                <path
+                  fill="#EA4335"
+                  d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"
+                />
+                <path
+                  fill="#4285F4"
+                  d="M46.1 24.5c0-1.64-.15-3.21-.43-4.73H24v9.01h12.4c-.54 2.91-2.18 5.38-4.65 7.04l7.2 5.59c4.21-3.88 6.65-9.6 6.65-16.91z"
+                />
+                <path
+                  fill="#FBBC05"
+                  d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"
+                />
+                <path
+                  fill="#34A853"
+                  d="M24 48c6.48 0 11.93-2.13 15.9-5.81l-7.2-5.59c-2 1.35-4.56 2.15-8.7 2.15-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"
+                />
+              </svg>
               Google
             </Button>
-            <Button type="button" onClick={handleAppleLogin} disabled={isLoading} className="h-10 rounded-xl gap-2 text-sm font-medium bg-foreground text-background hover:bg-foreground/90">
+            <Button
+              type="button"
+              onClick={handleAppleLogin}
+              disabled={isLoading}
+              className="h-10 rounded-xl gap-2 text-sm font-medium bg-foreground text-background hover:bg-foreground/90"
+            >
               <Apple className="w-4 h-4" />
               Apple
             </Button>
@@ -291,16 +534,116 @@ function LoginContent() {
           {/* Footer links */}
           <p className="text-center text-sm text-muted-foreground mt-6">
             {"Don't have an account? "}
-            <Link href="/auth/signup" className="font-semibold text-primary hover:underline">Sign up</Link>
+            <Link
+              href="/auth/signup"
+              className="font-semibold text-primary hover:underline"
+            >
+              Sign up
+            </Link>
             <span className="mx-2 text-border">|</span>
-            <button onClick={() => router.push("/")} className="font-medium text-primary hover:underline">Homepage</button>
+            <button
+              onClick={() => router.push("/")}
+              className="font-medium text-primary hover:underline"
+            >
+              Homepage
+            </button>
           </p>
         </div>
       </div>
+
+      <Dialog open={showReactivateModal} onOpenChange={setShowReactivateModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reactivate account</DialogTitle>
+            <DialogDescription>
+              Confirm your signup phone and set a new password to restore
+              account access.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1.5 block">
+                Email
+              </label>
+              <Input value={email} disabled className="h-10 rounded-xl" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1.5 block">
+                Full name (optional)
+              </label>
+              <Input
+                value={reactivateName}
+                onChange={(e) => setReactivateName(e.target.value)}
+                className="h-10 rounded-xl"
+                placeholder="Your name"
+                disabled={isReactivating}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1.5 block">
+                Signup phone number
+              </label>
+              <Input
+                value={reactivatePhone}
+                onChange={(e) => setReactivatePhone(e.target.value)}
+                className="h-10 rounded-xl"
+                placeholder="+254700000000"
+                disabled={isReactivating}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1.5 block">
+                New password
+              </label>
+              <Input
+                type="password"
+                value={reactivatePassword}
+                onChange={(e) => setReactivatePassword(e.target.value)}
+                className="h-10 rounded-xl"
+                placeholder="Minimum 8 characters"
+                disabled={isReactivating}
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1.5 block">
+                Confirm new password
+              </label>
+              <Input
+                type="password"
+                value={reactivatePasswordConfirm}
+                onChange={(e) => setReactivatePasswordConfirm(e.target.value)}
+                className="h-10 rounded-xl"
+                placeholder="Repeat password"
+                disabled={isReactivating}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowReactivateModal(false)}
+              className="bg-transparent"
+              disabled={isReactivating}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleReactivate}
+              disabled={isReactivating}
+            >
+              {isReactivating ? "Reactivating..." : "Reactivate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
-  )
+  );
 }
 
 export default function LoginPage() {
-  return <LoginContent />
+  return <LoginContent />;
 }

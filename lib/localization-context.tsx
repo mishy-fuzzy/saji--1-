@@ -13,6 +13,7 @@ export interface LocalizationContextType {
   setTheme: (theme: "light" | "dark") => void
   t: (key: string) => string
   convertPrice: (amount: number, fromCurrency?: CurrencyCode, toCurrency?: CurrencyCode) => number
+  formatCurrency: (amount: number, code?: CurrencyCode) => string
 }
 
 export const LocalizationContext = createContext<LocalizationContextType | undefined>(undefined)
@@ -82,6 +83,19 @@ export function LocalizationProvider({ children }: { children: ReactNode }) {
     return Math.round(amountInKES * rates[toCurrency] * 100) / 100
   }
 
+  const formatCurrency = (amount: number, code: CurrencyCode = currency): string => {
+    const converted = convertPrice(Number.isFinite(amount) ? amount : 0, "KES", code)
+    try {
+      return new Intl.NumberFormat("en-KE", {
+        style: "currency",
+        currency: code,
+        maximumFractionDigits: 2,
+      }).format(converted)
+    } catch {
+      return `${code} ${converted.toLocaleString()}`
+    }
+  }
+
   return (
     <LocalizationContext.Provider
       value={{
@@ -93,6 +107,7 @@ export function LocalizationProvider({ children }: { children: ReactNode }) {
         setTheme,
         t,
         convertPrice,
+        formatCurrency,
       }}
     >
       {mounted ? children : null}
