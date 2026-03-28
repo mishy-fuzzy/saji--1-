@@ -525,17 +525,19 @@ export default function JobsPage() {
                   {job.client}
                 </p>
               </div>
-              <button
-                onClick={() => {
-                  setSelectedJob(job);
-                  setShowJobModal(true);
-                }}
-                className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors group relative"
-              >
-                <MoreVertical
-                  size={18}
-                  className="text-gray-600 dark:text-gray-400"
-                />
+              <div className="relative group">
+                <button
+                  onClick={() => {
+                    setSelectedJob(job);
+                    setShowJobModal(true);
+                  }}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors"
+                >
+                  <MoreVertical
+                    size={18}
+                    className="text-gray-600 dark:text-gray-400"
+                  />
+                </button>
                 <div className="absolute right-0 top-10 bg-white dark:bg-gray-800 shadow-lg rounded-lg overflow-hidden z-10 hidden group-hover:block">
                   <button
                     onClick={() => {
@@ -562,7 +564,7 @@ export default function JobsPage() {
                     Archive
                   </button>
                 </div>
-              </button>
+              </div>
             </div>
 
             {/* Job Details */}
