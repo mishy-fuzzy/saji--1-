@@ -47,6 +47,7 @@ export default function AdminDashboard() {
   const [data, setData] = useState({
     users: 0,
     jobs: 0,
+    jobValue: 0,
     revenue: 0,
     pending: 0,
   });
@@ -61,6 +62,7 @@ export default function AdminDashboard() {
           setData({
             users: json.count,
             jobs: json.jobs,
+            jobValue: Number(json.jobValue || 0),
             revenue: json.revenue,
             pending: json.pending,
           });
@@ -88,8 +90,8 @@ export default function AdminDashboard() {
       textColor: "text-emerald-600",
     },
     {
-      label: "Total Revenue",
-      value: formatCurrency(data.revenue),
+      label: "Jobs Value",
+      value: formatCurrency(data.jobValue),
       change: "0%",
       positive: true,
       icon: DollarSign,
@@ -147,7 +149,7 @@ export default function AdminDashboard() {
           return (
             <Card
               key={i}
-              className={`p-6 border-0 shadow-lg bg-gradient-to-br ${stat.color} dark:from-gray-800 dark:to-gray-800 hover:shadow-xl transition-shadow`}
+              className={`p-6 border-0 shadow-lg bg-linear-to-br ${stat.color} dark:from-gray-800 dark:to-gray-800 hover:shadow-xl transition-shadow`}
             >
               <div className="flex items-center justify-between mb-4">
                 <div
@@ -211,6 +213,13 @@ export default function AdminDashboard() {
               <p className="text-sm text-muted-foreground">Total Revenue</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
                 {formatCurrency(data.revenue)}
+              </p>
+              <p className="text-xs text-emerald-600 mt-1">0% from last week</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Jobs Value</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                {formatCurrency(data.jobValue)}
               </p>
               <p className="text-xs text-emerald-600 mt-1">0% from last week</p>
             </div>
@@ -389,7 +398,7 @@ export default function AdminDashboard() {
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm">
+                    <div className="w-10 h-10 rounded-full bg-linear-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm">
                       {performer.name.split(" ")[0][0]}
                     </div>
                     <div>
