@@ -39,6 +39,20 @@ type JobItem = {
   category: string;
 };
 
+function statusColorClass(status: string): string {
+  const normalized = String(status || "").toLowerCase();
+  if (normalized === "completed") {
+    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400";
+  }
+  if (normalized === "active" || normalized === "assigned") {
+    return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400";
+  }
+  if (normalized === "cancelled" || normalized === "archived") {
+    return "bg-gray-200 text-gray-700 dark:bg-gray-800 dark:text-gray-300";
+  }
+  return "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
+}
+
 export default function JobsPage() {
   const { formatCurrency } = useLocalization();
   const { toast } = useToast();
@@ -49,6 +63,9 @@ export default function JobsPage() {
   const [selectedJob, setSelectedJob] = useState<any>(null);
   const [showJobModal, setShowJobModal] = useState(false);
   const [showCreateJob, setShowCreateJob] = useState(false);
+  const [showPasteModal, setShowPasteModal] = useState(false);
+  const [pastePayload, setPastePayload] = useState("");
+  const [isPasting, setIsPasting] = useState(false);
   const [newJobTitle, setNewJobTitle] = useState("");
   const [newJobClient, setNewJobClient] = useState("");
   const [newJobBudget, setNewJobBudget] = useState("");
@@ -192,6 +209,146 @@ export default function JobsPage() {
     }
   };
 
+  const handleArchiveJob = async (jobId: string) => {
+    try {
+      const resp = await fetch("/api/admin/jobs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: jobId, status: "cancelled" }),
+      });
+      const result = await resp.json();
+      if (!resp.ok || !result?.ok) {
+        throw new Error(result?.error || "Failed to archive job");
+      }
+
+      toast({
+        title: "Archived",
+        description: "Job archived successfully.",
+      });
+      setShowJobModal(false);
+      fetchJobs();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to archive job",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleEditJob = () => {
+    toast({
+      title: "Edit not available",
+      description:
+        "Use job status actions for now. Full edit fields will be added next.",
+    });
+  };
+
+  const parsePastedJobs = (raw: string) => {
+    const trimmed = raw.trim();
+    if (!trimmed) return [] as Array<Record<string, string | number>>;
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      const rows = Array.isArray(parsed) ? parsed : [parsed];
+      return rows
+        .map((row: any) => ({
+          title: String(row?.title || "").trim(),
+          description: String(row?.description || "").trim(),
+          location: String(row?.location || row?.client || "").trim(),
+          price: Number(
+            String(row?.price ?? row?.budget ?? 0).replace(/,/g, ""),
+          ),
+        }))
+        .filter(
+          (row) =>
+            row.title &&
+            row.description &&
+            Number.isFinite(row.price) &&
+            row.price > 0,
+        );
+    } catch {
+      return trimmed
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const [title, location, budget, ...descriptionParts] = line
+            .split("|")
+            .map((part) => part.trim());
+          const description = descriptionParts.join(" | ").trim();
+          return {
+            title: title || "",
+            description,
+            location: location || "",
+            price: Number(String(budget || "0").replace(/,/g, "")),
+          };
+        })
+        .filter(
+          (row) =>
+            row.title &&
+            row.description &&
+            Number.isFinite(row.price) &&
+            row.price > 0,
+        );
+    }
+  };
+
+  const handlePasteJobs = async () => {
+    const rows = parsePastedJobs(pastePayload);
+    if (rows.length === 0) {
+      toast({
+        title: "Nothing to import",
+        description:
+          "Paste JSON or lines in this format: Title | Location | Budget | Description",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsPasting(true);
+    try {
+      const results = await Promise.allSettled(
+        rows.map((row) =>
+          fetch("/api/admin/jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(row),
+          }),
+        ),
+      );
+
+      let success = 0;
+      let failed = 0;
+
+      for (const item of results) {
+        if (item.status !== "fulfilled") {
+          failed += 1;
+          continue;
+        }
+
+        const payload = await item.value.json();
+        if (item.value.ok && payload?.ok) success += 1;
+        else failed += 1;
+      }
+
+      toast({
+        title: "Paste jobs completed",
+        description: `${success} created, ${failed} failed.`,
+        variant: failed > 0 ? "destructive" : undefined,
+      });
+
+      if (success > 0) {
+        setShowPasteModal(false);
+        setPastePayload("");
+        fetchJobs();
+      }
+    } finally {
+      setIsPasting(false);
+    }
+  };
+
   const handleExportJobs = () => {
     // ... existing export logic
   };
@@ -238,6 +395,13 @@ export default function JobsPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowPasteModal(true)}
+            className="gap-2 bg-transparent"
+          >
+            Paste Jobs
+          </Button>
           <Button
             variant="outline"
             onClick={fetchJobs}
@@ -352,7 +516,7 @@ export default function JobsPage() {
                     {job.title}
                   </h3>
                   <span
-                    className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(job.status)}`}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold ${statusColorClass(job.status)}`}
                   >
                     {job.status}
                   </span>
@@ -576,6 +740,43 @@ export default function JobsPage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Paste Jobs Modal */}
+      <Dialog open={showPasteModal} onOpenChange={setShowPasteModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Paste Jobs</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Paste JSON array/object, or one job per line using:
+              <br />
+              <span className="font-medium">
+                Title | Location | Budget | Description
+              </span>
+            </p>
+            <textarea
+              rows={10}
+              value={pastePayload}
+              onChange={(e) => setPastePayload(e.target.value)}
+              placeholder='[{"title":"Pipe Fix","location":"Westlands","price":2500,"description":"Fix leaking sink"}]'
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowPasteModal(false)}
+              className="bg-transparent"
+            >
+              Cancel
+            </Button>
+            <Button onClick={handlePasteJobs} disabled={isPasting}>
+              {isPasting ? "Importing..." : "Import Jobs"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
