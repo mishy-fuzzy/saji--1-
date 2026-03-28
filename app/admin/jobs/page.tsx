@@ -71,8 +71,10 @@ export default function JobsPage() {
   const [newJobBudget, setNewJobBudget] = useState("");
   const [newJobDesc, setNewJobDesc] = useState("");
 
-  const fetchJobs = async () => {
-    setLoading(true);
+  const fetchJobs = async (silent = false) => {
+    if (!silent) {
+      setLoading(true);
+    }
     try {
       const resp = await fetch("/api/admin/jobs");
       const result = await resp.json();
@@ -98,12 +100,31 @@ export default function JobsPage() {
         variant: "destructive",
       });
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
     fetchJobs();
+
+    const intervalId = window.setInterval(() => {
+      fetchJobs(true);
+    }, 15000);
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        fetchJobs(true);
+      }
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, []);
 
   const filters = [
