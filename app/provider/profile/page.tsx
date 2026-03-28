@@ -1,6 +1,6 @@
-"use client"
+"use client";
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react";
 import {
   Home,
   Briefcase,
@@ -16,37 +16,119 @@ import {
   ChevronRight,
   Edit,
   Bell,
-} from "lucide-react"
-import Link from "next/link"
-import { useRouter } from "next/navigation"
-import { useAuthContext } from "@/lib/auth-context"
+} from "lucide-react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuthContext } from "@/lib/auth-context";
 
 export default function ProviderProfilePage() {
-  const router = useRouter()
-  const { user, logout } = useAuthContext()
-  const providerName = user?.name?.trim() || "Provider"
-  const [provider] = useState({
-    rating: 4.7,
-    reviews: 200,
-    providerSince: "January 2025",
-    completedJobs: 12,
-  })
+  const router = useRouter();
+  const { user, logout } = useAuthContext();
+  const providerName = user?.name?.trim() || "Provider";
+  const [providerSince, setProviderSince] = useState("-");
+  const [completedJobs, setCompletedJobs] = useState(0);
+  const [totalJobs, setTotalJobs] = useState(0);
+  const [proofCount, setProofCount] = useState(0);
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!user?.id) return;
+
+      try {
+        const [meResponse, bookingsResponse, contentResponse] =
+          await Promise.all([
+            fetch("/api/users/me", { cache: "no-store" }),
+            fetch(`/api/bookings?providerId=${encodeURIComponent(user.id)}`, {
+              cache: "no-store",
+            }),
+            fetch("/api/provider/content", { cache: "no-store" }),
+          ]);
+
+        const mePayload = await meResponse.json();
+        const bookingsPayload = await bookingsResponse.json();
+        const contentPayload = await contentResponse.json();
+
+        const createdAt = mePayload?.user?.createdAt;
+        if (createdAt) {
+          setProviderSince(
+            new Date(createdAt).toLocaleDateString(undefined, {
+              month: "long",
+              year: "numeric",
+            }),
+          );
+        }
+
+        const bookings = Array.isArray(bookingsPayload?.data)
+          ? bookingsPayload.data
+          : [];
+        const completed = bookings.filter(
+          (item: { status?: string }) =>
+            String(item?.status || "").toLowerCase() === "completed",
+        );
+        setTotalJobs(bookings.length);
+        setCompletedJobs(completed.length);
+
+        const posts = Array.isArray(contentPayload?.data)
+          ? contentPayload.data
+          : [];
+        setProofCount(posts.length);
+      } catch {
+        setProviderSince("-");
+        setTotalJobs(0);
+        setCompletedJobs(0);
+        setProofCount(0);
+      }
+    };
+
+    loadProfile();
+  }, [user?.id]);
+
+  const completionRate = useMemo(() => {
+    if (totalJobs === 0) return 0;
+    return (completedJobs / totalJobs) * 100;
+  }, [completedJobs, totalJobs]);
+
+  const performanceRating = useMemo(
+    () => Number((completionRate / 20).toFixed(1)),
+    [completionRate],
+  );
 
   const handleLogout = () => {
-    logout()
-    router.push("/")
-  }
+    logout();
+    router.push("/");
+  };
 
   const menuItems = [
     { icon: User, title: "My Account", href: "/provider/profile/account" },
-    { icon: Award, title: "Work Area & Skills", href: "/provider/profile/skills" },
-    { icon: Shield, title: "Verification", href: "/provider/profile/verification" },
-    { icon: FileText, title: "Proof of Work", badge: "2 New", href: "/provider/profile/proof" },
-    { icon: Wallet, title: "Payment Methods", href: "/provider/profile/payments" },
+    {
+      icon: Award,
+      title: "Work Area & Skills",
+      href: "/provider/profile/skills",
+    },
+    {
+      icon: Shield,
+      title: "Verification",
+      href: "/provider/profile/verification",
+    },
+    {
+      icon: FileText,
+      title: "Proof of Work",
+      badge: proofCount > 0 ? String(proofCount) : undefined,
+      href: "/provider/profile/proof",
+    },
+    {
+      icon: Wallet,
+      title: "Payment Methods",
+      href: "/provider/profile/payments",
+    },
     { icon: Star, title: "Star Rating", href: "/provider/profile/ratings" },
-    { icon: MessageCircle, title: "Help & Support", href: "/provider/profile/help" },
+    {
+      icon: MessageCircle,
+      title: "Help & Support",
+      href: "/provider/profile/help",
+    },
     { icon: Settings, title: "Settings", href: "/provider/profile/settings" },
-  ]
+  ];
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
@@ -63,20 +145,24 @@ export default function ProviderProfilePage() {
       <div className="p-4 space-y-4 max-w-2xl">
         {/* Profile Card */}
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 text-center border dark:border-gray-700">
-          <div className="w-24 h-24 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full mx-auto mb-4"></div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">{providerName}</h2>
+          <div className="w-24 h-24 bg-linear-to-br from-blue-400 to-blue-600 rounded-full mx-auto mb-4"></div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            {providerName}
+          </h2>
           <div className="flex justify-center gap-1 my-2">
             {[...Array(5)].map((_, i) => (
               <Star
                 key={i}
-                className={`w-4 h-4 ${i < Math.floor(provider.rating) ? "fill-yellow-400 text-yellow-400" : "text-gray-300 dark:text-gray-600"}`}
+                className={`w-4 h-4 ${i < Math.floor(performanceRating) ? "fill-yellow-400 text-yellow-400" : "text-gray-300 dark:text-gray-600"}`}
               />
             ))}
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            {provider.rating} • {provider.providerSince}
+            {performanceRating.toFixed(1)} performance • {providerSince}
           </p>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">Completed jobs {provider.completedJobs}</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Completed jobs {completedJobs}
+          </p>
           {/* Edit Profile Button */}
           <Link
             href="/provider/profile/edit"
@@ -90,7 +176,7 @@ export default function ProviderProfilePage() {
         {/* Menu Items */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 divide-y dark:divide-gray-700">
           {menuItems.map((item, idx) => {
-            const IconComponent = item.icon
+            const IconComponent = item.icon;
             return (
               <Link
                 key={idx}
@@ -100,7 +186,9 @@ export default function ProviderProfilePage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <IconComponent className="w-5 h-5 text-gray-600 dark:text-gray-400" />
-                    <span className="font-medium text-gray-900 dark:text-white">{item.title}</span>
+                    <span className="font-medium text-gray-900 dark:text-white">
+                      {item.title}
+                    </span>
                     {item.badge && (
                       <span className="ml-2 bg-orange-500 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
                         {item.badge}
@@ -110,7 +198,7 @@ export default function ProviderProfilePage() {
                   <ChevronRight className="w-5 h-5 text-gray-400 dark:text-gray-600" />
                 </div>
               </Link>
-            )
+            );
           })}
           <button
             onClick={handleLogout}
@@ -155,11 +243,14 @@ export default function ProviderProfilePage() {
           <Wallet className="w-6 h-6" />
           <span className="text-xs">Wallet</span>
         </Link>
-        <Link href="/provider/profile" className="flex flex-col items-center gap-1 text-blue-600">
+        <Link
+          href="/provider/profile"
+          className="flex flex-col items-center gap-1 text-blue-600"
+        >
           <User className="w-6 h-6" />
           <span className="text-xs">Profile</span>
         </Link>
       </div>
     </div>
-  )
+  );
 }

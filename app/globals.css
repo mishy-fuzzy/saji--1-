@@ -14,7 +14,7 @@
   --secondary-foreground: oklch(0.15 0.01 254);
 
   /* Background & Text - Premium Light */
-  --background: oklch(0.99 0.00 254);
+  --background: oklch(0.99 0 254);
   --foreground: oklch(0.1 0.01 254);
 
   /* Cards & Surfaces - Clean White */
@@ -34,8 +34,8 @@
   --destructive-foreground: oklch(0.98 0.01 254);
 
   /* Borders & Input - Subtle */
-  --border: oklch(0.94 0.00 254);
-  --input: oklch(0.97 0.00 254);
+  --border: oklch(0.94 0 254);
+  --input: oklch(0.97 0 254);
   --ring: oklch(0.32 0.12 254);
 
   /* Popover */
@@ -50,13 +50,13 @@
   --chart-5: oklch(0.5 0.15 280);
 
   /* Sidebar */
-  --sidebar: oklch(0.99 0.00 254);
+  --sidebar: oklch(0.99 0 254);
   --sidebar-foreground: oklch(0.1 0.01 254);
   --sidebar-primary: oklch(0.32 0.12 254);
   --sidebar-primary-foreground: oklch(0.98 0.01 254);
   --sidebar-accent: oklch(0.55 0.15 254);
   --sidebar-accent-foreground: oklch(0.08 0.01 254);
-  --sidebar-border: oklch(0.94 0.00 254);
+  --sidebar-border: oklch(0.94 0 254);
   --sidebar-ring: oklch(0.32 0.12 254);
 
   /* Radius */
@@ -106,8 +106,8 @@
   --chart-1: oklch(0.55 0.15 254);
   --chart-2: oklch(0.65 0.16 254);
   --chart-3: oklch(0.55 0.25 25);
-  --chart-4: oklch(0.50 0.12 120);
-  --chart-5: oklch(0.60 0.15 280);
+  --chart-4: oklch(0.5 0.12 120);
+  --chart-5: oklch(0.6 0.15 280);
 
   /* Sidebar */
   --sidebar: oklch(0.13 0 0);
@@ -171,6 +171,14 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled),
+  input[type="button"]:not(:disabled),
+  input[type="submit"]:not(:disabled),
+  input[type="reset"]:not(:disabled) {
+    cursor: pointer;
   }
 }
 

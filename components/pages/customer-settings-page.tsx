@@ -36,7 +36,6 @@ import {
   Clock,
   FileArchive,
 } from "lucide-react";
-import Image from "next/image";
 import type { Language, CurrencyCode } from "@/lib/types";
 
 export function CustomerSettingsPage() {
@@ -44,6 +43,12 @@ export function CustomerSettingsPage() {
   const { language, setLanguage, currency, setCurrency, theme, setTheme } =
     useLocalization();
   const { user, logout } = useAuthContext();
+  const [profileForm, setProfileForm] = useState({
+    name: user?.name || "",
+    email: user?.email || "",
+    phone: user?.phone || "",
+    location: "",
+  });
   const [activeSection, setActiveSection] = useState("account");
   const [showPassword, setShowPassword] = useState(false);
   const [notificationSettings, setNotificationSettings] = useState({
@@ -135,6 +140,15 @@ export function CustomerSettingsPage() {
     alert("Profile changes saved");
   };
 
+  useEffect(() => {
+    setProfileForm((current) => ({
+      ...current,
+      name: user?.name || "",
+      email: user?.email || "",
+      phone: user?.phone || "",
+    }));
+  }, [user?.email, user?.name, user?.phone]);
+
   const handleUpdatePassword = () => {
     alert("Password updated");
   };
@@ -152,7 +166,7 @@ export function CustomerSettingsPage() {
 
         <div className="flex flex-col lg:flex-row gap-6">
           {/* Sidebar */}
-          <div className="lg:w-56 flex-shrink-0">
+          <div className="lg:w-56 shrink-0">
             <Card className="border-0 shadow-sm overflow-hidden sticky top-20">
               <nav className="p-1.5">
                 {settingsSections.map((section) => {
@@ -194,17 +208,16 @@ export function CustomerSettingsPage() {
                   </h3>
                   <div className="flex flex-col sm:flex-row items-start gap-5">
                     <div className="relative">
-                      <div className="w-20 h-20 rounded-2xl bg-muted overflow-hidden">
-                        <Image
-                          src={
-                            user?.avatar ||
-                            "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop"
-                          }
-                          alt="Profile"
-                          width={80}
-                          height={80}
-                          className="object-cover"
-                        />
+                      <div className="w-20 h-20 rounded-2xl bg-primary/10 flex items-center justify-center overflow-hidden text-2xl font-bold text-primary">
+                        {user?.avatar ? (
+                          <img
+                            src={user.avatar}
+                            alt="Profile"
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <span>{user?.name?.[0] || "U"}</span>
+                        )}
                       </div>
                       <button className="absolute -bottom-1 -right-1 w-7 h-7 bg-primary text-primary-foreground rounded-lg flex items-center justify-center hover:bg-primary/90 transition-colors shadow-sm">
                         <User className="w-3.5 h-3.5" />
@@ -217,7 +230,13 @@ export function CustomerSettingsPage() {
                             Full Name
                           </label>
                           <Input
-                            defaultValue={user?.name || "John Doe"}
+                            value={profileForm.name}
+                            onChange={(e) =>
+                              setProfileForm({
+                                ...profileForm,
+                                name: e.target.value,
+                              })
+                            }
                             className="rounded-xl"
                           />
                         </div>
@@ -226,7 +245,13 @@ export function CustomerSettingsPage() {
                             Email
                           </label>
                           <Input
-                            defaultValue={user?.email || "john@example.com"}
+                            value={profileForm.email}
+                            onChange={(e) =>
+                              setProfileForm({
+                                ...profileForm,
+                                email: e.target.value,
+                              })
+                            }
                             className="rounded-xl"
                           />
                         </div>
@@ -235,7 +260,13 @@ export function CustomerSettingsPage() {
                             Phone
                           </label>
                           <Input
-                            defaultValue="+254 700 123 456"
+                            value={profileForm.phone}
+                            onChange={(e) =>
+                              setProfileForm({
+                                ...profileForm,
+                                phone: e.target.value,
+                              })
+                            }
                             className="rounded-xl"
                           />
                         </div>
@@ -244,7 +275,14 @@ export function CustomerSettingsPage() {
                             Location
                           </label>
                           <Input
-                            defaultValue="Nairobi, Kenya"
+                            value={profileForm.location}
+                            onChange={(e) =>
+                              setProfileForm({
+                                ...profileForm,
+                                location: e.target.value,
+                              })
+                            }
+                            placeholder="Add your location"
                             className="rounded-xl"
                           />
                         </div>
@@ -638,7 +676,7 @@ export function CustomerSettingsPage() {
                   <div className="p-4 rounded-xl border border-border/50 mb-3 hover:bg-muted/20 transition-colors">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3">
-                        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                        <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/20 rounded-xl flex items-center justify-center shrink-0">
                           <Download className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                         </div>
                         <div>
@@ -654,7 +692,7 @@ export function CustomerSettingsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="rounded-xl bg-transparent flex-shrink-0"
+                        className="rounded-xl bg-transparent shrink-0"
                         onClick={() => setShowDownloadModal(true)}
                       >
                         Request
@@ -698,7 +736,7 @@ export function CustomerSettingsPage() {
                 {/* Delete Account */}
                 <Card className="p-5 border-0 shadow-sm border-red-200/50 dark:border-red-900/20">
                   <div className="flex items-start gap-3 mb-4">
-                    <div className="w-10 h-10 bg-red-100 dark:bg-red-900/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <div className="w-10 h-10 bg-red-100 dark:bg-red-900/20 rounded-xl flex items-center justify-center shrink-0">
                       <AlertTriangle className="w-5 h-5 text-red-500" />
                     </div>
                     <div>
@@ -727,7 +765,7 @@ export function CustomerSettingsPage() {
                           key={idx}
                           className="flex items-start gap-2 text-xs text-red-600/80 dark:text-red-400/80"
                         >
-                          <span className="w-1 h-1 bg-red-400 rounded-full mt-1.5 flex-shrink-0" />
+                          <span className="w-1 h-1 bg-red-400 rounded-full mt-1.5 shrink-0" />
                           {item}
                         </li>
                       ))}
@@ -924,7 +962,7 @@ export function CustomerSettingsPage() {
           {deleteStep === 1 && (
             <div>
               <div className="flex items-center gap-3 mb-4">
-                <div className="w-10 h-10 bg-red-100 dark:bg-red-900/20 rounded-xl flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 bg-red-100 dark:bg-red-900/20 rounded-xl flex items-center justify-center shrink-0">
                   <AlertTriangle className="w-5 h-5 text-red-500" />
                 </div>
                 <div>
@@ -1008,7 +1046,7 @@ export function CustomerSettingsPage() {
                       key={idx}
                       className="flex items-center gap-2 text-xs text-red-600/80 dark:text-red-400/80"
                     >
-                      <X className="w-3 h-3 flex-shrink-0" /> {item}
+                      <X className="w-3 h-3 shrink-0" /> {item}
                     </li>
                   ))}
                 </ul>

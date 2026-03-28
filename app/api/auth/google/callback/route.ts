@@ -1,46 +1,57 @@
-import { NextResponse } from "next/server"
-import { exchangeCodeForToken, fetchGoogleUserInfo } from "@/lib/server/google-oauth"
-import { db, serializePayload } from "@/lib/server/db"
-import { createSessionCookie } from "@/lib/server/session"
+import { NextResponse } from "next/server";
+import {
+  exchangeCodeForToken,
+  fetchGoogleUserInfo,
+} from "@/lib/server/google-oauth";
+import { db, serializePayload } from "@/lib/server/db";
+import { createSessionCookie } from "@/lib/server/session";
 
 function normalizeMode(mode: string | null | undefined): "login" | "signup" {
-  return mode === "signup" ? "signup" : "login"
+  return mode === "signup" ? "signup" : "login";
 }
 
 function decodeState(state: string | null): { mode: string; role: string } {
   if (!state) {
-    return { mode: "login", role: "customer" }
+    return { mode: "login", role: "customer" };
   }
 
   try {
-    const decoded = JSON.parse(Buffer.from(state, "base64url").toString("utf8"))
-    const mode = normalizeMode(String(decoded?.mode || "login"))
-    const role = normalizeSignupRole(String(decoded?.role || "customer"))
+    const decoded = JSON.parse(
+      Buffer.from(state, "base64url").toString("utf8"),
+    );
+    const mode = normalizeMode(String(decoded?.mode || "login"));
+    const role = normalizeSignupRole(String(decoded?.role || "customer"));
     return {
       mode,
       role,
-    }
+    };
   } catch {
-    return { mode: "login", role: "customer" }
+    return { mode: "login", role: "customer" };
   }
 }
 
 function normalizeSignupRole(role: string): string {
-  const normalized = String(role || "customer").trim().toLowerCase()
-  if (normalized === "provider") return "provider"
-  if (normalized === "shopkeeper") return "shopkeeper"
-  return "customer"
+  const normalized = String(role || "customer")
+    .trim()
+    .toLowerCase();
+  if (normalized === "provider") return "provider";
+  if (normalized === "shopkeeper") return "shopkeeper";
+  return "customer";
 }
 
 function routeByRole(role: string): string {
-  const normalized = String(role || "customer").trim().toLowerCase().replace(/_/g, "-")
-  if (normalized === "admin") return "/admin"
-  if (normalized === "provider") return "/provider"
-  if (normalized === "shopkeeper") return "/shopkeeper"
-  if (normalized === "secretary") return "/secretary"
-  if (normalized === "sub-admin" || normalized === "subadmin") return "/sub-admin"
-  if (normalized === "agent") return "/agent"
-  return "/customer/home"
+  const normalized = String(role || "customer")
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, "-");
+  if (normalized === "admin") return "/admin";
+  if (normalized === "provider") return "/provider";
+  if (normalized === "shopkeeper") return "/shopkeeper";
+  if (normalized === "secretary") return "/secretary";
+  if (normalized === "sub-admin" || normalized === "subadmin")
+    return "/sub-admin";
+  if (normalized === "agent") return "/agent";
+  return "/customer/home";
 }
 
 async function createRoleProfile(tx: any, role: string, userId: string) {
@@ -49,8 +60,8 @@ async function createRoleProfile(tx: any, role: string, userId: string) {
       where: { userId },
       update: {},
       create: { userId },
-    })
-    return
+    });
+    return;
   }
 
   if (role === "provider") {
@@ -58,42 +69,54 @@ async function createRoleProfile(tx: any, role: string, userId: string) {
       where: { userId },
       update: {},
       create: { userId },
-    })
+    });
   }
 }
 
 export async function GET(request: Request) {
   try {
-    const { searchParams, origin } = new URL(request.url)
-    const code = searchParams.get("code")
-    const error = searchParams.get("error")
-    const errorDescription = searchParams.get("error_description")
-    const state = searchParams.get("state")
-    const parsedState = decodeState(state)
-    const oauthError = String(errorDescription || error || "").trim()
+    const { searchParams, origin } = new URL(request.url);
+    const code = searchParams.get("code");
+    const error = searchParams.get("error");
+    const errorDescription = searchParams.get("error_description");
+    const state = searchParams.get("state");
+    const parsedState = decodeState(state);
+    const oauthError = String(errorDescription || error || "").trim();
 
     if (oauthError) {
-      await db.authLog.create({
-        data: {
-          provider: "google",
-          mode: parsedState.mode,
-          status: "FAILED",
-          error: oauthError,
-        },
-      })
-      return NextResponse.redirect(`${origin}/auth/${parsedState.mode}?error=${encodeURIComponent(oauthError)}`)
+      try {
+        await db.authLog.create({
+          data: {
+            provider: "google",
+            mode: parsedState.mode,
+            status: "FAILED",
+            error: oauthError,
+          },
+        });
+      } catch {
+        // Keep OAuth error handling resilient when audit logging is unavailable.
+      }
+      return NextResponse.redirect(
+        `${origin}/auth/${parsedState.mode}?error=${encodeURIComponent(oauthError)}`,
+      );
     }
 
     if (!code) {
-      return NextResponse.redirect(`${origin}/auth/${parsedState.mode}?error=${encodeURIComponent("Missing authorization code")}`)
+      return NextResponse.redirect(
+        `${origin}/auth/${parsedState.mode}?error=${encodeURIComponent("Missing authorization code")}`,
+      );
     }
 
-    const token = await exchangeCodeForToken(code)
-    const googleUser = await fetchGoogleUserInfo(token.access_token)
-    const googleEmail = String(googleUser.email || "").trim().toLowerCase()
+    const token = await exchangeCodeForToken(code);
+    const googleUser = await fetchGoogleUserInfo(token.access_token);
+    const googleEmail = String(googleUser.email || "")
+      .trim()
+      .toLowerCase();
 
     if (!googleEmail) {
-      return NextResponse.redirect(`${origin}/auth/${parsedState.mode}?error=${encodeURIComponent("Google account does not expose an email address")}`)
+      return NextResponse.redirect(
+        `${origin}/auth/${parsedState.mode}?error=${encodeURIComponent("Google account does not expose an email address")}`,
+      );
     }
 
     let appUser = await db.user.findFirst({
@@ -108,10 +131,10 @@ export async function GET(request: Request) {
         role: true,
         isSuspended: true,
       },
-    })
+    });
 
     if (parsedState.mode === "signup" && !appUser) {
-      const role = normalizeSignupRole(parsedState.role)
+      const role = normalizeSignupRole(parsedState.role);
 
       appUser = await db.$transaction(async (tx: any) => {
         const created = await tx.user.create({
@@ -129,36 +152,46 @@ export async function GET(request: Request) {
             role: true,
             isSuspended: true,
           },
-        })
+        });
 
-        await createRoleProfile(tx, role, created.id)
-        return created
-      })
+        await createRoleProfile(tx, role, created.id);
+        return created;
+      });
     }
 
     if (!appUser) {
-      return NextResponse.redirect(`${origin}/auth/login?error=${encodeURIComponent("No account found. Please sign up first.")}`)
+      return NextResponse.redirect(
+        `${origin}/auth/login?error=${encodeURIComponent("No account found. Please sign up first.")}`,
+      );
     }
 
     if (appUser.isSuspended) {
-      return NextResponse.redirect(`${origin}/auth/login?error=${encodeURIComponent("Account is suspended")}`)
+      return NextResponse.redirect(
+        `${origin}/auth/login?error=${encodeURIComponent("Account is suspended")}`,
+      );
     }
 
-    await db.authLog.create({
-      data: {
-        provider: "google",
-        mode: parsedState.mode,
-        email: googleEmail,
-        status: "SUCCESS",
-        response: serializePayload({
-          role: appUser.role,
-          tokenType: token.token_type,
-          expiresIn: token.expires_in,
-        }),
-      },
-    })
+    try {
+      await db.authLog.create({
+        data: {
+          provider: "google",
+          mode: parsedState.mode,
+          email: googleEmail,
+          status: "SUCCESS",
+          response: serializePayload({
+            role: appUser.role,
+            tokenType: token.token_type,
+            expiresIn: token.expires_in,
+          }),
+        },
+      });
+    } catch {
+      // Login should continue even when audit logging fails.
+    }
 
-    const response = NextResponse.redirect(new URL(`${origin}${routeByRole(appUser.role)}`))
+    const response = NextResponse.redirect(
+      new URL(`${origin}${routeByRole(appUser.role)}`),
+    );
     response.headers.append(
       "Set-Cookie",
       createSessionCookie({
@@ -166,13 +199,21 @@ export async function GET(request: Request) {
         role: appUser.role,
         email: appUser.email,
       }),
-    )
+    );
 
-    return response
+    return response;
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Google authentication failed"
-    const { origin, searchParams } = new URL(request.url)
-    const parsedState = decodeState(searchParams.get("state"))
+    const message =
+      err instanceof Error ? err.message : "Google authentication failed";
+    const lowered = message.toLowerCase();
+    const friendlyMessage =
+      lowered.includes("can't reach database") ||
+      lowered.includes("database server") ||
+      lowered.includes("prisma")
+        ? "Google sign-in is temporarily unavailable. Please check your database connection and try again."
+        : message;
+    const { origin, searchParams } = new URL(request.url);
+    const parsedState = decodeState(searchParams.get("state"));
 
     try {
       await db.authLog.create({
@@ -182,11 +223,13 @@ export async function GET(request: Request) {
           status: "FAILED",
           error: message,
         },
-      })
+      });
     } catch {
       // Keep API response behavior stable when DB logging fails.
     }
 
-    return NextResponse.redirect(`${origin}/auth/${parsedState.mode}?error=${encodeURIComponent(message)}`)
+    return NextResponse.redirect(
+      `${origin}/auth/${parsedState.mode}?error=${encodeURIComponent(friendlyMessage)}`,
+    );
   }
 }

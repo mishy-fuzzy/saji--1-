@@ -60,7 +60,13 @@ export default function JobsPage() {
       const resp = await fetch("/api/admin/jobs");
       const result = await resp.json();
       if (result.ok) {
-        setJobs(result.data);
+        setJobs(
+          Array.isArray(result.data)
+            ? result.data
+            : Array.isArray(result.jobs)
+              ? result.jobs
+              : [],
+        );
       } else {
         toast({
           title: "Error",
@@ -140,12 +146,50 @@ export default function JobsPage() {
   };
 
   const handleCreateJob = async () => {
-    // Basic validation omitted for brevity
-    toast({
-      title: "Info",
-      description:
-        "Creation via UI linked to DB but requires customer/service selection.",
-    });
+    if (!newJobTitle.trim() || !newJobDesc.trim() || !newJobBudget.trim()) {
+      toast({
+        title: "Missing fields",
+        description: "Title, description, and budget are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const resp = await fetch("/api/admin/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: newJobTitle.trim(),
+          description: newJobDesc.trim(),
+          price: newJobBudget.trim(),
+          location: newJobClient.trim(),
+        }),
+      });
+
+      const result = await resp.json();
+      if (!resp.ok || !result?.ok) {
+        throw new Error(result?.error || "Failed to create job");
+      }
+
+      toast({
+        title: "Success",
+        description: "Job listing created successfully.",
+      });
+      setShowCreateJob(false);
+      setNewJobTitle("");
+      setNewJobClient("");
+      setNewJobBudget("");
+      setNewJobDesc("");
+      fetchJobs();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to create job",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleExportJobs = () => {
@@ -222,7 +266,7 @@ export default function JobsPage() {
           return (
             <Card
               key={i}
-              className={`p-4 border-0 shadow-lg bg-gradient-to-br ${stat.color} dark:from-gray-800 dark:to-gray-800`}
+              className={`p-4 border-0 shadow-lg bg-linear-to-br ${stat.color} dark:from-gray-800 dark:to-gray-800`}
             >
               <div className="flex items-center justify-between">
                 <div>
@@ -497,7 +541,7 @@ export default function JobsPage() {
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <input
-              placeholder="Client Name"
+              placeholder="Location / Area"
               value={newJobClient}
               onChange={(e) => setNewJobClient(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"

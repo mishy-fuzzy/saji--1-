@@ -1,22 +1,24 @@
-import { db } from "@/lib/server/db"
+import { db } from "@/lib/server/db";
 
-const prismaDb: any = db
+const prismaDb: any = db;
 
 type UserWithStats = {
-  id: string
-  name: string | null
-  email: string
-  phone: string | null
-  role: string
-  isSuspended: boolean
-  createdAt: Date
-  bookings: Array<{ amount: number; status: string }>
-  jobs: Array<{ amount: number; status: string }>
-}
+  id: string;
+  name: string | null;
+  email: string;
+  phone: string | null;
+  role: string;
+  isSuspended: boolean;
+  emailVerified: boolean;
+  deletedAt: Date | null;
+  createdAt: Date;
+  bookings: Array<{ amount: number; status: string }>;
+  jobs: Array<{ amount: number; status: string }>;
+};
 
 function toTitleCase(value: string): string {
-  if (!value) return "Unknown"
-  return value.charAt(0).toUpperCase() + value.slice(1)
+  if (!value) return "Unknown";
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function formatJoinedDate(date: Date): string {
@@ -24,24 +26,45 @@ function formatJoinedDate(date: Date): string {
     month: "short",
     day: "2-digit",
     year: "numeric",
-  }).format(date)
+  }).format(date);
 }
 
 function mapUser(user: UserWithStats) {
-  const now = Date.now()
-  const createdAtMs = new Date(user.createdAt).getTime()
-  const isIncoming = now - createdAtMs <= 1000 * 60 * 60 * 24
+  const isIncoming = !user.emailVerified;
 
-  const completedJobs = user.jobs.filter((job) => String(job.status).toLowerCase() === "completed")
-  const earnings = completedJobs.reduce((sum, job) => sum + Number(job.amount || 0), 0)
+  const completedJobs = user.jobs.filter(
+    (job) => String(job.status).toLowerCase() === "completed",
+  );
+  const earnings = completedJobs.reduce(
+    (sum, job) => sum + Number(job.amount || 0),
+    0,
+  );
 
-  const orders = user.role === "provider" ? user.jobs.length : user.bookings.length
+  const orders =
+    user.role === "provider" ? user.jobs.length : user.bookings.length;
   const disputes = [...user.bookings, ...user.jobs].filter(
     (entry) => String(entry.status).toLowerCase() === "cancelled",
-  ).length
+  ).length;
 
-  const type = disputes > 0 ? "disputed" : isIncoming ? "incoming" : orders > 0 ? "completed" : "active"
-  const status = user.isSuspended ? "Suspended" : disputes > 0 ? "Disputed" : isIncoming ? "Pending" : "Active"
+  const type = user.deletedAt
+    ? "deactivated"
+    : disputes > 0
+      ? "disputed"
+      : isIncoming
+        ? "incoming"
+        : orders > 0
+          ? "completed"
+          : "active";
+
+  const status = user.deletedAt
+    ? "Deactivated"
+    : user.isSuspended
+      ? "Suspended"
+      : disputes > 0
+        ? "Disputed"
+        : isIncoming
+          ? "Pending"
+          : "Active";
 
   return {
     id: user.id,
@@ -55,20 +78,22 @@ function mapUser(user: UserWithStats) {
     orders,
     disputes,
     type,
-  }
+  };
 }
 
-export async function fetchMappedUsers(roleFilter?: string[]) {
-  const whereBase = {
-    deletedAt: null,
-  }
+export async function fetchMappedUsers(
+  roleFilter?: string[],
+  includeDeleted = false,
+) {
+  const whereBase = includeDeleted ? {} : { deletedAt: null };
 
-  const where = roleFilter && roleFilter.length > 0
-    ? {
-        ...whereBase,
-        role: { in: roleFilter },
-      }
-    : whereBase
+  const where =
+    roleFilter && roleFilter.length > 0
+      ? {
+          ...whereBase,
+          role: { in: roleFilter },
+        }
+      : whereBase;
 
   const users = await prismaDb.user.findMany({
     where,
@@ -80,6 +105,8 @@ export async function fetchMappedUsers(roleFilter?: string[]) {
       phone: true,
       role: true,
       isSuspended: true,
+      emailVerified: true,
+      deletedAt: true,
       createdAt: true,
       bookings: {
         select: {
@@ -94,7 +121,7 @@ export async function fetchMappedUsers(roleFilter?: string[]) {
         },
       },
     },
-  })
+  });
 
-  return users.map((user: UserWithStats) => mapUser(user))
+  return users.map((user: UserWithStats) => mapUser(user));
 }

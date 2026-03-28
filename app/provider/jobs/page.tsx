@@ -1,177 +1,199 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Search, Filter, Calendar, MapPin, Clock, CheckCircle2, AlertTriangle, ChevronRight, Star, Phone, MessageSquare, Navigation, MoreVertical, Diamond as Dialog, X, Check, Trash2 } from "lucide-react"
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Dialog as DialogComponent, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useEffect, useMemo, useState } from "react";
+import {
+  Search,
+  Filter,
+  Calendar,
+  MapPin,
+  Clock,
+  CheckCircle2,
+  AlertTriangle,
+  ChevronRight,
+  Star,
+  Phone,
+  MessageSquare,
+  Navigation,
+  MoreVertical,
+  Diamond as Dialog,
+  X,
+  Check,
+  Trash2,
+} from "lucide-react";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog as DialogComponent,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useAuthContext } from "@/lib/auth-context";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+} from "@/components/ui/dropdown-menu";
 
 export default function ProviderJobsPage() {
-  const [activeTab, setActiveTab] = useState("active")
-  const [searchQuery, setSearchQuery] = useState("")
-  const [selectedJob, setSelectedJob] = useState<any>(null)
-  const [showJobDetails, setShowJobDetails] = useState(false)
+  const { user } = useAuthContext();
+  const [activeTab, setActiveTab] = useState("pending");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedJob, setSelectedJob] = useState<any>(null);
+  const [showJobDetails, setShowJobDetails] = useState(false);
+  const [jobsList, setJobsList] = useState<any[]>([]);
 
-  const jobs = {
-    active: [
-      {
-        id: 1,
-        title: "Kitchen Plumbing Repair",
-        client: "Sarah Wanjiku",
-        clientAvatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=50&h=50&fit=crop",
-        location: "Westlands, Nairobi",
-        date: "Today, 2:00 PM",
-        amount: "KES 8,500",
-        status: "In Progress",
-        statusColor: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-        urgent: false,
-        distance: "2.3 km away"
-      },
-      {
-        id: 2,
-        title: "Electrical Wiring Installation",
-        client: "John Kamau",
-        clientAvatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=50&h=50&fit=crop",
-        location: "Kilimani, Nairobi",
-        date: "Tomorrow, 9:00 AM",
-        amount: "KES 15,000",
-        status: "Scheduled",
-        statusColor: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
-        urgent: false,
-        distance: "4.1 km away"
-      },
-      {
-        id: 3,
-        title: "Emergency Pipe Burst",
-        client: "Grace Muthoni",
-        clientAvatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=50&h=50&fit=crop",
-        location: "Lavington, Nairobi",
-        date: "Today, ASAP",
-        amount: "KES 12,000",
-        status: "Urgent",
-        statusColor: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-        urgent: true,
-        distance: "1.8 km away"
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const loadJobs = async () => {
+      try {
+        const response = await fetch("/api/jobs", { cache: "no-store" });
+        const payload = await response.json();
+        setJobsList(Array.isArray(payload?.jobs) ? payload.jobs : []);
+      } catch {
+        setJobsList([]);
       }
-    ],
-    pending: [
-      {
-        id: 4,
-        title: "Bathroom Renovation",
-        client: "Peter Ochieng",
-        clientAvatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=50&h=50&fit=crop",
-        location: "Karen, Nairobi",
-        date: "May 15, 10:00 AM",
-        amount: "KES 45,000",
-        status: "Awaiting Approval",
-        statusColor: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-        urgent: false,
-        distance: "8.2 km away"
-      }
-    ],
-    completed: [
-      {
-        id: 5,
-        title: "Water Heater Installation",
-        client: "Mary Njeri",
-        clientAvatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=50&h=50&fit=crop",
-        location: "Parklands, Nairobi",
-        date: "May 10",
-        amount: "KES 22,000",
-        status: "Completed",
-        statusColor: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-        urgent: false,
-        rating: 5,
-        review: "Excellent work! Very professional."
-      },
-      {
-        id: 6,
-        title: "Sink Replacement",
-        client: "David Kipchoge",
-        clientAvatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=50&h=50&fit=crop",
-        location: "Runda, Nairobi",
-        date: "May 8",
-        amount: "KES 18,500",
-        status: "Completed",
-        statusColor: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-        urgent: false,
-        rating: 4,
-        review: "Good job, arrived on time."
-      }
-    ],
-    disputed: [
-      {
-        id: 7,
-        title: "AC Repair",
-        client: "Alice Wambui",
-        clientAvatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50&h=50&fit=crop",
-        location: "Upperhill, Nairobi",
-        date: "May 5",
-        amount: "KES 9,500",
-        status: "Under Review",
-        statusColor: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
-        urgent: false,
-        disputeReason: "Customer claims incomplete work"
-      }
-    ]
-  }
+    };
+
+    loadJobs();
+    const intervalId = window.setInterval(loadJobs, 25000);
+    return () => window.clearInterval(intervalId);
+  }, [user?.id]);
+
+  const bookingCards = useMemo(() => {
+    return jobsList
+      .filter((row: any) => {
+        const postedByRole = String(row?.postedBy?.role || "").toLowerCase();
+        const statusValue = String(row?.status || "pending").toLowerCase();
+        return postedByRole === "customer" || statusValue !== "draft";
+      })
+      .map((row: any) => {
+        const statusValue = String(row?.status || "pending").toLowerCase();
+        const statusMeta =
+          statusValue === "completed"
+            ? {
+                label: "Completed",
+                statusColor:
+                  "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+              }
+            : statusValue === "pending" || statusValue === "open"
+              ? {
+                  label: "Available",
+                  statusColor:
+                    "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+                }
+              : statusValue === "in-progress" ||
+                  statusValue === "accepted" ||
+                  statusValue === "assigned"
+                ? {
+                    label: "In Progress",
+                    statusColor:
+                      "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+                  }
+                : {
+                    label: statusValue || "Unknown",
+                    statusColor:
+                      "bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400",
+                  };
+
+        return {
+          id: String(row.id),
+          bookingId: String(row.id),
+          title: String(row?.title || row?.service?.name || "Customer Job"),
+          client: String(
+            row?.postedBy?.name || row?.customer?.name || "Client",
+          ),
+          clientAvatar: String(
+            row?.postedBy?.image || row?.customer?.image || "/placeholder.svg",
+          ),
+          location: String(row?.location || row?.service?.category || "Kenya"),
+          date: new Date(row?.createdAt || Date.now()).toLocaleString(),
+          amount: `KES ${Number(row?.price || row?.amount || 0).toLocaleString()}`,
+          status: statusMeta.label,
+          statusColor: statusMeta.statusColor,
+          urgent: statusValue === "pending" || statusValue === "open",
+          distance: "-",
+          phone: String(row?.postedBy?.phone || row?.customer?.phone || ""),
+          rawStatus: statusValue,
+        };
+      });
+  }, [jobsList]);
+
+  const disputedCards = useMemo(() => {
+    return bookingCards.filter((job: any) => job.rawStatus === "disputed");
+  }, [bookingCards]);
+
+  const jobs = useMemo(
+    () => ({
+      active: bookingCards.filter((job: any) =>
+        ["in-progress", "accepted", "assigned"].includes(job.rawStatus),
+      ),
+      pending: bookingCards.filter((job: any) =>
+        ["pending", "open"].includes(job.rawStatus),
+      ),
+      completed: bookingCards.filter(
+        (job: any) => job.rawStatus === "completed",
+      ),
+      disputed: disputedCards,
+    }),
+    [bookingCards, disputedCards],
+  );
 
   const tabs = [
     { key: "active", label: "Active", count: jobs.active.length },
-    { key: "pending", label: "Pending", count: jobs.pending.length },
+    { key: "pending", label: "Available", count: jobs.pending.length },
     { key: "completed", label: "Completed", count: jobs.completed.length },
-    { key: "disputed", label: "Disputed", count: jobs.disputed.length }
-  ]
+    { key: "disputed", label: "Disputed", count: jobs.disputed.length },
+  ];
 
-  const currentJobs = jobs[activeTab as keyof typeof jobs] || []
+  const currentJobs = jobs[activeTab as keyof typeof jobs] || [];
 
-  const filteredJobs = currentJobs.filter(job => 
-    job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    job.client.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const filteredJobs = currentJobs.filter(
+    (job) =>
+      job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      job.client.toLowerCase().includes(searchQuery.toLowerCase()),
+  );
 
-  const handleAcceptJob = (jobId: number) => {
-    alert(`Job ${jobId} accepted! Starting job...`)
-    setShowJobDetails(false)
-  }
+  const handleAcceptJob = (jobId: string) => {
+    alert(`Job ${jobId} accepted! Starting job...`);
+    setShowJobDetails(false);
+  };
 
-  const handleDeclineJob = (jobId: number) => {
-    alert(`Job ${jobId} declined`)
-    setShowJobDetails(false)
-  }
+  const handleDeclineJob = (jobId: string) => {
+    alert(`Job ${jobId} declined`);
+    setShowJobDetails(false);
+  };
 
   const handleCallClient = (clientName: string) => {
-    alert(`Initiating call with ${clientName}...`)
-  }
+    alert(`Initiating call with ${clientName}...`);
+  };
 
   const handleChatClient = (clientName: string) => {
-    alert(`Opening chat with ${clientName}...`)
-  }
+    alert(`Opening chat with ${clientName}...`);
+  };
 
   const handleNavigate = (location: string) => {
-    alert(`Opening maps for ${location}...`)
-  }
+    alert(`Opening maps for ${location}...`);
+  };
 
   const openJobDetails = (job: any) => {
-    setSelectedJob(job)
-    setShowJobDetails(true)
-  }
+    setSelectedJob(job);
+    setShowJobDetails(true);
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-6">
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-800 dark:to-blue-900 text-white p-6 lg:rounded-b-3xl">
+      <div className="bg-linear-to-r from-blue-600 to-blue-700 dark:from-blue-800 dark:to-blue-900 text-white p-6 lg:rounded-b-3xl">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-2xl font-bold mb-2">My Jobs</h1>
-          <p className="text-blue-100 text-sm">Manage your service requests and track progress</p>
-          
+          <p className="text-blue-100 text-sm">
+            Manage your service requests and track progress
+          </p>
+
           {/* Stats Row */}
           <div className="grid grid-cols-4 gap-3 mt-6">
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 text-center">
@@ -187,7 +209,17 @@ export default function ProviderJobsPage() {
               <p className="text-xs text-blue-100">Done</p>
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-3 text-center">
-              <p className="text-2xl font-bold">KES 85K</p>
+              <p className="text-2xl font-bold">
+                KES{" "}
+                {bookingCards
+                  .reduce(
+                    (sum: number, job: any) =>
+                      sum +
+                      Number(String(job.amount).replace(/[^0-9]/g, "") || 0),
+                    0,
+                  )
+                  .toLocaleString()}
+              </p>
               <p className="text-xs text-blue-100">Earned</p>
             </div>
           </div>
@@ -200,8 +232,8 @@ export default function ProviderJobsPage() {
           <div className="flex gap-3">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input 
-                placeholder="Search jobs..." 
+              <Input
+                placeholder="Search jobs..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10"
@@ -226,9 +258,13 @@ export default function ProviderJobsPage() {
               }`}
             >
               {tab.label}
-              <span className={`text-xs px-2 py-0.5 rounded-full ${
-                activeTab === tab.key ? "bg-white/20" : "bg-gray-200 dark:bg-gray-700"
-              }`}>
+              <span
+                className={`text-xs px-2 py-0.5 rounded-full ${
+                  activeTab === tab.key
+                    ? "bg-white/20"
+                    : "bg-gray-200 dark:bg-gray-700"
+                }`}
+              >
                 {tab.count}
               </span>
             </button>
@@ -242,15 +278,19 @@ export default function ProviderJobsPage() {
               <div className="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Calendar className="w-8 h-8 text-gray-400" />
               </div>
-              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">No jobs found</h3>
+              <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+                No jobs found
+              </h3>
               <p className="text-sm text-muted-foreground">
-                {searchQuery ? "Try a different search term" : `You don't have any ${activeTab} jobs yet`}
+                {searchQuery
+                  ? "Try a different search term"
+                  : `You don't have any ${activeTab} jobs yet`}
               </p>
             </Card>
           ) : (
             filteredJobs.map((job) => (
-              <Card 
-                key={job.id} 
+              <Card
+                key={job.id}
                 className={`p-4 hover:shadow-lg transition-shadow border-0 shadow-sm ${
                   job.urgent ? "ring-2 ring-red-500 ring-offset-2" : ""
                 }`}
@@ -261,22 +301,28 @@ export default function ProviderJobsPage() {
                     Urgent Request
                   </div>
                 )}
-                
+
                 <div className="flex gap-4">
-                  <img 
-                    src={job.clientAvatar || "/placeholder.svg"} 
+                  <img
+                    src={job.clientAvatar || "/placeholder.svg"}
                     alt={job.client}
-                    className="w-14 h-14 rounded-full object-cover flex-shrink-0"
+                    className="w-14 h-14 rounded-full object-cover shrink-0"
                   />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2 mb-1">
-                      <h3 className="font-semibold text-gray-900 dark:text-white truncate">{job.title}</h3>
-                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full flex-shrink-0 ${job.statusColor}`}>
+                      <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                        {job.title}
+                      </h3>
+                      <span
+                        className={`text-xs font-medium px-2.5 py-1 rounded-full shrink-0 ${job.statusColor}`}
+                      >
                         {job.status}
                       </span>
                     </div>
-                    <p className="text-sm text-muted-foreground mb-2">{job.client}</p>
-                    
+                    <p className="text-sm text-muted-foreground mb-2">
+                      {job.client}
+                    </p>
+
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground mb-3">
                       <span className="flex items-center gap-1">
                         <MapPin className="w-3.5 h-3.5" />
@@ -286,7 +332,7 @@ export default function ProviderJobsPage() {
                         <Clock className="w-3.5 h-3.5" />
                         {job.date}
                       </span>
-                      {'distance' in job && (
+                      {"distance" in job && (
                         <span className="flex items-center gap-1">
                           <Navigation className="w-3.5 h-3.5" />
                           {job.distance}
@@ -294,52 +340,56 @@ export default function ProviderJobsPage() {
                       )}
                     </div>
 
-                    {'rating' in job && (
+                    {"rating" in job && (
                       <div className="flex items-center gap-2 mb-3">
                         <div className="flex">
                           {[...Array(5)].map((_, i) => (
-                            <Star 
-                              key={i} 
-                              className={`w-4 h-4 ${i < (job.rating || 0) ? "text-amber-400 fill-amber-400" : "text-gray-300"}`} 
+                            <Star
+                              key={i}
+                              className={`w-4 h-4 ${i < (job.rating || 0) ? "text-amber-400 fill-amber-400" : "text-gray-300"}`}
                             />
                           ))}
                         </div>
-                        <span className="text-xs text-muted-foreground">"{job.review}"</span>
+                        <span className="text-xs text-muted-foreground">
+                          "{job.review}"
+                        </span>
                       </div>
                     )}
 
-                    {'disputeReason' in job && (
+                    {"disputeReason" in job && (
                       <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 text-xs p-2 rounded-lg mb-3">
                         {job.disputeReason}
                       </div>
                     )}
 
                     <div className="flex items-center justify-between">
-                      <p className="text-lg font-bold text-gray-900 dark:text-white">{job.amount}</p>
+                      <p className="text-lg font-bold text-gray-900 dark:text-white">
+                        {job.amount}
+                      </p>
                       <div className="flex items-center gap-2">
                         {activeTab === "active" && (
                           <>
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
+                            <Button
+                              size="sm"
+                              variant="outline"
                               className="h-8 bg-transparent"
                               onClick={() => handleCallClient(job.client)}
                             >
                               <Phone className="w-3.5 h-3.5 mr-1" />
                               Call
                             </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
+                            <Button
+                              size="sm"
+                              variant="outline"
                               className="h-8 bg-transparent"
                               onClick={() => handleChatClient(job.client)}
                             >
                               <MessageSquare className="w-3.5 h-3.5 mr-1" />
                               Chat
                             </Button>
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
+                            <Button
+                              size="sm"
+                              variant="outline"
                               className="h-8 bg-transparent"
                               onClick={() => openJobDetails(job)}
                             >
@@ -349,16 +399,16 @@ export default function ProviderJobsPage() {
                         )}
                         {activeTab === "pending" && (
                           <>
-                            <Button 
-                              size="sm" 
-                              variant="outline" 
+                            <Button
+                              size="sm"
+                              variant="outline"
                               className="h-8 text-red-600 border-red-200 bg-transparent"
                               onClick={() => handleDeclineJob(job.id)}
                             >
                               Decline
                             </Button>
-                            <Button 
-                              size="sm" 
+                            <Button
+                              size="sm"
                               className="h-8 bg-green-600 hover:bg-green-700"
                               onClick={() => handleAcceptJob(job.id)}
                             >
@@ -367,8 +417,8 @@ export default function ProviderJobsPage() {
                           </>
                         )}
                         {activeTab === "disputed" && (
-                          <Button 
-                            size="sm" 
+                          <Button
+                            size="sm"
                             className="h-8 bg-red-600 hover:bg-red-700"
                             onClick={() => openJobDetails(job)}
                           >
@@ -377,7 +427,11 @@ export default function ProviderJobsPage() {
                         )}
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-8 w-8 p-0"
+                            >
                               <MoreVertical className="w-4 h-4" />
                             </Button>
                           </DropdownMenuTrigger>
@@ -403,20 +457,26 @@ export default function ProviderJobsPage() {
           <DialogHeader>
             <DialogTitle>Job Details</DialogTitle>
           </DialogHeader>
-          
+
           {selectedJob && (
             <div className="space-y-6">
               {/* Job Header */}
               <div className="flex gap-4 pb-4 border-b">
-                <img 
-                  src={selectedJob.clientAvatar || "/placeholder.svg"} 
+                <img
+                  src={selectedJob.clientAvatar || "/placeholder.svg"}
                   alt={selectedJob.client}
                   className="w-16 h-16 rounded-full object-cover"
                 />
                 <div className="flex-1">
-                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">{selectedJob.title}</h2>
-                  <p className="text-sm text-muted-foreground">{selectedJob.client}</p>
-                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-1">{selectedJob.amount}</p>
+                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                    {selectedJob.title}
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedJob.client}
+                  </p>
+                  <p className="text-lg font-bold text-blue-600 dark:text-blue-400 mt-1">
+                    {selectedJob.amount}
+                  </p>
                 </div>
               </div>
 
@@ -440,21 +500,21 @@ export default function ProviderJobsPage() {
 
               {/* Actions */}
               <div className="flex gap-3 flex-wrap">
-                <Button 
+                <Button
                   onClick={() => handleCallClient(selectedJob.client)}
                   className="bg-green-600 hover:bg-green-700"
                 >
                   <Phone className="w-4 h-4 mr-2" />
                   Call Client
                 </Button>
-                <Button 
+                <Button
                   onClick={() => handleChatClient(selectedJob.client)}
                   variant="outline"
                 >
                   <MessageSquare className="w-4 h-4 mr-2" />
                   Chat
                 </Button>
-                <Button 
+                <Button
                   onClick={() => handleNavigate(selectedJob.location)}
                   variant="outline"
                 >
@@ -466,14 +526,14 @@ export default function ProviderJobsPage() {
               {/* Pending Job Actions */}
               {activeTab === "pending" && (
                 <div className="flex gap-3">
-                  <Button 
+                  <Button
                     onClick={() => handleDeclineJob(selectedJob.id)}
-                    variant="outline" 
+                    variant="outline"
                     className="flex-1"
                   >
                     Decline
                   </Button>
-                  <Button 
+                  <Button
                     onClick={() => handleAcceptJob(selectedJob.id)}
                     className="flex-1 bg-green-600 hover:bg-green-700"
                   >
@@ -487,5 +547,5 @@ export default function ProviderJobsPage() {
         </DialogContent>
       </DialogComponent>
     </div>
-  )
+  );
 }

@@ -1,40 +1,95 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { ArrowLeft, Save, Award, MapPin } from "lucide-react"
-import Link from "next/link"
+import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft, Award, MapPin } from "lucide-react";
+import Link from "next/link";
+import { useAuthContext } from "@/lib/auth-context";
+
+type ServiceRecord = {
+  id: string;
+  category?: string | null;
+};
+
+type BookingRecord = {
+  id: string;
+  customer?: {
+    name?: string | null;
+  } | null;
+};
 
 export default function SkillsPage() {
-  const [skills, setSkills] = useState([
-    { id: 1, name: "Plumbing", verified: true },
-    { id: 2, name: "Electrical Work", verified: true },
-    { id: 3, name: "AC Repair", verified: false },
-  ])
-  const [workAreas, setWorkAreas] = useState(["Nairobi CBD", "Westlands", "Karen"])
-  const [newSkill, setNewSkill] = useState("")
-  const [newArea, setNewArea] = useState("")
+  const { user } = useAuthContext();
+  const [services, setServices] = useState<ServiceRecord[]>([]);
+  const [bookings, setBookings] = useState<BookingRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const addSkill = () => {
-    if (newSkill.trim()) {
-      setSkills([...skills, { id: Date.now(), name: newSkill, verified: false }])
-      setNewSkill("")
-    }
-  }
+  useEffect(() => {
+    const loadData = async () => {
+      if (!user?.id) {
+        setLoading(false);
+        return;
+      }
 
-  const removeSkill = (id: number) => {
-    setSkills(skills.filter((s) => s.id !== id))
-  }
+      try {
+        const [servicesResponse, bookingsResponse] = await Promise.all([
+          fetch("/api/services", { cache: "no-store" }),
+          fetch(`/api/bookings?providerId=${encodeURIComponent(user.id)}`, {
+            cache: "no-store",
+          }),
+        ]);
 
-  const addWorkArea = () => {
-    if (newArea.trim() && !workAreas.includes(newArea)) {
-      setWorkAreas([...workAreas, newArea])
-      setNewArea("")
-    }
-  }
+        const servicesPayload = await servicesResponse.json();
+        const bookingsPayload = await bookingsResponse.json();
 
-  const removeWorkArea = (area: string) => {
-    setWorkAreas(workAreas.filter((a) => a !== area))
-  }
+        const allServices = Array.isArray(servicesPayload?.data)
+          ? servicesPayload.data
+          : [];
+        const providerServices = allServices.filter(
+          (service: any) => String(service?.providerId || "") === user.id,
+        );
+        const providerBookings = Array.isArray(bookingsPayload?.data)
+          ? bookingsPayload.data
+          : [];
+
+        setServices(providerServices);
+        setBookings(providerBookings);
+      } catch {
+        setServices([]);
+        setBookings([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
+  }, [user?.id]);
+
+  const skills = useMemo(() => {
+    const categories = Array.from(
+      new Set(
+        services
+          .map((service) => String(service.category || "").trim())
+          .filter(Boolean),
+      ),
+    );
+
+    return categories.map((name, index) => ({
+      id: `${name}-${index}`,
+      name,
+      verified: true,
+    }));
+  }, [services]);
+
+  const workAreas = useMemo(() => {
+    const names = Array.from(
+      new Set(
+        bookings
+          .map((booking) => String(booking.customer?.name || "").trim())
+          .filter(Boolean),
+      ),
+    );
+    return names.slice(0, 8);
+  }, [bookings]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20 lg:pb-0">
@@ -57,47 +112,36 @@ export default function SkillsPage() {
             Professional Skills
           </h2>
 
-          {/* Add Skill */}
-          <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={newSkill}
-              onChange={(e) => setNewSkill(e.target.value)}
-              placeholder="Add a skill..."
-              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              onKeyPress={(e) => e.key === "Enter" && addSkill()}
-            />
-            <button
-              onClick={addSkill}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
-            >
-              Add
-            </button>
-          </div>
-
           {/* Skills List */}
           <div className="space-y-2">
-            {skills.map((skill) => (
-              <div
-                key={skill.id}
-                className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-900 dark:text-white font-medium">{skill.name}</span>
-                  {skill.verified && (
-                    <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded">
-                      Verified
-                    </span>
-                  )}
-                </div>
-                <button
-                  onClick={() => removeSkill(skill.id)}
-                  className="text-red-600 dark:text-red-400 hover:text-red-700 text-sm font-medium"
-                >
-                  Remove
-                </button>
+            {loading ? (
+              <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg text-sm text-gray-600 dark:text-gray-400">
+                Loading skills...
               </div>
-            ))}
+            ) : skills.length === 0 ? (
+              <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg text-sm text-gray-600 dark:text-gray-400">
+                No skills available yet. Add services to build your skills
+                profile.
+              </div>
+            ) : (
+              skills.map((skill) => (
+                <div
+                  key={skill.id}
+                  className="flex items-center justify-between bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-gray-900 dark:text-white font-medium">
+                      {skill.name}
+                    </span>
+                    {skill.verified && (
+                      <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-2 py-1 rounded">
+                        Verified
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -108,49 +152,31 @@ export default function SkillsPage() {
             Work Areas
           </h2>
 
-          {/* Add Work Area */}
-          <div className="flex gap-2 mb-4">
-            <input
-              type="text"
-              value={newArea}
-              onChange={(e) => setNewArea(e.target.value)}
-              placeholder="Add a location..."
-              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-              onKeyPress={(e) => e.key === "Enter" && addWorkArea()}
-            />
-            <button
-              onClick={addWorkArea}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium"
-            >
-              Add
-            </button>
-          </div>
-
           {/* Work Areas List */}
           <div className="flex flex-wrap gap-2">
-            {workAreas.map((area) => (
-              <div
-                key={area}
-                className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/30 px-3 py-2 rounded-full"
-              >
-                <span className="text-blue-900 dark:text-blue-400 font-medium">{area}</span>
-                <button
-                  onClick={() => removeWorkArea(area)}
-                  className="text-blue-600 dark:text-blue-400 hover:text-blue-700 text-sm"
-                >
-                  ✕
-                </button>
+            {loading ? (
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                Loading service areas...
               </div>
-            ))}
+            ) : workAreas.length === 0 ? (
+              <div className="text-sm text-gray-600 dark:text-gray-400">
+                No recent client locations found yet.
+              </div>
+            ) : (
+              workAreas.map((area) => (
+                <div
+                  key={area}
+                  className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/30 px-3 py-2 rounded-full"
+                >
+                  <span className="text-blue-900 dark:text-blue-400 font-medium">
+                    {area}
+                  </span>
+                </div>
+              ))
+            )}
           </div>
         </div>
-
-        {/* Save Button */}
-        <button className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-medium flex items-center justify-center gap-2">
-          <Save className="w-5 h-5" />
-          Save Changes
-        </button>
       </div>
     </div>
-  )
+  );
 }

@@ -1,15 +1,15 @@
-import { NextResponse } from "next/server"
-import { db } from "@/lib/server/db"
-import { authorizeRoles } from "@/lib/server/rbac"
+import { NextResponse } from "next/server";
+import { db } from "@/lib/server/db";
+import { authorizeRoles } from "@/lib/server/rbac";
 
-const prismaDb: any = db
+const prismaDb: any = db;
 
 async function writeAuditLog(params: {
-  email?: string
-  mode: string
-  status: "SUCCESS" | "FAILED"
-  response?: unknown
-  error?: string
+  email?: string;
+  mode: string;
+  status: "SUCCESS" | "FAILED";
+  response?: unknown;
+  error?: string;
 }) {
   try {
     await prismaDb.authLog.create({
@@ -21,33 +21,67 @@ async function writeAuditLog(params: {
         response: params.response ? JSON.stringify(params.response) : undefined,
         error: params.error,
       },
-    })
+    });
   } catch {
     // Do not fail the parent request when audit logging fails.
   }
 }
 
-export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
-  const denied = authorizeRoles(request, ["admin", "sub-admin", "subadmin"])
-  if (denied) return denied
+export async function PATCH(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  const denied = authorizeRoles(request, ["admin", "sub-admin", "subadmin"]);
+  if (denied) return denied;
 
-  const { id } = await context.params
+  const { id } = await context.params;
 
   try {
-    const body = await request.json()
+    const body = await request.json();
 
-    const name = body?.name ? String(body.name).trim() : undefined
-    const phone = body?.phone ? String(body.phone).trim() : undefined
-    const role = body?.role ? String(body.role).trim().toLowerCase() : undefined
-    const status = body?.status ? String(body.status).trim().toLowerCase() : undefined
+    const name = body?.name ? String(body.name).trim() : undefined;
+    const phone = body?.phone ? String(body.phone).trim() : undefined;
+    const role = body?.role
+      ? String(body.role).trim().toLowerCase()
+      : undefined;
+    const status = body?.status
+      ? String(body.status).trim().toLowerCase()
+      : undefined;
 
-    const allowedRoles = new Set(["customer", "provider", "admin", "agent", "secretary", "shopkeeper", "subadmin"])
+    const allowedRoles = new Set([
+      "customer",
+      "provider",
+      "admin",
+      "agent",
+      "secretary",
+      "shopkeeper",
+      "subadmin",
+    ]);
 
     if (role && !allowedRoles.has(role)) {
-      return NextResponse.json({ ok: false, error: "Invalid role" }, { status: 400 })
+      return NextResponse.json(
+        { ok: false, error: "Invalid role" },
+        { status: 400 },
+      );
     }
 
-    const isSuspended = status ? status === "suspended" : undefined
+    const statusData: Record<string, unknown> = {};
+    if (status) {
+      if (status === "suspended") {
+        statusData.isSuspended = true;
+      } else if (status === "active" || status === "completed") {
+        statusData.isSuspended = false;
+        statusData.deletedAt = null;
+        statusData.emailVerified = true;
+      } else if (status === "pending") {
+        statusData.isSuspended = false;
+        statusData.deletedAt = null;
+        statusData.emailVerified = false;
+      } else if (status === "deactivated") {
+        statusData.deletedAt = new Date();
+        statusData.isSuspended = true;
+      }
+    }
 
     const updated = await prismaDb.user.update({
       where: { id },
@@ -55,7 +89,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         ...(name ? { name } : {}),
         ...(phone ? { phone } : {}),
         ...(role ? { role } : {}),
-        ...(typeof isSuspended === "boolean" ? { isSuspended } : {}),
+        ...statusData,
       },
       select: {
         id: true,
@@ -64,9 +98,11 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         phone: true,
         role: true,
         isSuspended: true,
+        emailVerified: true,
+        deletedAt: true,
         updatedAt: true,
       },
-    })
+    });
 
     await writeAuditLog({
       email: updated.email,
@@ -76,41 +112,57 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
         targetUserId: updated.id,
         role: updated.role,
         isSuspended: updated.isSuspended,
+        emailVerified: updated.emailVerified,
+        deletedAt: updated.deletedAt,
       },
-    })
+    });
 
-    return NextResponse.json({ ok: true, data: updated })
+    return NextResponse.json({ ok: true, data: updated });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to update user"
-    await writeAuditLog({ mode: "admin-user-patch", status: "FAILED", error: message })
-    return NextResponse.json({ ok: false, error: message }, { status: 500 })
+    const message =
+      error instanceof Error ? error.message : "Failed to update user";
+    await writeAuditLog({
+      mode: "admin-user-patch",
+      status: "FAILED",
+      error: message,
+    });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
 
-export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
-  const denied = authorizeRoles(request, ["admin", "sub-admin", "subadmin"])
-  if (denied) return denied
+export async function DELETE(
+  request: Request,
+  context: { params: Promise<{ id: string }> },
+) {
+  const denied = authorizeRoles(request, ["admin", "sub-admin", "subadmin"]);
+  if (denied) return denied;
 
-  const { id } = await context.params
+  const { id } = await context.params;
 
   try {
     const existing = await prismaDb.user.findUnique({
       where: { id },
       select: { id: true, email: true, deletedAt: true },
-    })
+    });
 
     if (!existing) {
-      return NextResponse.json({ ok: false, error: "User not found" }, { status: 404 })
+      return NextResponse.json(
+        { ok: false, error: "User not found" },
+        { status: 404 },
+      );
     }
 
     if (existing.deletedAt) {
-      return NextResponse.json({ ok: true, data: { id: existing.id, alreadyDeleted: true } })
+      return NextResponse.json({
+        ok: true,
+        data: { id: existing.id, alreadyDeleted: true },
+      });
     }
 
-    const [localPart, domainPart] = existing.email.split("@")
+    const [localPart, domainPart] = existing.email.split("@");
     const nextEmail = domainPart
       ? `${localPart}.deleted.${Date.now()}@${domainPart}`
-      : `${existing.email}.deleted.${Date.now()}`
+      : `${existing.email}.deleted.${Date.now()}`;
 
     const deleted = await prismaDb.user.update({
       where: { id },
@@ -124,7 +176,7 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
         email: true,
         deletedAt: true,
       },
-    })
+    });
 
     await writeAuditLog({
       email: existing.email,
@@ -134,12 +186,17 @@ export async function DELETE(request: Request, context: { params: Promise<{ id: 
         targetUserId: deleted.id,
         deletedAt: deleted.deletedAt,
       },
-    })
+    });
 
-    return NextResponse.json({ ok: true, data: deleted })
+    return NextResponse.json({ ok: true, data: deleted });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to delete user"
-    await writeAuditLog({ mode: "admin-user-delete", status: "FAILED", error: message })
-    return NextResponse.json({ ok: false, error: message }, { status: 500 })
+    const message =
+      error instanceof Error ? error.message : "Failed to delete user";
+    await writeAuditLog({
+      mode: "admin-user-delete",
+      status: "FAILED",
+      error: message,
+    });
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

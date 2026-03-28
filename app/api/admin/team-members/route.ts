@@ -1,45 +1,166 @@
-import { NextResponse } from "next/server"
-import { randomBytes } from "crypto"
-import { db } from "@/lib/server/db"
-import { hashPassword } from "@/lib/server/password"
-import { getSessionActor, hasAnyRole } from "@/lib/server/api-auth"
+import { NextResponse } from "next/server";
+import { db } from "@/lib/server/db";
+import { getSessionActor, hasAnyRole } from "@/lib/server/api-auth";
+import { createInAppNotification } from "@/lib/server/in-app-notifications";
+import { sendEmail } from "@/lib/server/mailer";
+import { createPromotionInvite } from "@/lib/server/team-promotion-invites";
 
-const prismaDb: any = db
+const prismaDb: any = db;
 
-const TEAM_ROLES = new Set(["subadmin", "secretary", "agent"])
+const TEAM_ROLES = new Set(["subadmin", "secretary", "agent"]);
+const RESTORABLE_ROLES = new Set([
+  "customer",
+  "provider",
+  "shopkeeper",
+  "admin",
+  "subadmin",
+  "secretary",
+  "agent",
+]);
 
 function normalizeRole(value: string | null | undefined): string {
   const normalized = String(value || "")
     .trim()
     .toLowerCase()
-    .replace(/_/g, "-")
+    .replace(/_/g, "-");
 
-  if (normalized === "sub-admin") return "subadmin"
-  if (normalized === "subadmin") return "subadmin"
-  return normalized
-}
-
-function createTemporaryPassword(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%"
-  let generated = ""
-  const bytes = randomBytes(12)
-  for (let i = 0; i < 12; i += 1) {
-    generated += alphabet[bytes[i] % alphabet.length]
-  }
-  return generated
+  if (normalized === "sub-admin") return "subadmin";
+  if (normalized === "subadmin") return "subadmin";
+  return normalized;
 }
 
 function mapTeamRoleForUi(role: string): "sub-admin" | "secretary" | "agent" {
-  if (role === "subadmin") return "sub-admin"
-  if (role === "secretary") return "secretary"
-  return "agent"
+  if (role === "subadmin") return "sub-admin";
+  if (role === "secretary") return "secretary";
+  return "agent";
+}
+
+function normalizeRestorableRole(value: unknown): string | null {
+  const normalized = normalizeRole(String(value || ""));
+  if (!RESTORABLE_ROLES.has(normalized)) return null;
+  if (TEAM_ROLES.has(normalized)) return null;
+  return normalized;
+}
+
+function inferFallbackRole(member: {
+  customerProfile?: { userId: string } | null;
+  serviceProviderProfile?: { userId: string } | null;
+  services?: Array<{ id: string }>;
+}): string {
+  if (member.serviceProviderProfile || (member.services || []).length > 0) {
+    return "provider";
+  }
+  if (member.customerProfile) {
+    return "customer";
+  }
+  return "customer";
+}
+
+function safeParse(value: string | null | undefined): Record<string, unknown> {
+  if (!value) return {};
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
+function resolveAppUrl(requestOrigin?: string): string {
+  const explicit = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  if (explicit) return explicit.replace(/\/$/, "");
+  if (requestOrigin) return requestOrigin.replace(/\/$/, "");
+  return "http://localhost:3500";
+}
+
+async function getPreviousRoleFromLatestPromotion(
+  email: string,
+): Promise<string | null> {
+  const latest = await prismaDb.authLog.findFirst({
+    where: {
+      provider: "local",
+      mode: "admin-team-promotion-accepted",
+      email,
+      status: "SUCCESS",
+    },
+    orderBy: { createdAt: "desc" },
+    select: { response: true },
+  });
+
+  const payload = safeParse(latest?.response);
+  return normalizeRestorableRole(payload.previousRole ?? null);
+}
+
+async function queueTeamInviteEmail(params: {
+  email: string;
+  name: string;
+  role: string;
+  invitedByEmail: string | null;
+  inviteUrl: string;
+}) {
+  const roleLabel = mapTeamRoleForUi(params.role).replace("-", " ");
+  const subject = `Action required: accept your ${roleLabel} privileges`;
+  const text = [
+    `Hello ${params.name},`,
+    "",
+    `${params.invitedByEmail || "An administrator"} invited you to become ${roleLabel}.`,
+    "To accept and activate your privileges, click this secure link:",
+    params.inviteUrl,
+    "",
+    "This link expires in 7 days.",
+  ].join("\n");
+  const html = `
+    <p>Hello ${params.name},</p>
+    <p>${params.invitedByEmail || "An administrator"} invited you to become <strong>${roleLabel}</strong>.</p>
+    <p>To accept and activate your privileges, click the secure button below:</p>
+    <p><a href="${params.inviteUrl}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;">Accept Promotion</a></p>
+    <p>Or copy and paste this link into your browser:</p>
+    <p>${params.inviteUrl}</p>
+    <p>This link expires in 7 days.</p>
+  `;
+
+  try {
+    const result = await sendEmail({
+      to: params.email,
+      subject,
+      text,
+      html,
+    });
+
+    await prismaDb.notificationLog.create({
+      data: {
+        provider: "smtp",
+        channel: "email",
+        recipient: params.email,
+        message: subject,
+        status: "SENT",
+        response: JSON.stringify(result),
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Email send failed";
+    await prismaDb.notificationLog.create({
+      data: {
+        provider: "smtp",
+        channel: "email",
+        recipient: params.email,
+        message: subject,
+        status: "FAILED",
+        error: message,
+      },
+    });
+    throw error;
+  }
 }
 
 export async function GET(request: Request) {
-  const { actor, error } = await getSessionActor(request)
-  if (error) return error
+  const { actor, error } = await getSessionActor(request);
+  if (error) return error;
   if (!actor || !hasAnyRole(actor, ["admin"])) {
-    return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 })
+    return NextResponse.json(
+      { ok: false, error: "Forbidden" },
+      { status: 403 },
+    );
   }
 
   const rows = await prismaDb.user.findMany({
@@ -56,7 +177,7 @@ export async function GET(request: Request) {
       isSuspended: true,
       createdAt: true,
     },
-  })
+  });
 
   const data = rows.map((row: any) => ({
     id: row.id,
@@ -66,106 +187,149 @@ export async function GET(request: Request) {
     status: row.isSuspended ? "inactive" : "active",
     joinedDate: new Date(row.createdAt).toISOString().split("T")[0],
     credentialsSent: true,
-  }))
+  }));
 
-  return NextResponse.json({ ok: true, data })
+  return NextResponse.json({ ok: true, data });
 }
 
 export async function POST(request: Request) {
-  const { actor, error } = await getSessionActor(request)
-  if (error) return error
+  const { actor, error } = await getSessionActor(request);
+  if (error) return error;
   if (!actor || !hasAnyRole(actor, ["admin"])) {
-    return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 })
+    return NextResponse.json(
+      { ok: false, error: "Forbidden" },
+      { status: 403 },
+    );
   }
 
-  const body = await request.json()
-  const name = String(body?.name || "").trim()
-  const email = String(body?.email || "").trim().toLowerCase()
-  const role = normalizeRole(body?.role)
+  const body = await request.json();
+  const name = String(body?.name || "").trim();
+  const email = String(body?.email || "")
+    .trim()
+    .toLowerCase();
+  const role = normalizeRole(body?.role);
 
   if (!name || !email || !role) {
-    return NextResponse.json({ ok: false, error: "name, email and role are required" }, { status: 400 })
+    return NextResponse.json(
+      { ok: false, error: "name, email and role are required" },
+      { status: 400 },
+    );
   }
 
   if (!TEAM_ROLES.has(role)) {
-    return NextResponse.json({ ok: false, error: "invalid team role" }, { status: 400 })
+    return NextResponse.json(
+      { ok: false, error: "invalid team role" },
+      { status: 400 },
+    );
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!emailRegex.test(email)) {
-    return NextResponse.json({ ok: false, error: "invalid email format" }, { status: 400 })
+    return NextResponse.json(
+      { ok: false, error: "invalid email format" },
+      { status: 400 },
+    );
   }
 
-  const existing = await prismaDb.user.findUnique({ where: { email } })
-  if (existing && !existing.deletedAt) {
-    return NextResponse.json({ ok: false, error: "An account with this email already exists" }, { status: 409 })
+  const existing = await prismaDb.user.findUnique({
+    where: { email },
+    select: {
+      id: true,
+      role: true,
+      customerProfile: { select: { userId: true } },
+      serviceProviderProfile: { select: { userId: true } },
+      services: { select: { id: true }, take: 1 },
+    },
+  });
+
+  const created = await prismaDb.user.upsert({
+    where: { email },
+    update: {
+      name,
+      isSuspended: false,
+      deletedAt: null,
+    },
+    create: {
+      name,
+      email,
+      isSuspended: false,
+    },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      isSuspended: true,
+      createdAt: true,
+    },
+  });
+
+  const currentRole = normalizeRole(created.role);
+  let previousRole = normalizeRestorableRole(existing?.role);
+  if (!previousRole && TEAM_ROLES.has(currentRole)) {
+    previousRole = await getPreviousRoleFromLatestPromotion(created.email);
+  }
+  if (!previousRole) {
+    previousRole = inferFallbackRole(existing || created);
   }
 
-  const temporaryPassword = createTemporaryPassword()
-  const passwordHash = hashPassword(temporaryPassword)
+  const invite = await createPromotionInvite({
+    email: created.email,
+    userId: created.id,
+    targetRole: role,
+    previousRole,
+    invitedBy: actor.email,
+  });
 
-  const created = existing
-    ? await prismaDb.user.update({
-        where: { email },
-        data: {
-          name,
-          role,
-          passwordHash,
-          isSuspended: false,
-          deletedAt: null,
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          isSuspended: true,
-          createdAt: true,
-        },
-      })
-    : await prismaDb.user.create({
-        data: {
-          name,
-          email,
-          role,
-          passwordHash,
-          isSuspended: false,
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          role: true,
-          isSuspended: true,
-          createdAt: true,
-        },
-      })
-
-  if (role === "secretary") {
-    await prismaDb.secretary.upsert({
-      where: { userId: created.id },
-      update: {},
-      create: { userId: created.id },
-    })
-  }
-
-  if (role === "agent") {
-    await prismaDb.agent.upsert({
-      where: { userId: created.id },
-      update: {},
-      create: { userId: created.id },
-    })
-  }
+  const appUrl = resolveAppUrl(new URL(request.url).origin);
+  const inviteUrl = `${appUrl}/api/admin/team-promotions/accept?token=${encodeURIComponent(invite.token)}`;
 
   await prismaDb.authLog.create({
     data: {
       provider: "local",
-      mode: "admin-team-create",
+      mode: "admin-team-promotion-requested",
       email: created.email,
       status: "SUCCESS",
-      response: JSON.stringify({ by: actor.email, role: created.role }),
+      response: JSON.stringify({
+        by: actor.email,
+        targetRole: role,
+        inviteId: invite.inviteId,
+        previousRole,
+      }),
     },
-  })
+  });
+
+  await queueTeamInviteEmail({
+    email: created.email,
+    name: created.name || "Team member",
+    role,
+    invitedByEmail: actor.email,
+    inviteUrl,
+  });
+
+  await createInAppNotification({
+    userId: created.id,
+    type: "warning",
+    title: "Team promotion pending",
+    message: `Accept your ${mapTeamRoleForUi(role).replace("-", " ")} promotion from the link sent to ${created.email}.`,
+    actionHref: "/team-login",
+    metadata: { invitedBy: actor.email },
+  });
+
+  await prismaDb.authLog.create({
+    data: {
+      provider: "local",
+      mode: "admin-team-promotion-email",
+      email: created.email,
+      status: "SUCCESS",
+      response: JSON.stringify({
+        by: actor.email,
+        targetRole: role,
+        inviteId: invite.inviteId,
+        inviteUrl,
+      }),
+    },
+  });
 
   return NextResponse.json({
     ok: true,
@@ -173,52 +337,216 @@ export async function POST(request: Request) {
       id: created.id,
       name: created.name || "Unnamed User",
       email: created.email,
-      role: mapTeamRoleForUi(String(created.role || "")),
-      status: created.isSuspended ? "inactive" : "active",
+      role: mapTeamRoleForUi(role),
+      status: "inactive",
       joinedDate: new Date(created.createdAt).toISOString().split("T")[0],
       credentialsSent: false,
     },
-    credentials: {
+    invitation: {
       email: created.email,
-      temporaryPassword,
-      loginUrl: "/team-login",
+      loginUrl: inviteUrl,
+      status: "sent",
+      expiresAt: invite.expiresAt,
     },
-  })
+  });
+}
+
+export async function PATCH(request: Request) {
+  const { actor, error } = await getSessionActor(request);
+  if (error) return error;
+  if (!actor || !hasAnyRole(actor, ["admin"])) {
+    return NextResponse.json(
+      { ok: false, error: "Forbidden" },
+      { status: 403 },
+    );
+  }
+
+  const body = await request.json();
+  const id = String(body?.id || "").trim();
+  const action = String(body?.action || "")
+    .trim()
+    .toLowerCase();
+
+  if (!id || action !== "resend-invite") {
+    return NextResponse.json(
+      { ok: false, error: "id and action=resend-invite are required" },
+      { status: 400 },
+    );
+  }
+
+  const member = await prismaDb.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      deletedAt: true,
+      customerProfile: { select: { userId: true } },
+      serviceProviderProfile: { select: { userId: true } },
+      services: { select: { id: true }, take: 1 },
+    },
+  });
+
+  if (!member || member.deletedAt) {
+    return NextResponse.json(
+      { ok: false, error: "Team member not found" },
+      { status: 404 },
+    );
+  }
+
+  const role = normalizeRole(member.role);
+  if (!TEAM_ROLES.has(role)) {
+    return NextResponse.json(
+      { ok: false, error: "Only team members can receive invites" },
+      { status: 400 },
+    );
+  }
+
+  const previousRoleFromHistory = await getPreviousRoleFromLatestPromotion(
+    member.email,
+  );
+  const previousRole =
+    previousRoleFromHistory || inferFallbackRole(member) || "customer";
+
+  const invite = await createPromotionInvite({
+    email: member.email,
+    userId: member.id,
+    targetRole: role,
+    previousRole,
+    invitedBy: actor.email,
+  });
+
+  const appUrl = resolveAppUrl(new URL(request.url).origin);
+  const inviteUrl = `${appUrl}/api/admin/team-promotions/accept?token=${encodeURIComponent(invite.token)}`;
+
+  await queueTeamInviteEmail({
+    email: member.email,
+    name: member.name || "Team member",
+    role,
+    invitedByEmail: actor.email,
+    inviteUrl,
+  });
+
+  await prismaDb.authLog.create({
+    data: {
+      provider: "local",
+      mode: "admin-team-invite-resend",
+      email: member.email,
+      status: "SUCCESS",
+      response: JSON.stringify({
+        by: actor.email,
+        role: member.role,
+        inviteId: invite.inviteId,
+        inviteUrl,
+      }),
+    },
+  });
+
+  return NextResponse.json({ ok: true });
 }
 
 export async function DELETE(request: Request) {
-  const { actor, error } = await getSessionActor(request)
-  if (error) return error
+  const { actor, error } = await getSessionActor(request);
+  if (error) return error;
   if (!actor || !hasAnyRole(actor, ["admin"])) {
-    return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 })
+    return NextResponse.json(
+      { ok: false, error: "Forbidden" },
+      { status: 403 },
+    );
   }
 
-  const { searchParams } = new URL(request.url)
-  const id = String(searchParams.get("id") || "").trim()
+  const { searchParams } = new URL(request.url);
+  const id = String(searchParams.get("id") || "").trim();
   if (!id) {
-    return NextResponse.json({ ok: false, error: "id is required" }, { status: 400 })
+    return NextResponse.json(
+      { ok: false, error: "id is required" },
+      { status: 400 },
+    );
   }
 
   const existing = await prismaDb.user.findUnique({
     where: { id },
-    select: { id: true, role: true, deletedAt: true },
-  })
+    select: {
+      id: true,
+      role: true,
+      email: true,
+      deletedAt: true,
+      customerProfile: { select: { userId: true } },
+      serviceProviderProfile: { select: { userId: true } },
+      services: {
+        select: { id: true },
+        take: 1,
+      },
+    },
+  });
 
   if (!existing || existing.deletedAt) {
-    return NextResponse.json({ ok: false, error: "Team member not found" }, { status: 404 })
+    return NextResponse.json(
+      { ok: false, error: "Team member not found" },
+      { status: 404 },
+    );
   }
 
   if (!TEAM_ROLES.has(normalizeRole(existing.role))) {
-    return NextResponse.json({ ok: false, error: "Only team members can be removed from this screen" }, { status: 400 })
+    return NextResponse.json(
+      { ok: false, error: "Only team members can be removed from this screen" },
+      { status: 400 },
+    );
   }
+
+  const latestAssignment = await prismaDb.authLog.findFirst({
+    where: {
+      provider: "local",
+      mode: { in: ["admin-team-promotion-accepted", "admin-team-create"] },
+      email: existing.email,
+      status: "SUCCESS",
+    },
+    orderBy: { createdAt: "desc" },
+    select: { response: true },
+  });
+
+  let assignmentPayload: any = null;
+  if (latestAssignment?.response) {
+    try {
+      assignmentPayload = JSON.parse(latestAssignment.response);
+    } catch {
+      assignmentPayload = null;
+    }
+  }
+
+  const restoredRole =
+    normalizeRestorableRole(assignmentPayload?.previousRole) ||
+    inferFallbackRole(existing);
 
   await prismaDb.user.update({
     where: { id },
     data: {
-      deletedAt: new Date(),
-      isSuspended: true,
+      role: restoredRole,
+      deletedAt: null,
+      isSuspended: false,
     },
-  })
+  });
 
-  return NextResponse.json({ ok: true })
+  await prismaDb.authLog.create({
+    data: {
+      provider: "local",
+      mode: "admin-team-revoke",
+      email: existing.email,
+      status: "SUCCESS",
+      response: JSON.stringify({
+        by: actor.email,
+        fromRole: existing.role,
+        restoredRole,
+      }),
+    },
+  });
+
+  return NextResponse.json({
+    ok: true,
+    data: {
+      id,
+      restoredRole,
+    },
+  });
 }

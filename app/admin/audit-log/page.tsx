@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 
 interface LogEntry {
-  id: number;
+  id: string;
   user: string;
   role: string;
   action: string;
@@ -65,6 +65,8 @@ const categories = [
 
 export default function AdminAuditLogPage() {
   const [logs, setLogs] = useState<LogEntry[]>(initialLogs);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState("");
   const [search, setSearch] = useState("");
   const [catFilter, setCatFilter] = useState("all");
   const [sevFilter, setSevFilter] = useState("all");
@@ -73,33 +75,111 @@ export default function AdminAuditLogPage() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showRevertConfirm, setShowRevertConfirm] = useState(false);
 
-  const filtered = logs.filter((l) => {
-    if (catFilter !== "all" && l.category !== catFilter) return false;
-    if (sevFilter !== "all" && l.severity !== sevFilter) return false;
-    if (showFlaggedOnly && !l.flagged) return false;
-    if (
-      search &&
-      !l.action.toLowerCase().includes(search.toLowerCase()) &&
-      !l.user.toLowerCase().includes(search.toLowerCase()) &&
-      !l.target.toLowerCase().includes(search.toLowerCase())
-    )
-      return false;
-    return true;
-  });
+  useEffect(() => {
+    async function loadAuditEvents() {
+      setIsLoading(true);
+      setError("");
+      try {
+        const response = await fetch("/api/admin/audit-log", {
+          cache: "no-store",
+        });
+        const payload = await response.json();
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          throw new Error(payload?.error || "Failed to load audit events");
+        }
+        setLogs(payload.data);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Failed to load audit events";
+        setError(message);
+      } finally {
+        setIsLoading(false);
+      }
+    }
 
-  const toggleFlag = (id: number) => {
+    loadAuditEvents();
+  }, []);
+
+  const filtered = useMemo(
+    () =>
+      logs.filter((l) => {
+        if (catFilter !== "all" && l.category !== catFilter) return false;
+        if (sevFilter !== "all" && l.severity !== sevFilter) return false;
+        if (showFlaggedOnly && !l.flagged) return false;
+        if (
+          search &&
+          !l.action.toLowerCase().includes(search.toLowerCase()) &&
+          !l.user.toLowerCase().includes(search.toLowerCase()) &&
+          !l.target.toLowerCase().includes(search.toLowerCase())
+        )
+          return false;
+        return true;
+      }),
+    [catFilter, logs, search, sevFilter, showFlaggedOnly],
+  );
+
+  const toggleFlag = async (id: string) => {
+    const current = logs.find((item) => item.id === id);
+    if (!current) return;
+
+    const nextFlagged = !current.flagged;
     setLogs((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, flagged: !l.flagged } : l)),
+      prev.map((l) => (l.id === id ? { ...l, flagged: nextFlagged } : l)),
     );
+
+    try {
+      const response = await fetch("/api/admin/audit-log", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventId: id,
+          action: "toggle-flag",
+          flagged: nextFlagged,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to update flag state");
+      }
+    } catch (err) {
+      setLogs((prev) =>
+        prev.map((l) => (l.id === id ? { ...l, flagged: !nextFlagged } : l)),
+      );
+      const message =
+        err instanceof Error ? err.message : "Failed to update flag state";
+      setError(message);
+    }
   };
 
-  const handleRevert = () => {
+  const handleRevert = async () => {
     if (!selectedLog) return;
-    setLogs((prev) =>
-      prev.map((l) => (l.id === selectedLog.id ? { ...l, reverted: true } : l)),
-    );
-    setShowRevertConfirm(false);
-    setShowDetailModal(false);
+    setError("");
+
+    try {
+      const response = await fetch("/api/admin/audit-log", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId: selectedLog.id, action: "revert" }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to revert action");
+      }
+
+      setLogs((prev) =>
+        prev.map((l) =>
+          l.id === selectedLog.id ? { ...l, reverted: true } : l,
+        ),
+      );
+      setShowRevertConfirm(false);
+      setShowDetailModal(false);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to revert action";
+      setError(message);
+    }
   };
 
   const openDetail = (log: LogEntry) => {
@@ -159,7 +239,25 @@ export default function AdminAuditLogPage() {
           </p>
         </div>
         <Button
-          onClick={() => alert("Export audit logs as CSV")}
+          onClick={() => {
+            const rows = [
+              "id,user,role,action,target,category,severity,time,flagged,reverted",
+              ...filtered.map(
+                (item) =>
+                  `${item.id},${item.user},${item.role},${item.action},${item.target},${item.category},${item.severity},${item.timestamp},${item.flagged},${item.reverted}`,
+              ),
+            ];
+
+            const blob = new Blob([rows.join("\n")], {
+              type: "text/csv;charset=utf-8",
+            });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement("a");
+            anchor.href = url;
+            anchor.download = `admin-audit-${new Date().toISOString().slice(0, 10)}.csv`;
+            anchor.click();
+            URL.revokeObjectURL(url);
+          }}
           size="sm"
           className="bg-blue-600 hover:bg-blue-700 gap-1.5 text-xs w-fit rounded-lg"
         >
@@ -167,6 +265,18 @@ export default function AdminAuditLogPage() {
           Export CSV
         </Button>
       </div>
+
+      {isLoading && (
+        <Card className="p-4 text-sm text-gray-600 dark:text-gray-300">
+          Loading audit events...
+        </Card>
+      )}
+
+      {error && (
+        <Card className="p-4 text-sm border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-900/20 dark:text-red-300">
+          {error}
+        </Card>
+      )}
 
       {/* Summary */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
