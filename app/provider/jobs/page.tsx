@@ -45,18 +45,18 @@ export default function ProviderJobsPage() {
   const [showJobDetails, setShowJobDetails] = useState(false);
   const [jobsList, setJobsList] = useState<any[]>([]);
 
+  const loadJobs = async () => {
+    try {
+      const response = await fetch("/api/jobs", { cache: "no-store" });
+      const payload = await response.json();
+      setJobsList(Array.isArray(payload?.jobs) ? payload.jobs : []);
+    } catch {
+      setJobsList([]);
+    }
+  };
+
   useEffect(() => {
     if (!user?.id) return;
-
-    const loadJobs = async () => {
-      try {
-        const response = await fetch("/api/jobs", { cache: "no-store" });
-        const payload = await response.json();
-        setJobsList(Array.isArray(payload?.jobs) ? payload.jobs : []);
-      } catch {
-        setJobsList([]);
-      }
-    };
 
     loadJobs();
     const intervalId = window.setInterval(loadJobs, 25000);
@@ -86,6 +86,7 @@ export default function ProviderJobsPage() {
                     "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
                 }
               : statusValue === "in-progress" ||
+                  statusValue === "active" ||
                   statusValue === "accepted" ||
                   statusValue === "assigned"
                 ? {
@@ -118,6 +119,7 @@ export default function ProviderJobsPage() {
           distance: "-",
           phone: String(row?.postedBy?.phone || row?.customer?.phone || ""),
           rawStatus: statusValue,
+          providerId: String(row?.provider?.id || row?.providerId || ""),
         };
       });
   }, [jobsList]);
@@ -128,18 +130,22 @@ export default function ProviderJobsPage() {
 
   const jobs = useMemo(
     () => ({
-      active: bookingCards.filter((job: any) =>
-        ["in-progress", "accepted", "assigned"].includes(job.rawStatus),
+      active: bookingCards.filter(
+        (job: any) =>
+          ["in-progress", "active", "accepted", "assigned"].includes(job.rawStatus) &&
+          job.providerId === user?.id,
       ),
-      pending: bookingCards.filter((job: any) =>
-        ["pending", "open"].includes(job.rawStatus),
+      pending: bookingCards.filter(
+        (job: any) =>
+          ["pending", "open"].includes(job.rawStatus) && !job.providerId,
       ),
       completed: bookingCards.filter(
-        (job: any) => job.rawStatus === "completed",
+        (job: any) =>
+          job.rawStatus === "completed" && job.providerId === user?.id,
       ),
       disputed: disputedCards,
     }),
-    [bookingCards, disputedCards],
+    [bookingCards, disputedCards, user?.id],
   );
 
   const tabs = [
@@ -157,9 +163,44 @@ export default function ProviderJobsPage() {
       job.client.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
-  const handleAcceptJob = (jobId: string) => {
-    alert(`Job ${jobId} accepted! Starting job...`);
-    setShowJobDetails(false);
+  const handleAcceptJob = async (jobId: string) => {
+    try {
+      const response = await fetch("/api/jobs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: jobId, action: "accept" }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to accept job");
+      }
+
+      setShowJobDetails(false);
+      await loadJobs();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to accept job");
+    }
+  };
+
+  const handleCompleteJob = async (jobId: string) => {
+    try {
+      const response = await fetch("/api/jobs", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: jobId, action: "complete" }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to complete job");
+      }
+
+      setShowJobDetails(false);
+      await loadJobs();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to complete job");
+    }
   };
 
   const handleDeclineJob = (jobId: string) => {
@@ -371,6 +412,14 @@ export default function ProviderJobsPage() {
                           <>
                             <Button
                               size="sm"
+                              className="h-8 bg-emerald-600 hover:bg-emerald-700"
+                              onClick={() => handleCompleteJob(job.id)}
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                              Complete
+                            </Button>
+                            <Button
+                              size="sm"
                               variant="outline"
                               className="h-8 bg-transparent"
                               onClick={() => handleCallClient(job.client)}
@@ -539,6 +588,18 @@ export default function ProviderJobsPage() {
                   >
                     <Check className="w-4 h-4 mr-2" />
                     Accept Job
+                  </Button>
+                </div>
+              )}
+
+              {activeTab === "active" && (
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => handleCompleteJob(selectedJob.id)}
+                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" />
+                    Mark Complete
                   </Button>
                 </div>
               )}

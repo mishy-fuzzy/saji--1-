@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Edit,
   Bell,
+  AlertCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,24 +30,28 @@ export default function ProviderProfilePage() {
   const [completedJobs, setCompletedJobs] = useState(0);
   const [totalJobs, setTotalJobs] = useState(0);
   const [proofCount, setProofCount] = useState(0);
+  const [activeJobs, setActiveJobs] = useState<any[]>([]);
+  const [activeJobsLoading, setActiveJobsLoading] = useState(true);
 
   useEffect(() => {
     const loadProfile = async () => {
       if (!user?.id) return;
 
       try {
-        const [meResponse, bookingsResponse, contentResponse] =
+        const [meResponse, bookingsResponse, contentResponse, jobsResponse] =
           await Promise.all([
             fetch("/api/users/me", { cache: "no-store" }),
             fetch(`/api/bookings?providerId=${encodeURIComponent(user.id)}`, {
               cache: "no-store",
             }),
             fetch("/api/provider/content", { cache: "no-store" }),
+            fetch("/api/jobs", { cache: "no-store" }),
           ]);
 
         const mePayload = await meResponse.json();
         const bookingsPayload = await bookingsResponse.json();
         const contentPayload = await contentResponse.json();
+        const jobsPayload = await jobsResponse.json();
 
         const createdAt = mePayload?.user?.createdAt;
         if (createdAt) {
@@ -72,11 +77,26 @@ export default function ProviderProfilePage() {
           ? contentPayload.data
           : [];
         setProofCount(posts.length);
+
+        const allJobs = Array.isArray(jobsPayload?.jobs)
+          ? jobsPayload.jobs
+          : [];
+        const myActive = allJobs.filter(
+          (job: any) =>
+            String(job?.provider?.id || job?.providerId || "") === user.id &&
+            ["active", "accepted", "in-progress", "in_progress"].includes(
+              String(job?.status || "").toLowerCase(),
+            ),
+        );
+        setActiveJobs(myActive.slice(0, 5));
+        setActiveJobsLoading(false);
       } catch {
         setProviderSince("-");
         setTotalJobs(0);
         setCompletedJobs(0);
         setProofCount(0);
+        setActiveJobs([]);
+        setActiveJobsLoading(false);
       }
     };
 
@@ -172,6 +192,44 @@ export default function ProviderProfilePage() {
             Edit Profile
           </Link>
         </div>
+
+        {/* Active Jobs Section */}
+        {!activeJobsLoading && activeJobs.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700">
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+              Active Tasks
+            </h3>
+            <div className="space-y-3">
+              {activeJobs.map((job: any) => (
+                <div
+                  key={job.id}
+                  className="flex items-start gap-3 pb-3 border-b dark:border-gray-700 last:border-b-0"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 dark:text-white truncate">
+                      {job.title}
+                    </p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      {job?.postedBy?.name || "Client"}
+                    </p>
+                  </div>
+                  <Link
+                    href="/provider/jobs"
+                    className="text-blue-600 dark:text-blue-400 hover:text-blue-700 text-sm font-medium whitespace-nowrap"
+                  >
+                    View
+                  </Link>
+                </div>
+              ))}
+            </div>
+            <Link
+              href="/provider/jobs"
+              className="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 font-medium text-center transition-colors block"
+            >
+              Manage All Tasks
+            </Link>
+          </div>
+        )}
 
         {/* Menu Items */}
         <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 divide-y dark:divide-gray-700">

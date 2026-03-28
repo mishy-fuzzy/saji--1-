@@ -75,7 +75,7 @@ export default function ProviderWalletPage() {
         const prevYear = month === 0 ? year - 1 : year;
 
         const pendingStatuses = new Set(["pending"]);
-        const escrowStatuses = new Set(["accepted", "assigned", "in-progress"]);
+        const escrowStatuses = new Set(["active", "accepted", "assigned", "in-progress"]);
         const completedStatuses = new Set(["completed"]);
 
         let pending = 0;

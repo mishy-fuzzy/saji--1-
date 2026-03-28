@@ -99,6 +99,7 @@ async function loadManualJobs() {
         ).toLocaleDateString(),
         applicants: Number(payload.applicants || 0),
         assigned: String(payload.assigned || "Unassigned"),
+        providerId: String(payload.providerId || ""),
         category: String(payload.category || "General"),
         description: String(payload.description || ""),
         location: String(payload.location || ""),
@@ -112,14 +113,18 @@ async function loadManualJobs() {
     const nextRawStatus = String(
       payload.status || existing.status || "pending",
     );
+    const nextAssigned =
+      payload.assigned !== undefined
+        ? String(payload.assigned || "Unassigned")
+        : existing.assigned;
+    const nextProviderId =
+      payload.providerId || payload.assignedId || existing.providerId || "";
     jobs.set(jobId, {
       ...existing,
       status: toUiStatus(nextRawStatus),
       progress: toProgress(nextRawStatus),
-      assigned:
-        payload.assigned !== undefined
-          ? String(payload.assigned || "Unassigned")
-          : existing.assigned,
+      assigned: nextAssigned,
+      providerId: String(nextProviderId || ""),
     });
   }
 
@@ -331,6 +336,7 @@ export async function POST(request: Request) {
             createdAt: new Date().toISOString(),
             client: actor.name || actor.email || "Admin",
             assigned: assignedUser?.name || "Unassigned",
+            providerId: providerId || undefined,
             category: "General",
             applicants: providerId ? 1 : 0,
           }),
@@ -365,7 +371,7 @@ export async function PATCH(request: Request) {
 
   try {
     const body = await request.json();
-    const { id, status, providerId } = body;
+    const { id, status, providerId, title, client, budget, description } = body;
 
     if (!id) {
       return NextResponse.json(
@@ -399,6 +405,20 @@ export async function PATCH(request: Request) {
       data.providerId = providerId.trim();
     }
 
+    // Handle edit fields
+    if (typeof title === "string") {
+      data.title = title.trim();
+    }
+    if (typeof client === "string") {
+      data.client = client.trim();
+    }
+    if (typeof description === "string") {
+      data.description = description.trim();
+    }
+    if (typeof budget === "number" && budget > 0) {
+      data.budget = budget;
+    }
+
     const manualStatus = data.status ? String(data.status) : "";
 
     if (id.startsWith("manual-")) {
@@ -410,7 +430,12 @@ export async function PATCH(request: Request) {
           status: "SUCCESS",
           response: JSON.stringify({
             id,
+            title: data.title,
+            client: data.client,
+            description: data.description,
+            budget: data.budget,
             status: manualStatus,
+            providerId: data.providerId || undefined,
           }),
         },
       });
@@ -437,7 +462,12 @@ export async function PATCH(request: Request) {
           status: "SUCCESS",
           response: JSON.stringify({
             id,
+            title: data.title,
+            client: data.client,
+            description: data.description,
+            budget: data.budget,
             status: manualStatus,
+            providerId: data.providerId || undefined,
           }),
         },
       });

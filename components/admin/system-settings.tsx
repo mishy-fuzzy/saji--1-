@@ -77,7 +77,7 @@ export function SystemSettings() {
             ))}
           </div>
 
-          <Button onClick={() => alert(\"Save commission rates\")} className=\"rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold\">
+          <Button onClick={() => alert("Save commission rates")} className="rounded-lg bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-semibold">
             Save Commission Rates
           </Button>
         </Card>

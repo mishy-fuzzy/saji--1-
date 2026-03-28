@@ -76,11 +76,45 @@ export default function ShopkeeperRegistrationPage() {
   }
 
   const handleSubmit = async () => {
+    if (!isStepValid()) {
+      alert("Please complete all required fields on this step")
+      return
+    }
+
+    if (step < 4) {
+      setStep(step + 1)
+      return
+    }
+
+    // Final submission - call the registration API
     setIsSubmitting(true)
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    setIsSubmitting(false)
-    setSubmitted(true)
+    try {
+      const response = await fetch("/api/auth/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.fullName,
+          email: formData.email,
+          phone: formData.phone,
+          password: formData.password,
+          role: "shopkeeper",
+        }),
+      })
+
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Registration failed")
+      }
+
+      // Also store shop details in local storage or send to another endpoint
+      // For now, just mark as submitted
+      setIsSubmitting(false)
+      setSubmitted(true)
+    } catch (error) {
+      setIsSubmitting(false)
+      alert(error instanceof Error ? error.message : "Registration failed")
+    }
   }
 
   const isStepValid = () => {

@@ -210,12 +210,12 @@ export function AdminHeader({
 
   return (
     <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 lg:px-8 py-4 sticky top-0 z-40">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2 flex-1 max-w-md">
+      <div className="flex items-center justify-between gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
           <button
             type="button"
             onClick={onToggleSidebar}
-            className="hidden lg:inline-flex p-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="hidden lg:inline-flex p-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors shrink-0"
             aria-label={isSidebarHidden ? "Show sidebar" : "Hide sidebar"}
             title={isSidebarHidden ? "Show sidebar" : "Hide sidebar"}
           >
@@ -225,15 +225,15 @@ export function AdminHeader({
               <PanelLeftClose size={18} />
             )}
           </button>
-          <div className="relative hidden md:block">
+          <div className="relative hidden sm:block min-w-0 flex-1 max-w-xs">
             <Search
-              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-              size={20}
+              className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"
+              size={18}
             />
             <input
               type="text"
               placeholder="Search..."
-              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm overflow-hidden text-ellipsis"
             />
           </div>
         </div>

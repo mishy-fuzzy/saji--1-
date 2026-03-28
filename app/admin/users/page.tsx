@@ -421,15 +421,15 @@ function UsersContent() {
   const getTypeIcon = (type: string) => {
     switch (type) {
       case "incoming":
-        return <Incoming className="w-5 h-5 text-blue-600" />;
+        return <Incoming className="w-5 h-5 text-blue-600 shrink-0" />;
       case "active":
-        return <CheckCircle2 className="w-5 h-5 text-emerald-600" />;
+        return <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />;
       case "completed":
-        return <Clock className="w-5 h-5 text-purple-600" />;
+        return <Clock className="w-5 h-5 text-purple-600 shrink-0" />;
       case "disputed":
-        return <AlertCircle className="w-5 h-5 text-red-600" />;
+        return <AlertCircle className="w-5 h-5 text-red-600 shrink-0" />;
       case "deactivated":
-        return <AlertCircle className="w-5 h-5 text-slate-500" />;
+        return <AlertCircle className="w-5 h-5 text-slate-500 shrink-0" />;
       default:
         return null;
     }
@@ -688,14 +688,16 @@ function UsersContent() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-linear-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm">
+                        <div className="w-8 h-8 rounded-full bg-linear-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm shrink-0">
                           {user.name.split(" ")[0][0]}
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="text-sm font-medium text-gray-900 dark:text-white">
                             {user.name}
                           </span>
-                          {getTypeIcon(user.type)}
+                          <span className="inline-flex items-center">
+                            {getTypeIcon(user.type)}
+                          </span>
                         </div>
                       </div>
                     </td>

@@ -62,7 +62,7 @@ export async function GET() {
     }),
   ])
 
-  const activeJobs = jobs.filter((job: any) => ["pending", "accepted", "in_progress"].includes(job.status)).length
+  const activeJobs = jobs.filter((job: any) => ["pending", "active", "accepted", "in_progress"].includes(job.status)).length
   const completedTasks = jobs.filter((job: any) => job.status === "completed").length
   const openDisputes = disputes.filter((d: any) => d.status === "open" || d.status === "under_review").length
 
@@ -103,7 +103,7 @@ export async function GET() {
     }
   })
 
-  const pendingTasks = jobs.filter((job: any) => ["pending", "accepted", "in_progress"].includes(job.status)).length
+  const pendingTasks = jobs.filter((job: any) => ["pending", "active", "accepted", "in_progress"].includes(job.status)).length
   const disputedTasks = jobs.filter((job: any) => job.status === "disputed").length
   const totalTaskBase = Math.max(1, completedTasks + pendingTasks + disputedTasks)
   const pieData = [

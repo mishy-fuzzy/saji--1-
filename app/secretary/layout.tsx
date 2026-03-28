@@ -13,6 +13,24 @@ import {
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
+type SecretaryNotification = {
+  id: string
+  text: string
+  time: string
+}
+
+function formatRelativeTime(value?: string) {
+  if (!value) return "now"
+  const date = new Date(value)
+  const diffMs = Date.now() - date.getTime()
+  const mins = Math.max(1, Math.floor(diffMs / 60000))
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
 export default function SecretaryLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user, logout } = useAuthContext()
   const router = useRouter()
@@ -21,6 +39,7 @@ export default function SecretaryLayout({ children }: { children: React.ReactNod
   const [menuOpen, setMenuOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [showMore, setShowMore] = useState(false)
+  const [notifications, setNotifications] = useState<SecretaryNotification[]>([])
 
   useEffect(() => { setMounted(true) }, [])
 
@@ -52,12 +71,32 @@ export default function SecretaryLayout({ children }: { children: React.ReactNod
   const bottomNavItems = menuItems.slice(0, 4)
   const moreItems = menuItems.slice(4)
 
-  const notifications = [
-    { id: 1, text: "Payment of KES 45,000 requires approval", time: "2m ago", type: "payment" },
-    { id: 2, text: "Invoice #1089 overdue by 3 days", time: "15m ago", type: "invoice" },
-    { id: 3, text: "Reconciliation discrepancy found - KES 12,500", time: "1h ago", type: "alert" },
-    { id: 4, text: "New tax filing deadline approaching", time: "3h ago", type: "tax" },
-  ]
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const response = await fetch("/api/notifications", { cache: "no-store" })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          setNotifications([])
+          return
+        }
+
+        const items = payload.data.map((item: any) => ({
+          id: String(item?.id || ""),
+          text: String(item?.title || "Notification"),
+          time: formatRelativeTime(String(item?.createdAt || "")),
+        }))
+
+        setNotifications(items)
+      } catch {
+        setNotifications([])
+      }
+    }
+
+    loadNotifications()
+    const intervalId = window.setInterval(loadNotifications, 3000)
+    return () => window.clearInterval(intervalId)
+  }, [])
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
