@@ -36,6 +36,9 @@ export default function DisputesPage() {
   const [disputes, setDisputes] = useState<Dispute[]>([]);
   const [selectedDispute, setSelectedDispute] = useState<any>(null);
   const [showModal, setShowModal] = useState(false);
+  const [resolutionType, setResolutionType] = useState<
+    "refund_customer" | "release_to_provider" | "split" | ""
+  >("");
 
   useEffect(() => {
     const normalizeStatus = (status: string): Dispute["status"] => {
@@ -129,12 +132,17 @@ export default function DisputesPage() {
   };
 
   const handleResolveDispute = (disputeId: string) => {
+    if (!resolutionType) {
+      alert("Please select a resolution type");
+      return;
+    }
+
     (async () => {
       try {
-        const response = await fetch(`/api/disputes/${disputeId}`, {
+        const response = await fetch("/api/disputes", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ status: "resolved" }),
+          body: JSON.stringify({ bookingId: disputeId, resolution: resolutionType }),
         });
         const payload = await response.json();
         if (!response.ok || !payload?.ok)
@@ -145,6 +153,7 @@ export default function DisputesPage() {
           ),
         );
         setShowModal(false);
+        setResolutionType("");
       } catch (error) {
         alert(
           error instanceof Error ? error.message : "Failed to resolve dispute",
@@ -156,14 +165,17 @@ export default function DisputesPage() {
   const handleRejectDispute = (disputeId: string) => {
     (async () => {
       try {
-        const response = await fetch(`/api/disputes/${disputeId}`, {
-          method: "DELETE",
+        const response = await fetch("/api/disputes", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ bookingId: disputeId, resolution: "refund_customer" }),
         });
         const payload = await response.json();
         if (!response.ok || !payload?.ok)
           throw new Error(payload?.error || "Failed to reject dispute");
         setDisputes(disputes.filter((d) => d.id !== disputeId));
         setShowModal(false);
+        setResolutionType("");
       } catch (error) {
         alert(
           error instanceof Error ? error.message : "Failed to reject dispute",
@@ -402,7 +414,7 @@ export default function DisputesPage() {
       <Dialog open={showModal} onOpenChange={setShowModal}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Dispute Details</DialogTitle>
+            <DialogTitle>Dispute Details & Resolution</DialogTitle>
           </DialogHeader>
           {selectedDispute && (
             <div className="space-y-4 py-4">
@@ -430,19 +442,94 @@ export default function DisputesPage() {
                   </span>
                 </div>
               </div>
+
+              <div className="space-y-3">
+                <label className="text-sm font-semibold text-gray-900 dark:text-white">
+                  Resolution Type:
+                </label>
+                <div className="grid grid-cols-1 gap-2">
+                  <label className="flex items-center p-3 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <input
+                      type="radio"
+                      name="resolution"
+                      value="refund_customer"
+                      checked={resolutionType === "refund_customer"}
+                      onChange={(e) =>
+                        setResolutionType(
+                          e.target.value as "refund_customer" | "release_to_provider" | "split" | "",
+                        )
+                      }
+                      className="mr-3"
+                    />
+                    <div>
+                      <div className="font-semibold text-sm">Full Refund to Customer</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                        Customer gets full payment back
+                      </div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center p-3 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <input
+                      type="radio"
+                      name="resolution"
+                      value="release_to_provider"
+                      checked={resolutionType === "release_to_provider"}
+                      onChange={(e) =>
+                        setResolutionType(
+                          e.target.value as "refund_customer" | "release_to_provider" | "split" | "",
+                        )
+                      }
+                      className="mr-3"
+                    />
+                    <div>
+                      <div className="font-semibold text-sm">Release to Provider</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                        Provider receives full payment
+                      </div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center p-3 border border-gray-300 dark:border-gray-600 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <input
+                      type="radio"
+                      name="resolution"
+                      value="split"
+                      checked={resolutionType === "split"}
+                      onChange={(e) =>
+                        setResolutionType(
+                          e.target.value as "refund_customer" | "release_to_provider" | "split" | "",
+                        )
+                      }
+                      className="mr-3"
+                    />
+                    <div>
+                      <div className="font-semibold text-sm">Split 50/50</div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                        Payment split equally between both parties
+                      </div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
               <div className="flex gap-3">
                 <Button
                   variant="outline"
                   className="flex-1 bg-transparent"
-                  onClick={() => handleRejectDispute(selectedDispute.id)}
+                  onClick={() => {
+                    setShowModal(false);
+                    setResolutionType("");
+                  }}
                 >
-                  Reject
+                  Cancel
                 </Button>
                 <Button
                   className="flex-1 bg-emerald-600 hover:bg-emerald-700"
+                  disabled={!resolutionType}
                   onClick={() => handleResolveDispute(selectedDispute.id)}
                 >
-                  Resolve
+                  Apply Resolution
                 </Button>
               </div>
             </div>

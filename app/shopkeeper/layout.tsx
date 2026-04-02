@@ -11,10 +11,33 @@ import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useAuthContext } from "@/lib/auth-context"
 
+type ShopNotification = {
+  id: string
+  title: string
+  desc: string
+  time: string
+  read: boolean
+  type: string
+  actionHref?: string
+}
+
+function formatRelativeTime(value?: string) {
+  if (!value) return "now"
+  const date = new Date(value)
+  const diffMs = Date.now() - date.getTime()
+  const mins = Math.max(1, Math.floor(diffMs / 60000))
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
 export default function ShopkeeperLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [notifications, setNotifications] = useState<ShopNotification[]>([])
   const notifRef = useRef<HTMLDivElement>(null)
   const moreRef = useRef<HTMLDivElement>(null)
   const pathname = usePathname()
@@ -41,14 +64,6 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
   const bottomNavItems = menuItems.slice(0, 4)
   const moreNavItems = menuItems.slice(4)
 
-  const notifications = [
-    { id: 1, title: "New Order Received", desc: "Order #ORD-2024-006 from Alice Njeri", time: "2 min ago", read: false, type: "order" },
-    { id: 2, title: "Low Stock Alert", desc: "Ramtons Microwave Oven is out of stock", time: "15 min ago", read: false, type: "stock" },
-    { id: 3, title: "New Review", desc: "John Kamau left a 5-star review", time: "1 hour ago", read: false, type: "review" },
-    { id: 4, title: "Endorsement Request", desc: "Mike Njoroge requested your endorsement", time: "3 hours ago", read: true, type: "endorsement" },
-    { id: 5, title: "Payment Received", desc: "KES 65,000 received for Order #ORD-2024-001", time: "5 hours ago", read: true, type: "payment" },
-  ]
-
   const unreadCount = notifications.filter(n => !n.read).length
 
   const handleLogout = () => {
@@ -69,6 +84,63 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
     document.addEventListener("mousedown", handleClickOutside)
     return () => document.removeEventListener("mousedown", handleClickOutside)
   }, [])
+
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const response = await fetch("/api/notifications", { cache: "no-store" })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          setNotifications([])
+          return
+        }
+
+        const items: ShopNotification[] = payload.data.map((item: any) => ({
+          id: String(item?.id || ""),
+          title: String(item?.title || "Notification"),
+          desc: String(item?.message || ""),
+          time: formatRelativeTime(String(item?.createdAt || "")),
+          read: Boolean(item?.read),
+          type: String(item?.type || "order").toLowerCase(),
+          actionHref: item?.actionHref ? String(item.actionHref) : undefined,
+        }))
+
+        setNotifications(items)
+      } catch {
+        setNotifications([])
+      }
+    }
+
+    loadNotifications()
+    const intervalId = window.setInterval(loadNotifications, 3000)
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  const markAllNotificationsRead = async () => {
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markAllRead: true }),
+      })
+      setNotifications((prev) => prev.map((item) => ({ ...item, read: true })))
+    } catch {
+      // no-op to keep UI responsive
+    }
+  }
+
+  const markNotificationAsRead = async (id: string) => {
+    setNotifications((prev) => prev.map((item) => (item.id === id ? { ...item, read: true } : item)))
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+    } catch {
+      // no-op
+    }
+  }
 
   const getNotifColor = (type: string) => {
     const colors: Record<string, string> = {
@@ -215,7 +287,7 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
                   <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
                     <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
                       <h3 className="font-semibold text-gray-900 dark:text-white">Notifications</h3>
-                      <button className="text-xs text-amber-600 hover:text-amber-700 font-medium">
+                      <button onClick={markAllNotificationsRead} className="text-xs text-amber-600 hover:text-amber-700 font-medium">
                         Mark all read
                       </button>
                     </div>
@@ -223,6 +295,13 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
                       {notifications.map((notif) => (
                         <div
                           key={notif.id}
+                          onClick={() => {
+                            markNotificationAsRead(notif.id)
+                            setNotificationsOpen(false)
+                            if (notif.actionHref) {
+                              router.push(notif.actionHref)
+                            }
+                          }}
                           className={`p-3 flex gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors border-b border-gray-100 dark:border-gray-700/50 last:border-0 ${
                             !notif.read ? "bg-amber-50/50 dark:bg-amber-900/10" : ""
                           }`}

@@ -70,6 +70,12 @@ export default function JobsPage() {
   const [newJobClient, setNewJobClient] = useState("");
   const [newJobBudget, setNewJobBudget] = useState("");
   const [newJobDesc, setNewJobDesc] = useState("");
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editJobTitle, setEditJobTitle] = useState("");
+  const [editJobClient, setEditJobClient] = useState("");
+  const [editJobBudget, setEditJobBudget] = useState("");
+  const [editJobDesc, setEditJobDesc] = useState("");
+  const [isEditingSaving, setIsEditingSaving] = useState(false);
 
   const fetchJobs = async (silent = false) => {
     if (!silent) {
@@ -259,11 +265,13 @@ export default function JobsPage() {
   };
 
   const handleEditJob = () => {
-    toast({
-      title: "Edit not available",
-      description:
-        "Use job status actions for now. Full edit fields will be added next.",
-    });
+    if (!selectedJob) return;
+    setEditJobTitle(selectedJob.title || "");
+    setEditJobClient(selectedJob.client || "");
+    setEditJobBudget(String(selectedJob.budget || ""));
+    setEditJobDesc(selectedJob.description || "");
+    setShowJobModal(false);
+    setShowEditModal(true);
   };
 
   const parsePastedJobs = (raw: string) => {
@@ -370,6 +378,76 @@ export default function JobsPage() {
     }
   };
 
+  const handleSaveEditJob = async () => {
+    if (!selectedJob?.id) {
+      toast({
+        title: "Error",
+        description: "No job selected",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (
+      !editJobTitle.trim() ||
+      !editJobClient.trim() ||
+      !editJobBudget.trim()
+    ) {
+      toast({
+        title: "Validation Error",
+        description: "Title, client, and budget are required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const budget = Number(editJobBudget);
+    if (!Number.isFinite(budget) || budget <= 0) {
+      toast({
+        title: "Validation Error",
+        description: "Budget must be a positive number",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsEditingSaving(true);
+    try {
+      const response = await fetch(`/api/admin/jobs`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: selectedJob.id,
+          title: editJobTitle.trim(),
+          client: editJobClient.trim(),
+          budget,
+          description: editJobDesc.trim(),
+        }),
+      });
+
+      const result = await response.json();
+      if (response.ok && result.ok) {
+        toast({
+          title: "Success",
+          description: "Job updated successfully",
+        });
+        setShowEditModal(false);
+        fetchJobs();
+      } else {
+        throw new Error(result.error || "Failed to update job");
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description:
+          error instanceof Error ? error.message : "Failed to update job",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEditingSaving(false);
+    }
+  };
+
   const handleExportJobs = () => {
     // ... existing export logic
   };
@@ -470,10 +548,10 @@ export default function JobsPage() {
       </div>
 
       {/* Controls */}
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div className="w-full sm:flex-1 max-w-md relative">
+      <div className="flex flex-col gap-4 w-full">
+        <div className="w-full relative z-0">
           <Search
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none"
             size={20}
           />
           <input
@@ -484,7 +562,7 @@ export default function JobsPage() {
             className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
           />
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 justify-start sm:justify-end">
           <Button
             onClick={handleExportJobs}
             className="bg-green-600 hover:bg-green-700 gap-2"
@@ -760,6 +838,60 @@ export default function JobsPage() {
                 onClick={handleCreateJob}
               >
                 Create Job
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Job Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Job</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <input
+              placeholder="Job Title"
+              value={editJobTitle}
+              onChange={(e) => setEditJobTitle(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              placeholder="Location / Area"
+              value={editJobClient}
+              onChange={(e) => setEditJobClient(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <input
+              type="number"
+              placeholder="Budget (KES)"
+              value={editJobBudget}
+              onChange={(e) => setEditJobBudget(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <textarea
+              placeholder="Job Description"
+              rows={4}
+              value={editJobDesc}
+              onChange={(e) => setEditJobDesc(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 bg-transparent"
+                onClick={() => setShowEditModal(false)}
+                disabled={isEditingSaving}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50"
+                onClick={handleSaveEditJob}
+                disabled={isEditingSaving}
+              >
+                {isEditingSaving ? "Saving..." : "Save Changes"}
               </Button>
             </div>
           </div>

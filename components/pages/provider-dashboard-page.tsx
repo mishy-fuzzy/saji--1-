@@ -20,6 +20,7 @@ function toUiStatus(value: string): "in-progress" | "pending" | "completed" {
   if (status === "completed") return "completed";
   if (status === "in_progress" || status === "in-progress")
     return "in-progress";
+  if (status === "active") return "in-progress";
   if (status === "accepted") return "in-progress";
   return "pending";
 }

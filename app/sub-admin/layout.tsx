@@ -11,6 +11,25 @@ import {
   CheckCircle, FileText, MessageCircle, BarChart3, ChevronDown, Settings
 } from "lucide-react"
 
+type SubAdminNotification = {
+  id: string
+  text: string
+  time: string
+  type: string
+}
+
+function formatRelativeTime(value?: string) {
+  if (!value) return "now"
+  const date = new Date(value)
+  const diffMs = Date.now() - date.getTime()
+  const mins = Math.max(1, Math.floor(diffMs / 60000))
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
 export default function SubAdminLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading, user, logout } = useAuthContext()
   const router = useRouter()
@@ -19,6 +38,7 @@ export default function SubAdminLayout({ children }: { children: React.ReactNode
   const [menuOpen, setMenuOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [showMore, setShowMore] = useState(false)
+  const [notifications, setNotifications] = useState<SubAdminNotification[]>([])
 
   const normalizedRole = String(user?.role || "")
     .trim()
@@ -52,7 +72,32 @@ export default function SubAdminLayout({ children }: { children: React.ReactNode
   const isActive = (href: string) =>
     href === "/sub-admin" ? pathname === "/sub-admin" : pathname.startsWith(href)
 
-  const notifications: Array<{ id: number; text: string; time: string; type: string }> = []
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const response = await fetch("/api/notifications", { cache: "no-store" })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          setNotifications([])
+          return
+        }
+
+        const items = payload.data.map((item: any) => ({
+          id: String(item?.id || ""),
+          text: String(item?.title || "Notification"),
+          time: formatRelativeTime(String(item?.createdAt || "")),
+          type: String(item?.type || "system"),
+        }))
+        setNotifications(items)
+      } catch {
+        setNotifications([])
+      }
+    }
+
+    loadNotifications()
+    const intervalId = window.setInterval(loadNotifications, 3000)
+    return () => window.clearInterval(intervalId)
+  }, [])
 
   const bottomNavItems = menuItems.slice(0, 4)
   const moreItems = menuItems.slice(4)

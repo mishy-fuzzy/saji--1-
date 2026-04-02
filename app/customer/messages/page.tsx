@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAuthContext } from "@/lib/auth-context"
 import { LoadingScreen } from "@/components/loading-screen"
 import { CustomerMessagesPage } from "@/components/pages/customer-messages-page"
@@ -9,6 +9,8 @@ import { CustomerMessagesPage } from "@/components/pages/customer-messages-page"
 export default function MessagesPage() {
   const { isAuthenticated, isLoading, user } = useAuthContext()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const providerId = searchParams.get("provider")
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -23,5 +25,5 @@ export default function MessagesPage() {
     return <LoadingScreen />
   }
 
-  return <CustomerMessagesPage />
+  return <CustomerMessagesPage initialProviderId={providerId || undefined} />
 }

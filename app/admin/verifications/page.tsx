@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Search, Download, Filter, Eye, CheckCircle, Clock, UserCheck, AlertCircle } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,6 +22,34 @@ export default function VerificationsPage() {
   const [verifications, setVerifications] = useState<Verification[]>([])
   const [selectedVerification, setSelectedVerification] = useState<Verification | null>(null)
   const [showModal, setShowModal] = useState(false)
+
+  useEffect(() => {
+    const loadVerifications = async () => {
+      try {
+        const response = await fetch("/api/admin/verifications", { cache: "no-store" })
+        const payload = await response.json()
+        const rows = Array.isArray(payload?.verifications) ? payload.verifications : []
+
+        const mapped = rows.map((row: any) => ({
+          id: String(row.id || ""),
+          name: String(row.user?.name || "Unknown"),
+          email: String(row.user?.email || ""),
+          role: String(row.user?.role || ""),
+          documents: row.documentUrl ? "Yes" : "No",
+          status: String(row.status || "pending").charAt(0).toUpperCase() + String(row.status || "pending").slice(1) === "Pending" ? "Pending" : String(row.status || "pending").charAt(0).toUpperCase() + String(row.status || "pending").slice(1),
+          submittedDate: row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "",
+        }))
+
+        setVerifications(mapped)
+      } catch {
+        setVerifications([])
+      }
+    }
+
+    loadVerifications()
+    const intervalId = window.setInterval(loadVerifications, 25000)
+    return () => window.clearInterval(intervalId)
+  }, [])
 
   const filters = [
     { label: "All", type: "All", count: verifications.length },
@@ -55,13 +83,41 @@ export default function VerificationsPage() {
   ]
 
   const handleApprove = (id: string) => {
-    setVerifications(verifications.map(v => v.id === id ? { ...v, status: "Approved" } : v))
-    setShowModal(false)
+    (async () => {
+      try {
+        const response = await fetch("/api/admin/verifications", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ verificationId: id, status: "approved" }),
+        })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok)
+          throw new Error(payload?.error || "Failed to approve verification")
+        setVerifications(verifications.map(v => v.id === id ? { ...v, status: "Approved" } : v))
+        setShowModal(false)
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Failed to approve verification")
+      }
+    })()
   }
 
   const handleReject = (id: string) => {
-    setVerifications(verifications.map(v => v.id === id ? { ...v, status: "Rejected" } : v))
-    setShowModal(false)
+    (async () => {
+      try {
+        const response = await fetch("/api/admin/verifications", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ verificationId: id, status: "rejected" }),
+        })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok)
+          throw new Error(payload?.error || "Failed to reject verification")
+        setVerifications(verifications.map(v => v.id === id ? { ...v, status: "Rejected" } : v))
+        setShowModal(false)
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Failed to reject verification")
+      }
+    })()
   }
 
   const handleExportVerifications = () => {

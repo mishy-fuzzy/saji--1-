@@ -2,7 +2,7 @@
 
 import React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuthContext } from "@/lib/auth-context"
@@ -15,11 +15,32 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import Image from "next/image"
 
+type CustomerNotification = {
+  id: string
+  title: string
+  message: string
+  time: string
+  unread: boolean
+}
+
+function formatRelativeTime(value?: string) {
+  if (!value) return "now"
+  const date = new Date(value)
+  const diffMs = Date.now() - date.getTime()
+  const mins = Math.max(1, Math.floor(diffMs / 60000))
+  if (mins < 60) return `${mins}m ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
+}
+
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { user, logout } = useAuthContext()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [notifications, setNotifications] = useState<CustomerNotification[]>([])
 
   const navItems = [
     { icon: Home, label: "Home", href: "/customer/home" },
@@ -40,12 +61,47 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
     { icon: Settings, label: "Settings", href: "/customer/settings" },
   ]
 
-  const notifications = [
-    { id: 1, title: "Job Completed", message: "Your plumbing service has been completed", time: "2 min ago", unread: true },
-    { id: 2, title: "New Message", message: "Sarah Chen sent you a message", time: "1 hour ago", unread: true },
-    { id: 3, title: "Payment Received", message: "KES 5,000 refund processed", time: "3 hours ago", unread: false },
-    { id: 4, title: "Review Reminder", message: "Don't forget to review John Peters", time: "1 day ago", unread: false },
-  ]
+  useEffect(() => {
+    const loadNotifications = async () => {
+      try {
+        const response = await fetch("/api/notifications", { cache: "no-store" })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          setNotifications([])
+          return
+        }
+
+        const items: CustomerNotification[] = payload.data.map((item: any) => ({
+          id: String(item?.id || ""),
+          title: String(item?.title || "Notification"),
+          message: String(item?.message || ""),
+          time: formatRelativeTime(String(item?.createdAt || "")),
+          unread: !Boolean(item?.read),
+        }))
+
+        setNotifications(items)
+      } catch {
+        setNotifications([])
+      }
+    }
+
+    loadNotifications()
+    const intervalId = window.setInterval(loadNotifications, 3000)
+    return () => window.clearInterval(intervalId)
+  }, [])
+
+  const markAllNotificationsRead = async () => {
+    try {
+      await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ markAllRead: true }),
+      })
+      setNotifications((prev) => prev.map((item) => ({ ...item, unread: false })))
+    } catch {
+      // no-op
+    }
+  }
 
   const unreadCount = notifications.filter(n => n.unread).length
 
@@ -228,7 +284,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                     <div className="absolute right-0 top-12 w-80 bg-card rounded-xl shadow-xl border border-border z-50 overflow-hidden">
                       <div className="p-4 border-b border-border flex items-center justify-between">
                         <h3 className="font-semibold text-foreground">Notifications</h3>
-                        <Button variant="ghost" size="sm" className="text-xs text-primary">
+                        <Button variant="ghost" size="sm" className="text-xs text-primary" onClick={markAllNotificationsRead}>
                           Mark all read
                         </Button>
                       </div>

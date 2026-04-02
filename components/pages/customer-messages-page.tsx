@@ -55,10 +55,16 @@ function isRecentlyActive(value?: string | Date | null): boolean {
   return Date.now() - date.getTime() < 10 * 60 * 1000;
 }
 
-export function CustomerMessagesPage() {
+export function CustomerMessagesPage({
+  initialProviderId,
+}: {
+  initialProviderId?: string;
+}) {
   const { user } = useAuthContext();
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeChat, setActiveChat] = useState<string | null>(null);
+  const [activeChat, setActiveChat] = useState<string | null>(
+    initialProviderId || null,
+  );
   const [messageInput, setMessageInput] = useState("");
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -98,18 +104,22 @@ export function CustomerMessagesPage() {
         const payload = await response.json();
         const rows = Array.isArray(payload?.data) ? payload.data : [];
 
-        const mapped: Conversation[] = rows.map((row: any) => ({
-          id: String(row?.peer?.id || ""),
-          name: String(row?.peer?.name || "User"),
-          avatar: String(row?.peer?.image || "/placeholder.svg"),
-          lastMessage: String(row?.lastMessage || ""),
-          time: toTime(row?.createdAt || new Date()),
-          unread: Number(row?.unread || 0),
-          online: Boolean(
-            row?.peer?.online || isRecentlyActive(row?.peer?.lastLoginAt),
-          ),
-          roleLabel: String(row?.peer?.role || "User"),
-        }));
+        const mapped: Conversation[] = rows.map((row: unknown) => {
+          const typedRow = row as Record<string, unknown>;
+          const peer = typedRow?.peer as Record<string, unknown> | undefined;
+          return {
+            id: String(peer?.id || ""),
+            name: String(peer?.name || "User"),
+            avatar: String(peer?.image || "/placeholder.svg"),
+            lastMessage: String(typedRow?.lastMessage || ""),
+            time: toTime((typedRow?.createdAt as string | Date) || new Date()),
+            unread: Number(typedRow?.unread || 0),
+            online: Boolean(
+              peer?.online || isRecentlyActive(peer?.lastLoginAt as string | Date | null),
+            ),
+            roleLabel: String(peer?.role || "User"),
+          };
+        });
 
         setConversations(mapped);
         if (!activeChat && mapped.length > 0) {
@@ -121,7 +131,7 @@ export function CustomerMessagesPage() {
     };
 
     loadConversations();
-    const intervalId = window.setInterval(loadConversations, 15000);
+    const intervalId = window.setInterval(loadConversations, 5000); // Poll every 5 seconds for faster updates
     return () => window.clearInterval(intervalId);
   }, [activeChat, user?.id]);
 
@@ -140,16 +150,19 @@ export function CustomerMessagesPage() {
         const payload = await response.json();
         const rows = Array.isArray(payload?.data) ? payload.data : [];
 
-        const mapped: ChatMessage[] = rows.map((row: any) => ({
-          id: String(row?.id || ""),
-          sender:
-            String(row?.senderId || "") === String(activeChat)
-              ? "provider"
-              : "customer",
-          text: String(row?.text || ""),
-          time: toTime(row?.createdAt || new Date()),
-          status: "read",
-        }));
+        const mapped: ChatMessage[] = rows.map((row: unknown) => {
+          const typedRow = row as Record<string, unknown>;
+          return {
+            id: String(typedRow?.id || ""),
+            sender:
+              String(typedRow?.senderId || "") === String(activeChat)
+                ? "provider"
+                : "customer",
+            text: String(typedRow?.text || ""),
+            time: toTime((typedRow?.createdAt as string | Date) || new Date()),
+            status: "read" as const,
+          };
+        });
 
         setMessages(mapped);
       } catch {
@@ -158,7 +171,7 @@ export function CustomerMessagesPage() {
     };
 
     loadThread();
-    const intervalId = window.setInterval(loadThread, 10000);
+    const intervalId = window.setInterval(loadThread, 3000); // Poll every 3 seconds for active chat thread
     return () => window.clearInterval(intervalId);
   }, [activeChat]);
 
