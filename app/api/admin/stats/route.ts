@@ -50,10 +50,10 @@ async function loadManualJobsSummary() {
 }
 
 export async function GET(request: Request) {
-  const denied = authorizeRoles(request, ["admin", "sub-admin", "subadmin"]);
-  if (denied) return denied;
-
   try {
+    const denied = authorizeRoles(request, ["admin", "sub-admin", "subadmin"]);
+    if (denied) return denied;
+
     const [
       usersResult,
       bookingsCountResult,
@@ -61,16 +61,16 @@ export async function GET(request: Request) {
       revenueResult,
       pendingCountResult,
     ] = await Promise.allSettled([
-      db.user.count({ where: { deletedAt: null } }),
-      db.booking.count(),
-      db.booking.count({
+      prismaDb.user.count({ where: { deletedAt: null } }),
+      prismaDb.booking.count(),
+      prismaDb.booking.count({
         where: { status: { in: ["disputed", "cancelled"] } },
       }),
-      db.booking.aggregate({
+      prismaDb.booking.aggregate({
         where: { status: "completed" },
         _sum: { amount: true },
       }),
-      db.booking.count({ where: { status: "pending" } }),
+      prismaDb.booking.count({ where: { status: "pending" } }),
     ]);
 
     const userCount =
@@ -124,6 +124,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to fetch stats";
+    console.error("Admin stats error:", error);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

@@ -63,105 +63,137 @@ export async function GET(request: Request) {
   const appUrl = resolveAppUrl(origin);
 
   if (!token) {
-    return NextResponse.redirect(`${appUrl}/team-login?promotion=invalid`);
+    console.error("[INVITE] No token provided");
+    return NextResponse.json(
+      { ok: false, error: "No invitation token provided" },
+      { status: 400 }
+    );
   }
 
   const invite = await resolveInviteByToken(token);
   if (!invite.ok) {
-    const reason = encodeURIComponent(String(invite.reason || "invalid"));
-    return NextResponse.redirect(`${appUrl}/team-login?promotion=${reason}`);
+    const reason = String(invite.reason || "invalid");
+    console.error(`[INVITE] Token validation failed: ${reason}`);
+    return NextResponse.json(
+      { ok: false, error: `Invalid or ${reason} invitation token` },
+      { status: 400 }
+    );
   }
 
   const targetRole = normalizeRole(invite.targetRole);
   if (!TEAM_ROLES.has(targetRole)) {
-    return NextResponse.redirect(`${appUrl}/team-login?promotion=invalid-role`);
+    console.error(`[INVITE] Invalid role: ${targetRole}`);
+    return NextResponse.json(
+      { ok: false, error: "Invalid team role" },
+      { status: 400 }
+    );
   }
 
-  const updatedUser = await db.$transaction(async (tx) => {
-    const user = await tx.user.update({
-      where: { id: invite.userId },
-      data: {
-        role: targetRole,
-        isSuspended: false,
-        deletedAt: null,
-      },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-      },
-    });
-
-    await ensureRoleProfile(tx, targetRole, user.id);
-
-    await tx.authLog.create({
-      data: {
-        provider: "local",
-        mode: "admin-team-promotion-accepted",
-        email: user.email,
-        status: "SUCCESS",
-        response: JSON.stringify({
-          inviteId: invite.inviteId,
-          userId: user.id,
-          targetRole,
-          previousRole: invite.previousRole,
-          invitedBy: invite.invitedBy,
-        }),
-      },
-    });
-
-    await tx.authLog.create({
-      data: {
-        provider: "local",
-        mode: "admin-team-create",
-        email: user.email,
-        status: "SUCCESS",
-        response: JSON.stringify({
-          by: invite.invitedBy,
+  try {
+    const updatedUser = await db.$transaction(async (tx) => {
+      const user = await tx.user.update({
+        where: { id: invite.userId },
+        data: {
           role: targetRole,
-          previousRole: invite.previousRole,
+          isSuspended: false,
+          deletedAt: null,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+        },
+      });
+
+      await ensureRoleProfile(tx, targetRole, user.id);
+
+      await tx.authLog.create({
+        data: {
+          provider: "local",
+          mode: "admin-team-promotion-accepted",
+          email: user.email,
+          status: "SUCCESS",
+          response: JSON.stringify({
+            inviteId: invite.inviteId,
+            userId: user.id,
+            targetRole,
+            previousRole: invite.previousRole,
+            invitedBy: invite.invitedBy,
+          }),
+        },
+      });
+
+      await tx.authLog.create({
+        data: {
+          provider: "local",
+          mode: "admin-team-create",
+          email: user.email,
+          status: "SUCCESS",
+          response: JSON.stringify({
+            by: invite.invitedBy,
+            role: targetRole,
+            previousRole: invite.previousRole,
+            inviteId: invite.inviteId,
+            acceptedBy: user.email,
+          }),
+        },
+      });
+
+      return user;
+    });
+
+    await markInviteState({
+      inviteId: invite.inviteId,
+      email: invite.email,
+      state: "accepted",
+      by: updatedUser.email,
+    });
+
+    await createInAppNotification({
+      userId: updatedUser.id,
+      type: "success",
+      title: "Invitation accepted",
+      message: `Your ${targetRole.replace("-", " ")} role is now active.`,
+      actionHref: resolveLoginPath(targetRole),
+      metadata: {
+        invitedBy: invite.invitedBy,
+        previousRole: invite.previousRole,
+      },
+    });
+
+    await db.authLog.create({
+      data: {
+        provider: "local",
+        mode: "admin-team-promotion-link-clicked",
+        email: updatedUser.email,
+        status: "SUCCESS",
+        response: JSON.stringify({
           inviteId: invite.inviteId,
-          acceptedBy: user.email,
+          targetRole,
         }),
       },
     });
 
-    return user;
-  });
+    console.log(
+      `[INVITE] ✅ Invitation accepted for ${updatedUser.email} (role: ${targetRole})`
+    );
 
-  await markInviteState({
-    inviteId: invite.inviteId,
-    email: invite.email,
-    state: "accepted",
-    by: updatedUser.email,
-  });
-
-  await createInAppNotification({
-    userId: updatedUser.id,
-    type: "success",
-    title: "Promotion accepted",
-    message: `Your ${targetRole.replace("-", " ")} privileges are now active.`,
-    actionHref: resolveLoginPath(targetRole),
-    metadata: {
-      invitedBy: invite.invitedBy,
-      previousRole: invite.previousRole,
-    },
-  });
-
-  await db.authLog.create({
-    data: {
-      provider: "local",
-      mode: "admin-team-promotion-link-clicked",
-      email: updatedUser.email,
-      status: "SUCCESS",
-      response: JSON.stringify({
-        inviteId: invite.inviteId,
-        targetRole,
-      }),
-    },
-  });
-
-  return NextResponse.redirect(
-    `${appUrl}/team-login?promotion=accepted&role=${encodeURIComponent(targetRole)}`,
-  );
+    return NextResponse.json({
+      ok: true,
+      message: "Invitation accepted successfully",
+      data: {
+        id: updatedUser.id,
+        email: updatedUser.email,
+        role: targetRole,
+        loginUrl: resolveLoginPath(targetRole),
+      },
+    });
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[INVITE] ❌ Failed to accept invitation:`, errorMsg);
+    return NextResponse.json(
+      { ok: false, error: "Failed to process invitation" },
+      { status: 500 }
+    );
+  }
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Tag, Plus, Search, Calendar, Percent, DollarSign, Eye, Trash2, Edit,
   Copy, CheckCircle2, Clock, XCircle, TrendingUp, ShoppingCart, Users, Zap
@@ -27,86 +27,9 @@ interface Promotion {
   description: string
 }
 
-const initialPromotions: Promotion[] = [
-  {
-    id: 1,
-    name: "New Year Sale",
-    code: "NEWYEAR25",
-    type: "percentage",
-    value: 25,
-    minOrder: 5000,
-    maxUses: 100,
-    usedCount: 67,
-    startDate: "2026-01-01",
-    endDate: "2026-01-31",
-    status: "active",
-    products: "All Products",
-    description: "New Year special discount on all products"
-  },
-  {
-    id: 2,
-    name: "Electronics Flash Sale",
-    code: "ELECTRO15",
-    type: "percentage",
-    value: 15,
-    minOrder: 10000,
-    maxUses: 50,
-    usedCount: 23,
-    startDate: "2026-02-01",
-    endDate: "2026-02-28",
-    status: "active",
-    products: "Electronics",
-    description: "Discount on all electronics category items"
-  },
-  {
-    id: 3,
-    name: "First Order Discount",
-    code: "WELCOME500",
-    type: "fixed",
-    value: 500,
-    minOrder: 2000,
-    maxUses: 500,
-    usedCount: 312,
-    startDate: "2026-01-15",
-    endDate: "2026-06-30",
-    status: "active",
-    products: "All Products",
-    description: "KES 500 off for first-time customers"
-  },
-  {
-    id: 4,
-    name: "Valentine's Deal",
-    code: "LOVE2026",
-    type: "percentage",
-    value: 20,
-    minOrder: 3000,
-    maxUses: 200,
-    usedCount: 200,
-    startDate: "2026-02-10",
-    endDate: "2026-02-14",
-    status: "expired",
-    products: "Home Decor",
-    description: "Valentine's Day special offer"
-  },
-  {
-    id: 5,
-    name: "March Madness",
-    code: "MARCH30",
-    type: "percentage",
-    value: 30,
-    minOrder: 8000,
-    maxUses: 75,
-    usedCount: 0,
-    startDate: "2026-03-01",
-    endDate: "2026-03-31",
-    status: "scheduled",
-    products: "Appliances",
-    description: "Upcoming March promotion on appliances"
-  },
-]
-
 export default function ShopkeeperPromotionsPage() {
-  const [promotions, setPromotions] = useState<Promotion[]>(initialPromotions)
+  const [promotions, setPromotions] = useState<Promotion[]>([])
+  const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [activeFilter, setActiveFilter] = useState("all")
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -127,6 +50,26 @@ export default function ShopkeeperPromotionsPage() {
     description: "",
   })
 
+  useEffect(() => {
+    const loadPromotions = async () => {
+      try {
+        const response = await fetch("/api/shopkeeper/promotions", {
+          cache: "no-store",
+        })
+        const payload = await response.json()
+        if (payload?.ok && Array.isArray(payload?.data)) {
+          setPromotions(payload.data)
+        }
+      } catch (err) {
+        console.error("Failed to load promotions:", err)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadPromotions()
+  }, [])
+
   const filters = [
     { key: "all", label: "All" },
     { key: "active", label: "Active" },
@@ -145,7 +88,7 @@ export default function ShopkeeperPromotionsPage() {
   const stats = {
     active: promotions.filter(p => p.status === "active").length,
     totalUsed: promotions.reduce((acc, p) => acc + p.usedCount, 0),
-    totalRevenue: "KES 485K",
+    totalRevenue: "KES " + (promotions.reduce((acc, p) => acc + (p.usedCount * p.value), 0)).toLocaleString(),
     conversionRate: "12.4%"
   }
 
@@ -165,36 +108,60 @@ export default function ShopkeeperPromotionsPage() {
     setTimeout(() => setCopiedCode(null), 2000)
   }
 
-  const handleCreatePromo = () => {
+  const handleCreatePromo = async () => {
     if (!newPromo.name || !newPromo.code || !newPromo.value) {
       alert("Please fill in all required fields")
       return
     }
 
-    const promo: Promotion = {
-      id: Math.max(...promotions.map(p => p.id), 0) + 1,
-      name: newPromo.name,
-      code: newPromo.code.toUpperCase(),
-      type: newPromo.type,
-      value: parseFloat(newPromo.value),
-      minOrder: parseFloat(newPromo.minOrder) || 0,
-      maxUses: parseInt(newPromo.maxUses) || 999,
-      usedCount: 0,
-      startDate: newPromo.startDate || new Date().toISOString().split("T")[0],
-      endDate: newPromo.endDate || "2026-12-31",
-      status: newPromo.startDate && new Date(newPromo.startDate) > new Date() ? "scheduled" : "active",
-      products: newPromo.products,
-      description: newPromo.description,
-    }
+    try {
+      const response = await fetch("/api/shopkeeper/promotions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newPromo.name,
+          code: newPromo.code.toUpperCase(),
+          type: newPromo.type,
+          value: parseFloat(newPromo.value),
+          minOrder: parseFloat(newPromo.minOrder) || 0,
+          maxUses: parseInt(newPromo.maxUses) || 999,
+          startDate: newPromo.startDate || new Date().toISOString().split("T")[0],
+          endDate: newPromo.endDate || "2026-12-31",
+          products: newPromo.products,
+          description: newPromo.description,
+        }),
+      })
 
-    setPromotions([promo, ...promotions])
-    setShowCreateModal(false)
-    setNewPromo({ name: "", code: "", type: "percentage", value: "", minOrder: "", maxUses: "", startDate: "", endDate: "", products: "All Products", description: "" })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to create promotion")
+      }
+
+      if (payload?.data) {
+        setPromotions([payload.data, ...promotions])
+      }
+
+      setShowCreateModal(false)
+      setNewPromo({ name: "", code: "", type: "percentage", value: "", minOrder: "", maxUses: "", startDate: "", endDate: "", products: "All Products", description: "" })
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to create promotion")
+    }
   }
 
-  const handleDeletePromo = (id: number) => {
+  const handleDeletePromo = async (id: number) => {
     if (confirm("Are you sure you want to delete this promotion?")) {
-      setPromotions(promotions.filter(p => p.id !== id))
+      try {
+        const response = await fetch(`/api/shopkeeper/promotions/${id}`, {
+          method: "DELETE",
+        })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || "Failed to delete promotion")
+        }
+        setPromotions(promotions.filter(p => p.id !== id))
+      } catch (error) {
+        alert(error instanceof Error ? error.message : "Failed to delete promotion")
+      }
     }
   }
 

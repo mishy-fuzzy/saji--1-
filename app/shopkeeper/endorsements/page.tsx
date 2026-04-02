@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { 
   Award, Search, Check, X, Clock, Star, MapPin, Phone, ChevronRight, 
   MessageSquare, ThumbsUp, Eye, Calendar
@@ -16,74 +16,38 @@ export default function ShopkeeperEndorsementsPage() {
   const [activeTab, setActiveTab] = useState("pending")
   const [searchQuery, setSearchQuery] = useState("")
   const [showEndorseModal, setShowEndorseModal] = useState(false)
-  const [selectedSpecialist, setSelectedSpecialist] = useState<typeof pendingRequests[0] | null>(null)
+  const [selectedSpecialist, setSelectedSpecialist] = useState<any | null>(null)
   const [endorsementText, setEndorsementText] = useState("")
+  const [pendingRequests, setPendingRequests] = useState<any[]>([])
+  const [myEndorsements, setMyEndorsements] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  const pendingRequests = [
-    {
-      id: 1,
-      name: "Mike Njoroge",
-      avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop",
-      specialty: "Plumbing & Water Systems",
-      location: "Westlands, Nairobi",
-      rating: 4.8,
-      reviews: 56,
-      yearsKnown: 3,
-      message: "Hi, I've been purchasing plumbing supplies from your shop for 3 years. Your products have always been reliable. I would appreciate your endorsement.",
-      requestedAt: "2 days ago"
-    },
-    {
-      id: 2,
-      name: "Grace Wangari",
-      avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&h=100&fit=crop",
-      specialty: "Electrical Installation",
-      location: "Kilimani, Nairobi",
-      rating: 4.9,
-      reviews: 89,
-      yearsKnown: 5,
-      message: "Hello! I've been your customer for 5 years and always recommend your shop to my clients. Would love to have your endorsement on my profile.",
-      requestedAt: "1 day ago"
-    },
-    {
-      id: 3,
-      name: "David Omondi",
-      avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop",
-      specialty: "AC & Refrigeration",
-      location: "Parklands, Nairobi",
-      rating: 4.7,
-      reviews: 34,
-      yearsKnown: 2,
-      message: "I regularly buy refrigerant supplies and AC parts from your shop. Your quality has helped me build my reputation.",
-      requestedAt: "5 hours ago"
+  useEffect(() => {
+    const loadEndorsementData = async () => {
+      try {
+        const response = await fetch("/api/shopkeeper/endorsements", {
+          cache: "no-store",
+        })
+        const payload = await response.json()
+        if (payload?.ok && payload?.data) {
+          setPendingRequests(payload.data.pendingRequests || [])
+          setMyEndorsements(payload.data.myEndorsements || [])
+        }
+      } catch (err) {
+        console.error("Failed to load endorsements:", err)
+      } finally {
+        setIsLoading(false)
+      }
     }
-  ]
 
-  const myEndorsements = [
-    {
-      id: 1,
-      name: "John Kamau",
-      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop",
-      specialty: "General Repairs",
-      endorsement: "I've known John for over 5 years. He always uses quality parts from our shop and his workmanship is excellent. Highly recommended!",
-      endorsedAt: "Jan 15, 2024",
-      views: 234
-    },
-    {
-      id: 2,
-      name: "Sarah Muthoni",
-      avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop",
-      specialty: "Interior Design",
-      endorsement: "Sarah has been sourcing materials from us for 3 years. She has great taste and her clients love the products she selects.",
-      endorsedAt: "Feb 22, 2024",
-      views: 156
-    }
-  ]
+    loadEndorsementData()
+  }, [])
 
   const stats = {
-    totalEndorsements: 12,
+    totalEndorsements: myEndorsements.length,
     pendingRequests: pendingRequests.length,
-    totalViews: 1250,
-    thisMonth: 3
+    totalViews: myEndorsements.reduce((sum, e) => sum + (e.views || 0), 0),
+    thisMonth: myEndorsements.length
   }
 
   const handleEndorse = () => {

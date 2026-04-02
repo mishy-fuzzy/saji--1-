@@ -93,26 +93,33 @@ async function getPreviousRoleFromLatestPromotion(
 async function queueTeamInviteEmail(params: {
   email: string;
   name: string;
+  phone?: string | null;
   role: string;
   invitedByEmail: string | null;
   inviteUrl: string;
 }) {
   const roleLabel = mapTeamRoleForUi(params.role).replace("-", " ");
-  const subject = `Action required: accept your ${roleLabel} privileges`;
+  const subject = `Team Invitation: Join SAJI as ${roleLabel}`;
+  const phoneInfo = params.phone ? `\nPhone: ${params.phone}` : "";
   const text = [
     `Hello ${params.name},`,
     "",
-    `${params.invitedByEmail || "An administrator"} invited you to become ${roleLabel}.`,
-    "To accept and activate your privileges, click this secure link:",
+    `${params.invitedByEmail || "An administrator"} has invited you to join the SAJI team as a ${roleLabel}.`,
+    `Email: ${params.email}${phoneInfo}`,
+    "",
+    "To accept this invitation and create your account, click this secure link:",
     params.inviteUrl,
     "",
     "This link expires in 7 days.",
   ].join("\n");
+  const phoneHtml = params.phone ? `<p><strong>Phone:</strong> ${params.phone}</p>` : "";
   const html = `
     <p>Hello ${params.name},</p>
-    <p>${params.invitedByEmail || "An administrator"} invited you to become <strong>${roleLabel}</strong>.</p>
-    <p>To accept and activate your privileges, click the secure button below:</p>
-    <p><a href="${params.inviteUrl}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;">Accept Promotion</a></p>
+    <p>${params.invitedByEmail || "An administrator"} has invited you to join the SAJI team as a <strong>${roleLabel}</strong>.</p>
+    <p><strong>Email:</strong> ${params.email}</p>
+    ${phoneHtml}
+    <p>To accept this invitation and create your account, click the secure button below:</p>
+    <p><a href="${params.inviteUrl}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;">Accept Invitation</a></p>
     <p>Or copy and paste this link into your browser:</p>
     <p>${params.inviteUrl}</p>
     <p>This link expires in 7 days.</p>
@@ -193,115 +200,121 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const { actor, error } = await getSessionActor(request);
-  if (error) return error;
-  if (!actor || !hasAnyRole(actor, ["admin"])) {
-    return NextResponse.json(
-      { ok: false, error: "Forbidden" },
-      { status: 403 },
-    );
-  }
+  try {
+    const { actor, error } = await getSessionActor(request);
+    if (error) return error;
+    if (!actor || !hasAnyRole(actor, ["admin"])) {
+      return NextResponse.json(
+        { ok: false, error: "Forbidden" },
+        { status: 403 },
+      );
+    }
 
-  const body = await request.json();
-  const name = String(body?.name || "").trim();
-  const email = String(body?.email || "")
-    .trim()
-    .toLowerCase();
-  const role = normalizeRole(body?.role);
+    const body = await request.json();
+    const name = String(body?.name || "").trim();
+    const email = String(body?.email || "")
+      .trim()
+      .toLowerCase();
+    const phone = String(body?.phone || "").trim() || null;
+    const role = normalizeRole(body?.role);
 
-  if (!name || !email || !role) {
-    return NextResponse.json(
-      { ok: false, error: "name, email and role are required" },
-      { status: 400 },
-    );
-  }
+    if (!name || !email || !role) {
+      return NextResponse.json(
+        { ok: false, error: "name, email and role are required" },
+        { status: 400 },
+      );
+    }
 
-  if (!TEAM_ROLES.has(role)) {
-    return NextResponse.json(
-      { ok: false, error: "invalid team role" },
-      { status: 400 },
-    );
-  }
+    if (!TEAM_ROLES.has(role)) {
+      return NextResponse.json(
+        { ok: false, error: "invalid team role" },
+        { status: 400 },
+      );
+    }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(email)) {
-    return NextResponse.json(
-      { ok: false, error: "invalid email format" },
-      { status: 400 },
-    );
-  }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return NextResponse.json(
+        { ok: false, error: "invalid email format" },
+        { status: 400 },
+      );
+    }
 
-  const existing = await prismaDb.user.findUnique({
-    where: { email },
-    select: {
-      id: true,
-      role: true,
-      customerProfile: { select: { userId: true } },
-      serviceProviderProfile: { select: { userId: true } },
-      services: { select: { id: true }, take: 1 },
-    },
-  });
+    const existing = await prismaDb.user.findUnique({
+      where: { email },
+      select: {
+        id: true,
+        role: true,
+        customerProfile: { select: { userId: true } },
+        serviceProviderProfile: { select: { userId: true } },
+        services: { select: { id: true }, take: 1 },
+      },
+    });
 
-  const created = await prismaDb.user.upsert({
-    where: { email },
-    update: {
-      name,
-      isSuspended: false,
-      deletedAt: null,
-    },
-    create: {
-      name,
-      email,
-      isSuspended: false,
-    },
-    select: {
-      id: true,
-      name: true,
-      email: true,
-      role: true,
-      isSuspended: true,
-      createdAt: true,
-    },
-  });
+    const created = await prismaDb.user.upsert({
+      where: { email },
+      update: {
+        name,
+        phone,
+        isSuspended: false,
+        deletedAt: null,
+      },
+      create: {
+        name,
+        email,
+        phone,
+        isSuspended: false,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        isSuspended: true,
+        createdAt: true,
+      },
+    });
 
-  const currentRole = normalizeRole(created.role);
-  let previousRole = normalizeRestorableRole(existing?.role);
-  if (!previousRole && TEAM_ROLES.has(currentRole)) {
-    previousRole = await getPreviousRoleFromLatestPromotion(created.email);
-  }
-  if (!previousRole) {
-    previousRole = inferFallbackRole(existing || created);
-  }
+    const currentRole = normalizeRole(created.role);
+    let previousRole = normalizeRestorableRole(existing?.role);
+    if (!previousRole && TEAM_ROLES.has(currentRole)) {
+      previousRole = await getPreviousRoleFromLatestPromotion(created.email);
+    }
+    if (!previousRole) {
+      previousRole = inferFallbackRole(existing || created);
+    }
 
-  const invite = await createPromotionInvite({
-    email: created.email,
-    userId: created.id,
-    targetRole: role,
-    previousRole,
-    invitedBy: actor.email,
-  });
-
-  const appUrl = resolveAppUrl(new URL(request.url).origin);
-  const inviteUrl = `${appUrl}/api/admin/team-promotions/accept?token=${encodeURIComponent(invite.token)}`;
-
-  await prismaDb.authLog.create({
-    data: {
-      provider: "local",
-      mode: "admin-team-promotion-requested",
+    const invite = await createPromotionInvite({
       email: created.email,
-      status: "SUCCESS",
-      response: JSON.stringify({
-        by: actor.email,
-        targetRole: role,
-        inviteId: invite.inviteId,
-        previousRole,
-      }),
-    },
-  });
+      userId: created.id,
+      targetRole: role,
+      previousRole,
+      invitedBy: actor.email,
+    });
+
+    const appUrl = resolveAppUrl(new URL(request.url).origin);
+    const inviteUrl = `${appUrl}/team-invite?token=${encodeURIComponent(invite.token)}`;
+
+    await prismaDb.authLog.create({
+      data: {
+        provider: "local",
+        mode: "admin-team-promotion-requested",
+        email: created.email,
+        status: "SUCCESS",
+        response: JSON.stringify({
+          by: actor.email,
+          targetRole: role,
+          inviteId: invite.inviteId,
+          previousRole,
+        }),
+      },
+    });
 
   await queueTeamInviteEmail({
     email: created.email,
     name: created.name || "Team member",
+    phone: created.phone,
     role,
     invitedByEmail: actor.email,
     inviteUrl,
@@ -310,8 +323,8 @@ export async function POST(request: Request) {
   await createInAppNotification({
     userId: created.id,
     type: "warning",
-    title: "Team promotion pending",
-    message: `Accept your ${mapTeamRoleForUi(role).replace("-", " ")} promotion from the link sent to ${created.email}.`,
+    title: "Team Invitation",
+    message: `You've been invited to join SAJI as a ${mapTeamRoleForUi(role).replace("-", " ")}. Check your email at ${created.email} to accept.`,
     actionHref: "/team-login",
     metadata: { invitedBy: actor.email },
   });
@@ -349,6 +362,12 @@ export async function POST(request: Request) {
       expiresAt: invite.expiresAt,
     },
   });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to add team member";
+    console.error("Team member creation error:", error);
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
 }
 
 export async function PATCH(request: Request) {
@@ -380,6 +399,7 @@ export async function PATCH(request: Request) {
       id: true,
       email: true,
       name: true,
+      phone: true,
       role: true,
       deletedAt: true,
       customerProfile: { select: { userId: true } },
@@ -423,6 +443,7 @@ export async function PATCH(request: Request) {
   await queueTeamInviteEmail({
     email: member.email,
     name: member.name || "Team member",
+    phone: member.phone,
     role,
     invitedByEmail: actor.email,
     inviteUrl,
