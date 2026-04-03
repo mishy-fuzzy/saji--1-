@@ -21,7 +21,21 @@ type ShopDetails = {
   location: string; phone: string; permitNumber: string; kraPin: string
 }
 
-const PRODUCT_CATEGORIES = ["Fresh Produce", "Groceries", "Hardware", "Electronics", "Plumbing Supplies", "Electrical Supplies", "Building Materials", "Tools", "Household", "Other"]
+const PRODUCT_CATEGORIES = [
+  "Fresh Produce",
+  "Groceries",
+  "Hardware",
+  "Electronics",
+  "Plumbing Supplies",
+  "Electrical Supplies",
+  "Building Materials",
+  "Tools",
+  "Household",
+  "Fashion",
+  "Beauty & Cosmetics",
+  "Health & Wellness",
+  "Other",
+]
 
 export default function ShopPage() {
   const [shopDetails, setShopDetails] = useState<ShopDetails>({

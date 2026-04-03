@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { useAuthContext } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -69,7 +69,7 @@ interface Job {
 }
 
 export function CustomerJobsPage() {
-  const { user } = useAuthContext();
+  const { user, isAuthenticated, isLoading, logout } = useAuthContext();
   const [activeTab, setActiveTab] = useState<
     "active" | "scheduled" | "completed" | "cancelled"
   >("active");
@@ -92,6 +92,10 @@ export function CustomerJobsPage() {
   const [trackingEta, setTrackingEta] = useState(12);
   const [jobs, setJobs] = useState<Job[]>([]);
 
+  const handleUnauthorized = useCallback(async () => {
+    await logout();
+  }, [logout]);
+
   // Simulate ETA countdown for tracking
   useEffect(() => {
     if (!showTrackingPanel) return;
@@ -103,11 +107,22 @@ export function CustomerJobsPage() {
   }, [showTrackingPanel]);
 
   useEffect(() => {
+    if (isLoading || !isAuthenticated || !user?.id) {
+      setJobs([]);
+      return;
+    }
+
     let active = true;
 
     const loadJobs = async () => {
       try {
         const response = await fetch("/api/jobs", { cache: "no-store" });
+
+        if (response.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
+
         const payload = await response.json();
         const rows = Array.isArray(payload?.jobs)
           ? payload.jobs
@@ -168,7 +183,7 @@ export function CustomerJobsPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id]);
 
   const reviewQuickTags = [
     "Punctual",

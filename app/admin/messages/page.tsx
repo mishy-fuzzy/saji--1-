@@ -1,737 +1,520 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
-import { Send, Paperclip, Smile, Reply, Trash2, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  ArrowLeft,
+  Check,
+  CheckCheck,
+  Plus,
+  Search,
+  Send,
+} from "lucide-react";
+import Image from "next/image";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
-type MessageSummary = {
-  id: number;
-  from: string;
-  message: string;
+type Conversation = {
+  id: string;
+  name: string;
+  avatar: string;
+  lastMessage: string;
   time: string;
-  unread: boolean;
-  replies: number;
-  category: string;
+  unread: number;
+  online: boolean;
+  roleLabel: string;
 };
 
-type ThreadItem = {
-  sender: string;
+type ChatMessage = {
+  id: string;
+  sender: "admin" | "peer";
   text: string;
   time: string;
-  type: "sent" | "received";
+  status: "sent" | "delivered" | "read";
 };
 
-type ExternalInboxItem = {
-  id: number;
-  from: string;
-  message: string;
-  time: string;
-  unread: boolean;
-  replies: number;
-  category: string;
-  thread: ThreadItem[];
+type UserOption = {
+  id: string;
+  name: string;
+  role: string;
+  email: string;
 };
 
-const ADMIN_INBOX_STORAGE_KEY = "saji-admin-inbox";
-const ADMIN_MESSAGES_STORAGE_KEY = "saji-admin-messages";
-const ADMIN_MESSAGES_UPDATED_EVENT = "saji-admin-messages-updated";
-const TEAM_INBOX_SENDERS = new Set([
-  "Sub-Admin",
-  "Secretary",
-  "Agent",
-  "Provider",
-  "Shopkeeper",
-  "Customer",
-]);
-
-const baseMessagesData: MessageSummary[] = [
-  {
-    id: 1,
-    from: "Sarah K.",
-    message: "New job request for Web Development project",
-    time: "2 mins ago",
-    unread: true,
-    replies: 2,
-    category: "Jobs",
-  },
-  {
-    id: 2,
-    from: "John D.",
-    message: "Dispute raised on UI Design job - Quality issues",
-    time: "15 mins ago",
-    unread: true,
-    replies: 1,
-    category: "Disputes",
-  },
-  {
-    id: 3,
-    from: "Alice T.",
-    message: "Payment confirmation for completed task",
-    time: "1 hour ago",
-    unread: false,
-    replies: 0,
-    category: "Payments",
-  },
-  {
-    id: 4,
-    from: "Mark L.",
-    message: "Request for job deadline extension",
-    time: "3 hours ago",
-    unread: false,
-    replies: 3,
-    category: "Jobs",
-  },
-  {
-    id: 5,
-    from: "Emma B.",
-    message: "Verification documents submitted",
-    time: "Yesterday",
-    unread: false,
-    replies: 1,
-    category: "Verifications",
-  },
-  {
-    id: 6,
-    from: "Tom C.",
-    message: "System notification: Maintenance scheduled",
-    time: "2 days ago",
-    unread: false,
-    replies: 0,
-    category: "System",
-  },
-];
-
-const baseMessageThreads: Record<number, ThreadItem[]> = {
-  1: [
-    {
-      sender: "Sarah K.",
-      text: "Hi, I have a new web development project. Can we discuss the timeline?",
-      time: "2:30 PM",
-      type: "received",
-    },
-    {
-      sender: "Admin",
-      text: "Sure! Tell me more about the project scope.",
-      time: "2:35 PM",
-      type: "sent",
-    },
-    {
-      sender: "Sarah K.",
-      text: "Budget is KES 150,000 and deadline is Feb 15",
-      time: "2:40 PM",
-      type: "received",
-    },
-  ],
-  2: [
-    {
-      sender: "John D.",
-      text: "The design doesn't match our specifications",
-      time: "1:20 PM",
-      type: "received",
-    },
-    {
-      sender: "Admin",
-      text: "We'll review this and contact the designer",
-      time: "1:25 PM",
-      type: "sent",
-    },
-  ],
-  3: [
-    {
-      sender: "Alice T.",
-      text: "Payment of KES 50,000 has been processed",
-      time: "12:00 PM",
-      type: "received",
-    },
-  ],
-  4: [
-    {
-      sender: "Mark L.",
-      text: "Can we extend the deadline by 5 days?",
-      time: "9:15 AM",
-      type: "received",
-    },
-    {
-      sender: "Admin",
-      text: "Let me check with the client",
-      time: "9:20 AM",
-      type: "sent",
-    },
-    {
-      sender: "Admin",
-      text: "Extension approved until Feb 25",
-      time: "10:00 AM",
-      type: "sent",
-    },
-  ],
-  5: [
-    {
-      sender: "Emma B.",
-      text: "I've submitted all required documents",
-      time: "3:45 PM",
-      type: "received",
-    },
-    {
-      sender: "Admin",
-      text: "Documents received. Under review",
-      time: "4:00 PM",
-      type: "sent",
-    },
-  ],
-  6: [
-    {
-      sender: "System",
-      text: "Scheduled maintenance on Feb 10, 2-4 AM UTC",
-      time: "10:00 AM",
-      type: "received",
-    },
-  ],
-};
-
-function readExternalInbox(): ExternalInboxItem[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = window.localStorage.getItem(ADMIN_INBOX_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as ExternalInboxItem[]) : [];
-  } catch {
-    return [];
-  }
+function toTime(value: string | Date): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function writeExternalInbox(items: ExternalInboxItem[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(ADMIN_INBOX_STORAGE_KEY, JSON.stringify(items));
-    window.dispatchEvent(new Event(ADMIN_MESSAGES_UPDATED_EVENT));
-  } catch {
-    // Keep UI responsive even if storage write fails.
-  }
+function isRecentlyActive(value?: string | Date | null): boolean {
+  if (!value) return false;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return false;
+  return Date.now() - date.getTime() < 10 * 60 * 1000;
 }
 
-function readStoredMessages(): MessageSummary[] {
-  if (typeof window === "undefined") return baseMessagesData;
-
-  try {
-    const raw = window.localStorage.getItem(ADMIN_MESSAGES_STORAGE_KEY);
-    if (!raw) return baseMessagesData;
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? (parsed as MessageSummary[])
-      : baseMessagesData;
-  } catch {
-    return baseMessagesData;
-  }
+function toTitleCase(value: string): string {
+  if (!value) return "User";
+  return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function writeStoredMessages(items: MessageSummary[]) {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(
-      ADMIN_MESSAGES_STORAGE_KEY,
-      JSON.stringify(items),
+export default function AdminMessagesPage() {
+  const [activeChat, setActiveChat] = useState<string | null>(null);
+  const [messageInput, setMessageInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showCompose, setShowCompose] = useState(false);
+  const [contactQuery, setContactQuery] = useState("");
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [contacts, setContacts] = useState<UserOption[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [isSending, setIsSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const selectedChat = useMemo(
+    () => conversations.find((c) => c.id === activeChat) || null,
+    [conversations, activeChat],
+  );
+
+  const filteredConversations = useMemo(
+    () =>
+      conversations.filter(
+        (conv) =>
+          conv.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          conv.roleLabel.toLowerCase().includes(searchQuery.toLowerCase()),
+      ),
+    [conversations, searchQuery],
+  );
+
+  const filteredContacts = useMemo(() => {
+    const normalized = contactQuery.trim().toLowerCase();
+    const candidates = contacts.filter((item) => item.id !== activeChat);
+    if (!normalized) return candidates;
+    return candidates.filter(
+      (item) =>
+        item.name.toLowerCase().includes(normalized) ||
+        item.email.toLowerCase().includes(normalized) ||
+        item.role.toLowerCase().includes(normalized),
     );
-    window.dispatchEvent(new Event(ADMIN_MESSAGES_UPDATED_EVENT));
-  } catch {
-    // Keep UI responsive even if storage write fails.
-  }
-}
-
-export default function MessagesPage() {
-  const searchParams = useSearchParams();
-  const [selectedMessage, setSelectedMessage] = useState<number | null>(1);
-  const [replyText, setReplyText] = useState("");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [messages, setMessages] = useState<MessageSummary[]>(baseMessagesData);
-  const [threads, setThreads] =
-    useState<Record<number, ThreadItem[]>>(baseMessageThreads);
-  const [showMobileChat, setShowMobileChat] = useState(false);
+  }, [contacts, activeChat, contactQuery]);
 
   useEffect(() => {
-    const storedMessages = readStoredMessages();
-    setMessages(storedMessages);
+    const loadContacts = async () => {
+      try {
+        const response = await fetch("/api/admin/users?includeDeleted=false", {
+          cache: "no-store",
+        });
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data) ? payload.data : [];
 
-    const hydrateFromExternalInbox = () => {
-      const externalItems = readExternalInbox();
-      if (!externalItems.length) return;
+        const mapped: UserOption[] = rows
+          .map((row: any) => ({
+            id: String(row?.id || ""),
+            name: String(row?.name || "User"),
+            role: toTitleCase(String(row?.role || "user")),
+            email: String(row?.email || ""),
+          }))
+          .filter((row: UserOption) => row.id);
 
-      setMessages((prev) => {
-        const externalById = new Map(
-          externalItems.map((item) => [
-            item.id,
-            {
-              id: item.id,
-              from: item.from,
-              message: item.message,
-              time: item.time,
-              unread: item.unread,
-              replies: item.replies,
-              category: item.category,
-            },
-          ]),
-        );
-
-        const merged = prev.map(
-          (message) => externalById.get(message.id) || message,
-        );
-        const existingIds = new Set(merged.map((m) => m.id));
-        const incoming = externalItems
-          .filter((item) => !existingIds.has(item.id))
-          .map((item) => ({
-            id: item.id,
-            from: item.from,
-            message: item.message,
-            time: item.time,
-            unread: item.unread,
-            replies: item.replies,
-            category: item.category,
-          }));
-
-        return incoming.length ? [...incoming, ...merged] : merged;
-      });
-
-      setThreads((prev) => {
-        const next = { ...prev };
-        for (const item of externalItems) {
-          next[item.id] = Array.isArray(item.thread) ? item.thread : [];
-        }
-        return next;
-      });
+        setContacts(mapped);
+      } catch {
+        setContacts([]);
+      }
     };
 
-    hydrateFromExternalInbox();
-    window.addEventListener("storage", hydrateFromExternalInbox);
-    return () => {
-      window.removeEventListener("storage", hydrateFromExternalInbox);
-    };
+    loadContacts();
   }, []);
 
   useEffect(() => {
-    writeStoredMessages(messages);
+    const loadConversations = async () => {
+      try {
+        const response = await fetch("/api/messages", { cache: "no-store" });
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data) ? payload.data : [];
+
+        const mapped: Conversation[] = rows
+          .map((row: any) => ({
+            id: String(row?.peer?.id || ""),
+            name: String(row?.peer?.name || "User"),
+            avatar: String(row?.peer?.image || "/placeholder.svg"),
+            lastMessage: String(row?.lastMessage || ""),
+            time: toTime(row?.createdAt || new Date()),
+            unread: Number(row?.unread || 0),
+            online: Boolean(
+              row?.peer?.online || isRecentlyActive(row?.peer?.lastLoginAt),
+            ),
+            roleLabel: toTitleCase(String(row?.peer?.role || "user")),
+          }))
+          .filter((row: Conversation) => row.id);
+
+        setConversations(mapped);
+        if (!activeChat && mapped.length > 0) {
+          setActiveChat(mapped[0].id);
+        }
+      } catch {
+        setConversations([]);
+      }
+    };
+
+    loadConversations();
+    const intervalId = window.setInterval(loadConversations, 10000);
+    return () => window.clearInterval(intervalId);
+  }, [activeChat]);
+
+  useEffect(() => {
+    if (!activeChat) {
+      setMessages([]);
+      return;
+    }
+
+    const loadThread = async () => {
+      try {
+        const response = await fetch(
+          `/api/messages?withUserId=${encodeURIComponent(activeChat)}`,
+          { cache: "no-store" },
+        );
+        const payload = await response.json();
+        const rows = Array.isArray(payload?.data) ? payload.data : [];
+
+        const mapped: ChatMessage[] = rows.map((row: any) => ({
+          id: String(row?.id || ""),
+          sender:
+            String(row?.senderId || "") === String(activeChat)
+              ? "peer"
+              : "admin",
+          text: String(row?.text || ""),
+          time: toTime(row?.createdAt || new Date()),
+          status: "read",
+        }));
+
+        setMessages(mapped);
+      } catch {
+        setMessages([]);
+      }
+    };
+
+    loadThread();
+    const intervalId = window.setInterval(loadThread, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [activeChat]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  useEffect(() => {
-    const messageIdFromQuery = Number(searchParams.get("messageId"));
-    if (!Number.isFinite(messageIdFromQuery)) return;
-    if (!messages.some((m) => m.id === messageIdFromQuery)) return;
-
-    setSelectedMessage(messageIdFromQuery);
-    setShowMobileChat(true);
-  }, [messages, searchParams]);
-
-  useEffect(() => {
-    if (!selectedMessage) return;
-
-    setMessages((prev) => {
-      let changed = false;
-      const next = prev.map((m) => {
-        if (m.id !== selectedMessage || !m.unread) return m;
-        changed = true;
-        return { ...m, unread: false };
-      });
-      return changed ? next : prev;
-    });
-
-    const selectedFrom = messages.find((m) => m.id === selectedMessage)?.from;
-    if (!selectedFrom || !TEAM_INBOX_SENDERS.has(selectedFrom)) return;
-
-    const inbox = readExternalInbox();
-    const targetIndex = inbox.findIndex(
-      (item) => item.id === selectedMessage || item.from === selectedFrom,
-    );
-    if (targetIndex < 0) return;
-
-    const nextInbox = [...inbox];
-    const current = nextInbox[targetIndex];
-    if (current.unread) {
-      nextInbox[targetIndex] = {
-        ...current,
-        unread: false,
-      };
-      writeExternalInbox(nextInbox);
-    }
-  }, [messages, selectedMessage]);
-
-  const currentThread = selectedMessage ? threads[selectedMessage] || [] : [];
-  const selectedMessageData = messages.find((m) => m.id === selectedMessage);
-
-  const filteredMessages = messages.filter(
-    (m) =>
-      m.from.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.message.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
-
-  const handleSendReply = () => {
-    if (replyText.trim() && selectedMessage) {
-      const reply: ThreadItem = {
-        sender: "Admin",
-        text: replyText,
-        time: new Date().toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-        type: "sent",
-      };
-
-      setThreads((prev) => ({
+  const handleStartChat = (user: UserOption) => {
+    setActiveChat(user.id);
+    setShowCompose(false);
+    setContactQuery("");
+    setConversations((prev) => {
+      if (prev.some((item) => item.id === user.id)) return prev;
+      return [
+        {
+          id: user.id,
+          name: user.name,
+          avatar: "/placeholder.svg",
+          lastMessage: "",
+          time: "",
+          unread: 0,
+          online: false,
+          roleLabel: user.role,
+        },
         ...prev,
-        [selectedMessage]: [...(prev[selectedMessage] || []), reply],
-      }));
+      ];
+    });
+  };
 
-      const selectedFrom = messages.find((m) => m.id === selectedMessage)?.from;
-      if (selectedFrom && TEAM_INBOX_SENDERS.has(selectedFrom)) {
-        const inbox = readExternalInbox();
-        const targetIndex = inbox.findIndex(
-          (item) => item.id === selectedMessage || item.from === selectedFrom,
-        );
-        const nextInbox = [...inbox];
+  const handleSendMessage = async () => {
+    if (!activeChat || !messageInput.trim() || isSending) return;
 
-        if (targetIndex >= 0) {
-          const current = nextInbox[targetIndex];
-          nextInbox[targetIndex] = {
-            ...current,
-            id: selectedMessage,
-            message: reply.text,
-            time: "Just now",
-            unread: true,
-            replies: (current.replies || 0) + 1,
-            thread: [
-              ...(current.thread || []),
-              {
-                sender: "Admin",
-                text: reply.text,
-                time: reply.time,
-                type: "sent",
-              },
-            ],
-          };
-        } else {
-          nextInbox.unshift({
-            id: selectedMessage,
-            from: selectedFrom,
-            message: reply.text,
-            time: "Just now",
-            unread: true,
-            replies: 1,
-            category: "Internal",
-            thread: [
-              {
-                sender: "Admin",
-                text: reply.text,
-                time: reply.time,
-                type: "sent",
-              },
-            ],
-          });
-        }
+    const text = messageInput.trim();
+    const optimistic: ChatMessage = {
+      id: `temp-${Date.now()}`,
+      sender: "admin",
+      text,
+      time: toTime(new Date()),
+      status: "sent",
+    };
 
-        writeExternalInbox(nextInbox);
+    setMessages((prev) => [...prev, optimistic]);
+    setMessageInput("");
+    setIsSending(true);
+
+    try {
+      const response = await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ receiverId: activeChat, text }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to send message");
       }
 
-      setReplyText("");
+      const row = payload?.data;
       setMessages((prev) =>
-        prev.map((m) =>
-          m.id === selectedMessage ? { ...m, unread: false } : m,
+        prev.map((msg) =>
+          msg.id === optimistic.id
+            ? {
+                id: String(row?.id || optimistic.id),
+                sender: "admin",
+                text,
+                time: toTime(row?.createdAt || new Date()),
+                status: "delivered",
+              }
+            : msg,
         ),
       );
+
+      const selectedName =
+        selectedChat?.name || contacts.find((item) => item.id === activeChat)?.name || "User";
+      const selectedRole =
+        selectedChat?.roleLabel ||
+        contacts.find((item) => item.id === activeChat)?.role ||
+        "User";
+
+      setConversations((prev) => {
+        const existing = prev.find((item) => item.id === activeChat);
+        const nextItem: Conversation = {
+          id: activeChat,
+          name: existing?.name || selectedName,
+          avatar: existing?.avatar || "/placeholder.svg",
+          lastMessage: text,
+          time: toTime(row?.createdAt || new Date()),
+          unread: existing?.unread || 0,
+          online: existing?.online || false,
+          roleLabel: existing?.roleLabel || selectedRole,
+        };
+        const remaining = prev.filter((item) => item.id !== activeChat);
+        return [nextItem, ...remaining];
+      });
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to send message");
+      setMessages((prev) => prev.filter((msg) => msg.id !== optimistic.id));
+    } finally {
+      setIsSending(false);
     }
   };
 
-  const handleDeleteChat = (messageId: number) => {
-    setMessages((prev) => prev.filter((m) => m.id !== messageId));
-    setThreads((prev) => {
-      const next = { ...prev };
-      delete next[messageId];
-      return next;
-    });
-
-    if (selectedMessage === messageId) {
-      setSelectedMessage(null);
-      setShowMobileChat(false);
-    }
-  };
+  const chatHeader =
+    selectedChat || contacts.find((item) => item.id === activeChat)
+      ? {
+          name:
+            selectedChat?.name ||
+            contacts.find((item) => item.id === activeChat)?.name ||
+            "User",
+          roleLabel:
+            selectedChat?.roleLabel ||
+            contacts.find((item) => item.id === activeChat)?.role ||
+            "User",
+          avatar: selectedChat?.avatar || "/placeholder.svg",
+          online: selectedChat?.online || false,
+        }
+      : null;
 
   return (
-    <div className="space-y-6 pb-20 lg:pb-0">
-      <div>
-        <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
-          Messages
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-1">
-          View and respond to platform notifications and messages
-        </p>
-      </div>
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      <div className="max-w-6xl mx-auto flex h-screen lg:h-[calc(100vh-2rem)] lg:my-4 lg:rounded-2xl overflow-hidden shadow-xl">
+        <div
+          className={`w-full lg:w-96 bg-white dark:bg-gray-800 border-r dark:border-gray-700 flex flex-col ${activeChat ? "hidden lg:flex" : "flex"}`}
+        >
+          <div className="p-4 border-b dark:border-gray-700">
+            <div className="flex items-center justify-between mb-4">
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                Messages
+              </h1>
+              <Button size="sm" onClick={() => setShowCompose((prev) => !prev)}>
+                <Plus className="w-4 h-4 mr-1" />
+                New
+              </Button>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search conversations..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </div>
 
-      {/* Mobile and Desktop Layout */}
-      <div className={`${showMobileChat ? "hidden" : "block"} lg:block`}>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-[600px]">
-          {/* Messages List */}
-          <Card className="lg:col-span-1 border-0 shadow-lg p-0 overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700">
-              <div className="relative">
-                <Search
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  size={18}
-                />
-                <input
-                  type="text"
-                  placeholder="Search messages..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
+          {showCompose && (
+            <div className="border-b dark:border-gray-700 p-3 space-y-3 bg-blue-50/50 dark:bg-blue-950/10">
+              <Input
+                placeholder="Find user by name, email, or role"
+                value={contactQuery}
+                onChange={(e) => setContactQuery(e.target.value)}
+              />
+              <div className="max-h-44 overflow-y-auto rounded-lg border bg-white dark:bg-gray-800">
+                {filteredContacts.slice(0, 20).map((user) => (
+                  <button
+                    key={user.id}
+                    onClick={() => handleStartChat(user)}
+                    className="w-full text-left p-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b last:border-b-0"
+                  >
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      {user.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {user.role} • {user.email}
+                    </p>
+                  </button>
+                ))}
+                {filteredContacts.length === 0 && (
+                  <p className="p-3 text-sm text-muted-foreground">No users found.</p>
+                )}
               </div>
             </div>
+          )}
 
-            <div className="flex-1 overflow-y-auto">
-              {filteredMessages.map((msg) => (
-                <button
-                  key={msg.id}
-                  onClick={() => {
-                    setSelectedMessage(msg.id);
-                    setShowMobileChat(true);
-                  }}
-                  className={`w-full text-left p-4 border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors ${
-                    selectedMessage === msg.id
-                      ? "bg-blue-50 dark:bg-blue-900/20"
-                      : ""
-                  } ${msg.unread ? "bg-yellow-50 dark:bg-yellow-900/10" : ""}`}
-                >
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-3 h-3 rounded-full bg-blue-600 flex-shrink-0" />
-                      <h3 className="font-semibold text-gray-900 dark:text-white text-sm">
-                        {msg.from}
-                      </h3>
-                    </div>
-                    <span className="text-xs text-gray-500">{msg.time}</span>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2 ml-5">
-                    {msg.message}
-                  </p>
-                  <div className="flex items-center gap-2 mt-2 ml-5">
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full font-medium ${
-                        msg.category === "Jobs"
-                          ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
-                          : msg.category === "Disputes"
-                            ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-                            : msg.category === "Payments"
-                              ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
-                              : msg.category === "Verifications"
-                                ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400"
-                                : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
-                      }`}
-                    >
-                      {msg.category}
+          <div className="flex-1 overflow-y-auto">
+            {filteredConversations.map((conv) => (
+              <button
+                key={conv.id}
+                onClick={() => setActiveChat(conv.id)}
+                className={`w-full p-4 flex gap-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors text-left border-b dark:border-gray-700 last:border-0 ${
+                  activeChat === conv.id ? "bg-blue-50 dark:bg-blue-900/20" : ""
+                }`}
+              >
+                <div className="relative shrink-0">
+                  <Image
+                    src={conv.avatar || "/placeholder.svg"}
+                    alt={conv.name}
+                    width={48}
+                    height={48}
+                    className="rounded-full object-cover w-12 h-12"
+                  />
+                  {conv.online && (
+                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white dark:border-gray-800 rounded-full" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                      {conv.name}
+                    </h3>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
+                      {conv.time}
                     </span>
-                    {msg.replies > 0 && (
-                      <span className="text-xs text-gray-500">
-                        +{msg.replies} replies
+                  </div>
+                  <p className="text-sm text-muted-foreground truncate mb-1">
+                    {conv.lastMessage || "No messages yet"}
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-blue-600 dark:text-blue-400 truncate">
+                      {conv.roleLabel}
+                    </span>
+                    {conv.unread > 0 && (
+                      <span className="bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center shrink-0 ml-2">
+                        {conv.unread}
                       </span>
                     )}
                   </div>
-                </button>
-              ))}
-            </div>
-          </Card>
-
-          {/* Message Thread */}
-          <Card className="lg:col-span-2 border-0 shadow-lg p-0 overflow-hidden flex flex-col">
-            {selectedMessageData ? (
-              <>
-                {/* Thread Header */}
-                <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-gray-800 dark:to-gray-800">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <button
-                        onClick={() => setShowMobileChat(false)}
-                        className="lg:hidden p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-600 dark:text-gray-400 flex-shrink-0"
-                      >
-                        ←
-                      </button>
-                      <div className="min-w-0 flex-1">
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white truncate">
-                          {selectedMessageData.from}
-                        </h2>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 truncate">
-                          {selectedMessageData.message}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => alert("Open reply dialog")}
-                        className="p-2 hover:bg-blue-200 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-600 dark:text-gray-400"
-                      >
-                        <Reply size={20} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteChat(selectedMessage)}
-                        className="p-2 hover:bg-red-200 dark:hover:bg-red-900/30 rounded-lg transition-colors text-red-600 dark:text-red-400"
-                      >
-                        <Trash2 size={20} />
-                      </button>
-                    </div>
-                  </div>
                 </div>
-
-                {/* Messages Thread */}
-                <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                  {currentThread.map((msg, idx) => (
-                    <div
-                      key={idx}
-                      className={`flex ${msg.type === "sent" ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className={`max-w-xs lg:max-w-md px-4 py-3 rounded-lg ${
-                          msg.type === "sent"
-                            ? "bg-blue-600 text-white rounded-br-none"
-                            : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-none"
-                        }`}
-                      >
-                        <p className="text-sm font-medium mb-1">{msg.sender}</p>
-                        <p className="text-sm">{msg.text}</p>
-                        <p
-                          className={`text-xs mt-2 ${msg.type === "sent" ? "text-blue-200" : "text-gray-500"}`}
-                        >
-                          {msg.time}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Reply Box */}
-                <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-                  <div className="flex gap-2 items-end">
-                    <button
-                      onClick={() => alert("Attach file to reply")}
-                      className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-600 dark:text-gray-400"
-                    >
-                      <Paperclip size={20} />
-                    </button>
-                    <textarea
-                      value={replyText}
-                      onChange={(e) => setReplyText(e.target.value)}
-                      onKeyPress={(e) => {
-                        if (e.key === "Enter" && e.ctrlKey) {
-                          handleSendReply();
-                        }
-                      }}
-                      placeholder="Type your reply... (Ctrl+Enter to send)"
-                      rows={3}
-                      className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
-                    />
-                    <button
-                      onClick={handleSendReply}
-                      disabled={!replyText.trim()}
-                      className="p-2 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 text-white rounded-lg transition-colors flex-shrink-0"
-                    >
-                      <Send size={20} />
-                    </button>
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-gray-500 dark:text-gray-400">
-                  Select a message to view thread
-                </p>
+              </button>
+            ))}
+            {filteredConversations.length === 0 && (
+              <div className="p-6 text-center text-sm text-muted-foreground">
+                No conversations found.
               </div>
             )}
-          </Card>
-        </div>
-      </div>
-
-      {/* Mobile Chat View */}
-      {showMobileChat && selectedMessageData && (
-        <Card className="fixed inset-0 lg:hidden border-0 shadow-lg p-0 overflow-hidden flex flex-col rounded-none z-50">
-          {/* Thread Header */}
-          <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-gray-800 dark:to-gray-800 flex items-center justify-between">
-            <button
-              onClick={() => setShowMobileChat(false)}
-              className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-600 dark:text-gray-400"
-            >
-              ←
-            </button>
-            <div className="flex-1 px-2">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white truncate">
-                {selectedMessageData.from}
-              </h2>
-            </div>
-            <button
-              onClick={() => handleDeleteChat(selectedMessage)}
-              className="p-2 hover:bg-red-200 dark:hover:bg-red-900/30 rounded-lg transition-colors text-red-600 dark:text-red-400"
-            >
-              <Trash2 size={20} />
-            </button>
           </div>
+        </div>
 
-          {/* Messages Thread */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {currentThread.map((msg, idx) => (
-              <div
-                key={idx}
-                className={`flex ${msg.type === "sent" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-xs px-4 py-3 rounded-lg ${
-                    msg.type === "sent"
-                      ? "bg-blue-600 text-white rounded-br-none"
-                      : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-none"
-                  }`}
+        <div
+          className={`flex-1 flex flex-col bg-gray-50 dark:bg-gray-900 ${activeChat ? "flex" : "hidden lg:flex"}`}
+        >
+          {activeChat && chatHeader ? (
+            <>
+              <div className="p-4 bg-white dark:bg-gray-800 border-b dark:border-gray-700 flex items-center gap-3">
+                <button
+                  onClick={() => setActiveChat(null)}
+                  className="lg:hidden p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
                 >
-                  <p className="text-sm font-medium mb-1">{msg.sender}</p>
-                  <p className="text-sm">{msg.text}</p>
-                  <p
-                    className={`text-xs mt-2 ${msg.type === "sent" ? "text-blue-200" : "text-gray-500"}`}
-                  >
-                    {msg.time}
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <Image
+                  src={chatHeader.avatar || "/placeholder.svg"}
+                  alt={chatHeader.name}
+                  width={40}
+                  height={40}
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+                <div>
+                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                    {chatHeader.name}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {chatHeader.online ? "Online now" : chatHeader.roleLabel}
                   </p>
                 </div>
               </div>
-            ))}
-          </div>
 
-          {/* Reply Box */}
-          <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
-            <div className="flex gap-2 items-end">
-              <button
-                onClick={() =>
-                  alert("Pin/action functionality would be implemented here")
-                }
-                className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-600 dark:text-gray-400"
-              >
-                <Paperclip size={20} />
-              </button>
-              <textarea
-                value={replyText}
-                onChange={(e) => setReplyText(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === "Enter" && e.ctrlKey) {
-                    handleSendReply();
-                  }
-                }}
-                placeholder="Type your reply..."
-                rows={2}
-                className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
-              />
-              <button
-                onClick={handleSendReply}
-                disabled={!replyText.trim()}
-                className="p-2 hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed bg-blue-600 text-white rounded-lg transition-colors flex-shrink-0"
-              >
-                <Send size={20} />
-              </button>
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.08),_transparent_35%)] dark:bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.14),_transparent_35%)]">
+                {messages.map((msg) => (
+                  <div
+                    key={msg.id}
+                    className={`flex ${msg.sender === "admin" ? "justify-end" : "justify-start"}`}
+                  >
+                    <div
+                      className={`max-w-[78%] px-4 py-2.5 rounded-2xl shadow-sm ${
+                        msg.sender === "admin"
+                          ? "bg-emerald-500 text-white rounded-br-sm"
+                          : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-sm border border-gray-100 dark:border-gray-700"
+                      }`}
+                    >
+                      <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
+                      <div
+                        className={`flex items-center justify-end gap-1 mt-1 ${
+                          msg.sender === "admin"
+                            ? "text-emerald-50"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        <span className="text-[10px]">{msg.time}</span>
+                        {msg.sender === "admin" &&
+                          (msg.status === "read" ? (
+                            <CheckCheck className="w-3 h-3" />
+                          ) : (
+                            <Check className="w-3 h-3" />
+                          ))}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+
+              <Card className="m-3 p-2 border border-border shadow-sm">
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void handleSendMessage();
+                      }
+                    }}
+                    placeholder="Type a message..."
+                  />
+                  <Button
+                    onClick={handleSendMessage}
+                    disabled={!messageInput.trim() || isSending}
+                    className="h-9"
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
+                </div>
+              </Card>
+            </>
+          ) : (
+            <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+              Select a conversation or start a new chat.
             </div>
-          </div>
-        </Card>
-      )}
+          )}
+        </div>
+      </div>
     </div>
   );
 }

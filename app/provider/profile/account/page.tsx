@@ -2,8 +2,8 @@
 
 import type React from "react"
 
-import { useMemo, useState } from "react"
-import { ArrowLeft, Save, User, Mail, MapPin } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { ArrowLeft, LocateFixed, Save, User, Mail, MapPin } from "lucide-react"
 import Link from "next/link"
 import { useLocalization } from "@/lib/hooks/useLocalization"
 import { useAuthContext } from "@/lib/auth-context"
@@ -30,6 +30,35 @@ export default function MyAccountPage() {
   })
 
   const [isSaving, setIsSaving] = useState(false)
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false)
+  const [locationMessage, setLocationMessage] = useState("")
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    let cancelled = false
+
+    const loadSavedLocation = async () => {
+      try {
+        const response = await fetch("/api/auth/location", { cache: "no-store" })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || cancelled) return
+
+        const savedLocation = String(payload?.data?.location || "")
+        if (!savedLocation) return
+
+        setFormData((prev) => ({ ...prev, city: savedLocation }))
+      } catch {
+        // Keep account page usable when location history is unavailable.
+      }
+    }
+
+    loadSavedLocation()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -38,9 +67,66 @@ export default function MyAccountPage() {
 
   const handleSave = async () => {
     setIsSaving(true)
+    if (formData.city.trim()) {
+      await fetch("/api/auth/location", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          location: formData.city.trim(),
+          latitude: 0,
+          longitude: 0,
+          accuracy: null,
+        }),
+      }).catch(() => {
+        // Keep manual profile save non-blocking.
+      })
+    }
     await new Promise((resolve) => setTimeout(resolve, 1000))
     setIsSaving(false)
     alert("Profile updated successfully!")
+  }
+
+  const detectAndSaveLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationMessage("Geolocation is not supported in this browser.")
+      return
+    }
+
+    setIsDetectingLocation(true)
+    setLocationMessage("Fetching your current location...")
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const latitude = Number(position.coords.latitude.toFixed(6))
+        const longitude = Number(position.coords.longitude.toFixed(6))
+        const accuracy = Number(position.coords.accuracy.toFixed(0))
+        const location = `${latitude}, ${longitude}`
+
+        setFormData((prev) => ({ ...prev, city: location }))
+
+        try {
+          const response = await fetch("/api/auth/location", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ location, latitude, longitude, accuracy }),
+          })
+          const payload = await response.json()
+          if (!response.ok || !payload?.ok) {
+            throw new Error(payload?.error || "Failed to save location")
+          }
+          setLocationMessage("Location captured and saved.")
+        } catch (error) {
+          setLocationMessage(error instanceof Error ? error.message : "Failed to save location.")
+        } finally {
+          setIsDetectingLocation(false)
+        }
+      },
+      () => {
+        setLocationMessage("Unable to fetch location.")
+        setIsDetectingLocation(false)
+      },
+      { enableHighAccuracy: true, timeout: 15000 },
+    )
   }
 
   return (
@@ -134,6 +220,20 @@ export default function MyAccountPage() {
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white hover:bg-gray-50 dark:hover:bg-gray-600 inline-flex items-center"
+                    onClick={detectAndSaveLocation}
+                    disabled={isDetectingLocation}
+                  >
+                    <LocateFixed className="w-4 h-4 mr-2" />
+                    {isDetectingLocation ? "Detecting..." : "Use Current Location"}
+                  </button>
+                  {locationMessage && (
+                    <p className="text-xs text-gray-600 dark:text-gray-400">{locationMessage}</p>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Country</label>

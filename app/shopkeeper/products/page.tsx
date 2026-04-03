@@ -39,6 +39,22 @@ import { useAuthContext } from "@/lib/auth-context";
 import Link from "next/link";
 import Image from "next/image";
 
+const DEFAULT_PRODUCT_CATEGORIES = [
+  "Fresh Produce",
+  "Groceries",
+  "Hardware",
+  "Electronics",
+  "Plumbing Supplies",
+  "Electrical Supplies",
+  "Building Materials",
+  "Tools",
+  "Household",
+  "Fashion",
+  "Beauty & Cosmetics",
+  "Health & Wellness",
+  "Other",
+];
+
 export default function ShopkeeperProductsPage() {
   const { user } = useAuthContext();
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -64,14 +80,18 @@ export default function ShopkeeperProductsPage() {
     description: "",
     image: "",
   });
+  const [productsList, setProductsList] = useState<any[]>([]);
   const categories = [
     "all",
-    "Electronics",
-    "Appliances",
-    "Hardware",
-    "Furniture",
+    ...Array.from(
+      new Set([
+        ...DEFAULT_PRODUCT_CATEGORIES,
+        ...productsList
+          .map((product) => String(product?.category || "").trim())
+          .filter(Boolean),
+      ]),
+    ),
   ];
-  const [productsList, setProductsList] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -378,7 +398,7 @@ export default function ShopkeeperProductsPage() {
                 onChange={(e) => setCategoryFilter(e.target.value)}
                 className="px-3 py-2 bg-background border border-input rounded-md text-sm"
               >
-                {categories.map((cat) => (
+                {(categories.length > 1 ? categories : DEFAULT_PRODUCT_CATEGORIES).map((cat) => (
                   <option key={cat} value={cat}>
                     {cat === "all" ? "All Categories" : cat}
                   </option>
@@ -667,10 +687,13 @@ export default function ShopkeeperProductsPage() {
                 className="w-full px-3 py-2 border border-input rounded-md bg-background"
               >
                 <option value="">Select category</option>
-                <option value="Electronics">Electronics</option>
-                <option value="Appliances">Appliances</option>
-                <option value="Hardware">Hardware</option>
-                <option value="Furniture">Furniture</option>
+                {(categories.length > 1 ? categories : DEFAULT_PRODUCT_CATEGORIES)
+                  .filter((category) => category !== "all")
+                  .map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
               </select>
             </div>
 
@@ -815,10 +838,13 @@ export default function ShopkeeperProductsPage() {
                 className="w-full px-3 py-2 border border-input rounded-md bg-background"
               >
                 <option value="">Select category</option>
-                <option value="Electronics">Electronics</option>
-                <option value="Appliances">Appliances</option>
-                <option value="Hardware">Hardware</option>
-                <option value="Furniture">Furniture</option>
+                {(categories.length > 1 ? categories : DEFAULT_PRODUCT_CATEGORIES)
+                  .filter((category) => category !== "all")
+                  .map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
               </select>
             </div>
 

@@ -18,6 +18,7 @@ async function main() {
   await prisma.admin.deleteMany()
   await prisma.wallet.deleteMany()
   await prisma.service.deleteMany()
+  await prisma.virtualGift.deleteMany()
   await prisma.notificationLog.deleteMany()
   await prisma.authLog.deleteMany()
   await prisma.user.deleteMany()
@@ -36,7 +37,28 @@ async function main() {
   // 1b. Role-specific profile table for Admin.
   await prisma.admin.create({ data: { userId: adminUser.id } })
 
-  console.log('Seeding completed. Only admin@saji.app remains.')
+  // 2. Seed Virtual Gifts
+  const gifts = [
+    { name: 'Thumbs Up', icon: '👍', price: 10 },
+    { name: 'Clap', icon: '👏', price: 20 },
+    { name: 'Heart', icon: '❤️', price: 50 },
+    { name: 'Fire', icon: '🔥', price: 100 },
+    { name: 'Star', icon: '⭐', price: 200 },
+    { name: 'Diamond', icon: '💎', price: 500 },
+    { name: 'Crown', icon: '👑', price: 1000 },
+    { name: 'Rocket', icon: '🚀', price: 2000 },
+  ]
+
+  for (const gift of gifts) {
+    await prisma.virtualGift.create({
+      data: {
+        ...gift,
+        isActive: true,
+      },
+    })
+  }
+
+  console.log('Seeding completed: Admin user and 8 virtual gifts created.')
 }
 
 main()

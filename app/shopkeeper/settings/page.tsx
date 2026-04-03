@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { 
   Bell, Lock, User, CreditCard, Shield, Eye, EyeOff,
   ChevronRight, Save, AlertCircle, CheckCircle2, Mail, Phone, MapPin
@@ -16,15 +16,16 @@ export default function ShopkeeperSettingsPage() {
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [showSaveSuccess, setShowSaveSuccess] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([])
 
   const [settings, setSettings] = useState({
-    shopName: "SAJI Shop Kenya",
-    businessRegistration: "KES-12345-67890",
-    contactEmail: "shop@sajishop.com",
-    contactPhone: "+254 712 345 678",
-    shopLocation: "Westlands, Nairobi",
-    businessDescription: "Premium electronics and home appliances",
-    businessCategory: "Electronics & Appliances",
+    shopName: "",
+    businessRegistration: "",
+    contactEmail: "",
+    contactPhone: "",
+    shopLocation: "",
+    businessDescription: "",
+    businessCategory: "",
     
     emailNotifications: true,
     smsNotifications: true,
@@ -38,6 +39,41 @@ export default function ShopkeeperSettingsPage() {
     deviceManagement: true,
     apiKeys: true,
   })
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const response = await fetch("/api/shopkeeper/settings", {
+          cache: "no-store",
+        })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !payload?.data) return
+        setSettings((prev) => ({ ...prev, ...payload.data }))
+      } catch {
+        // keep empty defaults when settings cannot be loaded
+      }
+    }
+
+    const loadCategories = async () => {
+      try {
+        const response = await fetch("/api/shopkeeper/register-options", {
+          cache: "no-store",
+        })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !payload?.data) return
+        setCategoryOptions(
+          Array.isArray(payload.data.categories)
+            ? payload.data.categories.map((item: unknown) => String(item)).filter(Boolean)
+            : [],
+        )
+      } catch {
+        setCategoryOptions([])
+      }
+    }
+
+    loadSettings()
+    loadCategories()
+  }, [])
 
   const handleSaveChanges = () => {
     setShowSaveSuccess(true)
@@ -123,12 +159,17 @@ export default function ShopkeeperSettingsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Business Category</label>
-                    <select className="w-full px-3 py-2 border border-input rounded-md bg-background">
-                      <option>Electronics & Appliances</option>
-                      <option>Fashion & Clothing</option>
-                      <option>Home & Garden</option>
-                      <option>Sports & Outdoors</option>
-                      <option>Other</option>
+                    <select
+                      value={settings.businessCategory}
+                      onChange={(e) => setSettings({ ...settings, businessCategory: e.target.value })}
+                      className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                    >
+                      <option value="">Select category</option>
+                      {categoryOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>

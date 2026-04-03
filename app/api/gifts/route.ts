@@ -1,22 +1,25 @@
 import { NextRequest, NextResponse } from "next/server"
+import { db } from "@/lib/server/db"
 
-export async function GET(req: NextRequest) {
+const prismaDb: any = db
+
+export async function GET(_req: NextRequest) {
   try {
-    // Virtual gifts/coins with pricing
-    const gifts = [
-      { id: 1, name: "Thumbs Up", icon: "👍", price: 10 },
-      { id: 2, name: "Clap", icon: "👏", price: 20 },
-      { id: 3, name: "Heart", icon: "❤️", price: 50 },
-      { id: 4, name: "Fire", icon: "🔥", price: 100 },
-      { id: 5, name: "Star", icon: "⭐", price: 200 },
-      { id: 6, name: "Diamond", icon: "💎", price: 500 },
-      { id: 7, name: "Crown", icon: "👑", price: 1000 },
-      { id: 8, name: "Rocket", icon: "🚀", price: 2000 },
-    ]
+    // Fetch virtual gifts from database
+    const gifts = await prismaDb.virtualGift.findMany({
+      select: {
+        id: true,
+        name: true,
+        icon: true,
+        price: true,
+      },
+      orderBy: { price: "asc" },
+    })
 
+    // If no gifts found, return empty array (will be loaded later)
     return NextResponse.json({
       ok: true,
-      data: gifts,
+      data: gifts || [],
     })
   } catch (error) {
     console.error("Virtual gifts error:", error)

@@ -18,7 +18,7 @@ interface Transaction {
 
 export function CustomerWalletPage() {
   const { currency } = useLocalization()
-  const { user } = useAuthContext()
+  const { user, isAuthenticated, isLoading, logout } = useAuthContext()
   const [showBalance, setShowBalance] = useState(true)
   const [showAddMoney, setShowAddMoney] = useState(false)
   const [showWithdraw, setShowWithdraw] = useState(false)
@@ -40,11 +40,26 @@ export function CustomerWalletPage() {
       .reduce((sum, txn) => sum + Math.abs(txn.amount), 0)
   }, [transactions])
 
+  const handleUnauthorized = useCallback(async () => {
+    await logout()
+  }, [logout])
+
   const loadWallet = useCallback(async () => {
+    if (isLoading || !isAuthenticated || !user?.id) {
+      setIsLoadingWallet(false)
+      return
+    }
+
     setIsLoadingWallet(true)
     try {
       const response = await fetch("/api/wallet", { cache: "no-store" })
       const payload = await response.json()
+
+      if (response.status === 401) {
+        await handleUnauthorized()
+        return
+      }
+
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.error || "Failed to load wallet")
       }
@@ -68,13 +83,13 @@ export function CustomerWalletPage() {
     } finally {
       setIsLoadingWallet(false)
     }
-  }, [])
+  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id])
 
   useEffect(() => {
-    if (user?.id) {
+    if (!isLoading && isAuthenticated && user?.id) {
       loadWallet()
     }
-  }, [user?.id])
+  }, [isAuthenticated, isLoading, loadWallet, user?.id])
 
   useEffect(() => {
     if (showAddMoney && !mpesaPhone && user?.phone) {
@@ -164,6 +179,12 @@ export function CustomerWalletPage() {
         }),
       })
       const payload = await response.json()
+
+      if (response.status === 401) {
+        await handleUnauthorized()
+        return
+      }
+
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.error || "Failed to add funds")
       }
@@ -199,6 +220,12 @@ export function CustomerWalletPage() {
         body: JSON.stringify({ action: "withdraw", amount, method: "mpesa" }),
       })
       const payload = await response.json()
+
+      if (response.status === 401) {
+        await handleUnauthorized()
+        return
+      }
+
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.error || "Failed to withdraw")
       }

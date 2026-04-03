@@ -82,6 +82,38 @@ export async function GET() {
         timestamp: "Now",
       }));
 
+    const emergencyKeywords = [
+      "emergency",
+      "burst",
+      "pipe",
+      "outage",
+      "leak",
+      "flood",
+      "urgent",
+      "fire",
+      "lock",
+      "repair",
+    ];
+
+    const emergencyService =
+      services.find((service: any) => {
+        const searchable = [service.name, service.category, service.description]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return emergencyKeywords.some((keyword) => searchable.includes(keyword));
+      }) || services[0] || null;
+
+    const emergencyAlert = emergencyService
+      ? {
+          title: emergencyService.name || "Emergency Service",
+          category: emergencyService.category || "General",
+          message:
+            emergencyService.description?.slice(0, 80) ||
+            "Fast response team available now",
+        }
+      : null;
+
     return NextResponse.json({
       ok: true,
       data: {
@@ -90,6 +122,7 @@ export async function GET() {
         serviceCategories: categories,
         projectStories,
         liveExperts,
+        emergencyAlert,
       },
     });
   } catch (error) {

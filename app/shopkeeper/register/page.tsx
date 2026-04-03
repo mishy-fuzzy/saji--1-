@@ -2,7 +2,7 @@
 
 import React from "react"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { 
   Store, ChevronRight, ChevronLeft, Upload, MapPin, Phone, Mail, User, Building2,
   FileText, Camera, CheckCircle2, Clock, AlertCircle, Eye, EyeOff
@@ -14,8 +14,13 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import Link from "next/link"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
+import { useAuthContext } from "@/lib/auth-context"
+import { LoadingScreen } from "@/components/loading-screen"
 
 export default function ShopkeeperRegistrationPage() {
+  const router = useRouter()
+  const { user, isLoading, isAuthenticated, login } = useAuthContext()
   const [step, setStep] = useState(1)
   const [showPassword, setShowPassword] = useState(false)
   const [formData, setFormData] = useState({
@@ -44,25 +49,63 @@ export default function ShopkeeperRegistrationPage() {
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [categories, setCategories] = useState<string[]>([])
+  const [counties, setCounties] = useState<string[]>([])
 
-  const categories = [
-    "Electronics & Appliances",
-    "Hardware & Tools",
-    "Building Materials",
-    "Plumbing Supplies",
-    "Electrical Supplies",
-    "Furniture",
-    "Home Decor",
-    "Kitchen & Bathroom",
-    "Solar & Energy",
-    "Paint & Finishes",
-    "Other"
-  ]
+  useEffect(() => {
+    if (isLoading) return
 
-  const counties = [
-    "Nairobi", "Mombasa", "Kisumu", "Nakuru", "Eldoret", "Kiambu", 
-    "Machakos", "Nyeri", "Meru", "Kakamega"
-  ]
+    if (!isAuthenticated || !user) {
+      router.replace("/auth/login?role=shopkeeper&next=/shopkeeper/register")
+      return
+    }
+
+    const role = String(user.role || "").toLowerCase()
+    if (role !== "shopkeeper") {
+      router.replace("/")
+      return
+    }
+
+    if (user.shopkeeperRegistrationComplete) {
+      router.replace("/shopkeeper")
+      return
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      fullName: prev.fullName || String(user.name || ""),
+      email: prev.email || String(user.email || ""),
+      phone: prev.phone || String(user.phone || ""),
+    }))
+  }, [isLoading, isAuthenticated, user, router])
+
+  useEffect(() => {
+    const loadOptions = async () => {
+      try {
+        const response = await fetch("/api/shopkeeper/register-options", {
+          cache: "no-store",
+        })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !payload?.data) return
+
+        setCategories(
+          Array.isArray(payload.data.categories)
+            ? payload.data.categories.map((item: unknown) => String(item)).filter(Boolean)
+            : [],
+        )
+        setCounties(
+          Array.isArray(payload.data.counties)
+            ? payload.data.counties.map((item: unknown) => String(item)).filter(Boolean)
+            : [],
+        )
+      } catch {
+        setCategories([])
+        setCounties([])
+      }
+    }
+
+    loadOptions()
+  }, [])
 
   const handleImageUpload = (field: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -86,18 +129,29 @@ export default function ShopkeeperRegistrationPage() {
       return
     }
 
-    // Final submission - call the registration API
+    // Final submission - call the protected registration API
     setIsSubmitting(true)
     try {
-      const response = await fetch("/api/auth/signup", {
+      const response = await fetch("/api/shopkeeper/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: formData.fullName,
+          fullName: formData.fullName,
           email: formData.email,
           phone: formData.phone,
-          password: formData.password,
-          role: "shopkeeper",
+          shopName: formData.shopName,
+          shopCategory: formData.shopCategory,
+          shopDescription: formData.shopDescription,
+          county: formData.county,
+          town: formData.town,
+          streetAddress: formData.streetAddress,
+          buildingName: formData.buildingName,
+          idNumber: formData.idNumber,
+          kraPIN: formData.kraPIN,
+          idFront: formData.idFront,
+          idBack: formData.idBack,
+          businessPermit: formData.businessPermit,
+          shopLogo: formData.shopLogo,
         }),
       })
 
@@ -107,14 +161,26 @@ export default function ShopkeeperRegistrationPage() {
         throw new Error(payload?.error || "Registration failed")
       }
 
-      // Also store shop details in local storage or send to another endpoint
-      // For now, just mark as submitted
+      try {
+        const meResponse = await fetch("/api/auth/me", { cache: "no-store" })
+        const mePayload = await meResponse.json()
+        if (meResponse.ok && mePayload?.ok && mePayload?.data) {
+          login(mePayload.data)
+        }
+      } catch {
+        // Continue even if auth sync fails, registration has already been saved.
+      }
+
       setIsSubmitting(false)
       setSubmitted(true)
     } catch (error) {
       setIsSubmitting(false)
       alert(error instanceof Error ? error.message : "Registration failed")
     }
+  }
+
+  if (isLoading || !isAuthenticated || !user || String(user.role || "").toLowerCase() !== "shopkeeper") {
+    return <LoadingScreen />
   }
 
   const isStepValid = () => {
@@ -315,7 +381,7 @@ export default function ShopkeeperRegistrationPage() {
                 <Input 
                   value={formData.shopName}
                   onChange={(e) => setFormData(prev => ({ ...prev, shopName: e.target.value }))}
-                  placeholder="e.g., Hotpoint Electronics"
+                  placeholder="Enter your shop name"
                   className="mt-1.5"
                 />
               </div>

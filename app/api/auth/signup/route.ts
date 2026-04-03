@@ -73,6 +73,35 @@ async function createRoleProfile(tx: any, role: string, userId: string) {
   // shopkeeper currently uses user role only and no dedicated profile table.
 }
 
+async function attachReferralIfProvided(tx: any, data: {
+  referredId: string;
+  referrerIdRaw?: string;
+}) {
+  const referrerId = String(data.referrerIdRaw || "").trim();
+  if (!referrerId || referrerId === data.referredId) {
+    return;
+  }
+
+  const referrer = await tx.user.findUnique({
+    where: { id: referrerId },
+    select: { id: true },
+  });
+
+  if (!referrer) {
+    return;
+  }
+
+  await tx.referral.upsert({
+    where: { referredId: data.referredId },
+    update: { referrerId: referrer.id },
+    create: {
+      referrerId: referrer.id,
+      referredId: data.referredId,
+      status: "pending",
+    },
+  });
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -82,6 +111,7 @@ export async function POST(request: Request) {
       .toLowerCase();
     const phone = String(body?.phone || "").trim();
     const password = String(body?.password || "");
+    const referrerIdRaw = String(body?.referrerId || "");
     const roleRaw = String(body?.role || "customer")
       .trim()
       .toLowerCase();
@@ -182,6 +212,10 @@ export async function POST(request: Request) {
           });
 
       await createRoleProfile(tx, user.role, user.id);
+      await attachReferralIfProvided(tx, {
+        referredId: user.id,
+        referrerIdRaw,
+      });
       return user;
     });
 

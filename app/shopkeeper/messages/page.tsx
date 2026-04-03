@@ -16,6 +16,7 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useSearchParams } from "next/navigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +51,7 @@ function toTime(value: string | Date): string {
 }
 
 export default function ShopkeeperMessagesPage() {
+  const searchParams = useSearchParams();
   const [activeChat, setActiveChat] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
@@ -62,6 +64,13 @@ export default function ShopkeeperMessagesPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const customerId = searchParams.get("customer");
+    if (customerId) {
+      setActiveChat(customerId);
+    }
+  }, [searchParams]);
 
   const selectedChat = useMemo(
     () => conversations.find((c) => c.id === activeChat) || null,

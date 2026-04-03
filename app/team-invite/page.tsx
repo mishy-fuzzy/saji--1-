@@ -34,12 +34,18 @@ export default function TeamInvitePage() {
           return;
         }
 
+        const data = await response.json().catch(() => ({}));
+        const nextLoginUrl =
+          typeof data?.data?.loginUrl === "string" && data.data.loginUrl
+            ? data.data.loginUrl
+            : "/team-login";
+
         setStatus("success");
         setMessage("Invitation accepted! Redirecting...");
 
         // Redirect after short delay
         setTimeout(() => {
-          window.location.href = "/team-login";
+          window.location.href = nextLoginUrl;
         }, 2000);
       } catch (err) {
         setStatus("error");

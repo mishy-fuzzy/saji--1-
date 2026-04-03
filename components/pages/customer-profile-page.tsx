@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthContext } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import Link from "next/link";
 import {
   Edit,
+  LocateFixed,
   MapPin,
   Star,
   Shield,
@@ -37,7 +38,7 @@ interface WalletSummary {
 }
 
 export function CustomerProfilePage() {
-  const { user, logout } = useAuthContext();
+  const { user, logout, isAuthenticated, isLoading } = useAuthContext();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const profileImageInputRef = useRef<HTMLInputElement>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -50,9 +51,12 @@ export function CustomerProfilePage() {
     name: user?.name || "",
     email: user?.email || "",
     phone: user?.phone || "",
+    location: "",
     bio: "",
   });
   const [formData, setFormData] = useState({ ...savedData });
+  const [isDetectingLocation, setIsDetectingLocation] = useState(false);
+  const [locationMessage, setLocationMessage] = useState("");
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [showAddressForm, setShowAddressForm] = useState(false);
   const [newAddress, setNewAddress] = useState({ label: "", address: "" });
@@ -62,12 +66,17 @@ export function CustomerProfilePage() {
     totalSpent: 0,
   });
 
+  const handleUnauthorized = useCallback(async () => {
+    await logout();
+  }, [logout]);
+
   useEffect(() => {
     setSavedData((current) => {
       const nextData = {
         name: user?.name || "",
         email: user?.email || "",
         phone: user?.phone || "",
+        location: current.location,
         bio: current.bio,
       };
       setFormData(nextData);
@@ -76,11 +85,56 @@ export function CustomerProfilePage() {
   }, [user?.email, user?.name, user?.phone]);
 
   useEffect(() => {
+    if (isLoading || !isAuthenticated || !user?.id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSavedLocation = async () => {
+      try {
+        const response = await fetch("/api/auth/location", { cache: "no-store" });
+
+        if (response.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
+
+        const payload = await response.json();
+        if (!response.ok || !payload?.ok || cancelled) return;
+
+        const location = String(payload?.data?.location || "");
+        if (!location) return;
+
+        setSavedData((current) => ({ ...current, location }));
+        setFormData((current) => ({ ...current, location }));
+      } catch {
+        // Keep profile usable when location fetch fails.
+      }
+    };
+
+    loadSavedLocation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id]);
+
+  useEffect(() => {
     const loadWalletSummary = async () => {
-      if (!user?.id) return;
+      if (isLoading || !isAuthenticated || !user?.id) {
+        setWalletSummary({ balance: 0, totalServices: 0, totalSpent: 0 });
+        return;
+      }
 
       try {
         const response = await fetch("/api/wallet", { cache: "no-store" });
+
+        if (response.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
+
         const payload = await response.json();
         if (!response.ok || !payload?.ok) return;
 
@@ -95,7 +149,7 @@ export function CustomerProfilePage() {
     };
 
     loadWalletSummary();
-  }, [user?.id]);
+  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -161,6 +215,58 @@ export function CustomerProfilePage() {
       icon: Star,
     },
   ];
+
+  const detectAndSaveLocation = () => {
+    if (!navigator.geolocation) {
+      setLocationMessage("Geolocation is not supported in this browser.");
+      return;
+    }
+
+    setIsDetectingLocation(true);
+    setLocationMessage("Fetching your current location...");
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const latitude = Number(position.coords.latitude.toFixed(6));
+        const longitude = Number(position.coords.longitude.toFixed(6));
+        const accuracy = Number(position.coords.accuracy.toFixed(0));
+        const location = `${latitude}, ${longitude}`;
+
+        setFormData((current) => ({ ...current, location }));
+        setSavedData((current) => ({ ...current, location }));
+
+        try {
+          const response = await fetch("/api/auth/location", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ location, latitude, longitude, accuracy }),
+          });
+
+          if (response.status === 401) {
+            await handleUnauthorized();
+            return;
+          }
+
+          const payload = await response.json();
+          if (!response.ok || !payload?.ok) {
+            throw new Error(payload?.error || "Failed to save location");
+          }
+          setLocationMessage("Location captured and saved.");
+        } catch (error) {
+          setLocationMessage(
+            error instanceof Error ? error.message : "Failed to save location.",
+          );
+        } finally {
+          setIsDetectingLocation(false);
+        }
+      },
+      () => {
+        setLocationMessage("Unable to fetch location.");
+        setIsDetectingLocation(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000 },
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -315,11 +421,59 @@ export function CustomerProfilePage() {
                   rows={2}
                 />
               </div>
+              <div>
+                <label className="text-sm font-medium text-muted-foreground mb-1.5 block">
+                  Location
+                </label>
+                <Input
+                  value={formData.location}
+                  onChange={(e) =>
+                    setFormData({ ...formData, location: e.target.value })
+                  }
+                  placeholder="Not set"
+                  className="rounded-xl"
+                />
+                <div className="mt-2 flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-xl bg-transparent"
+                    onClick={detectAndSaveLocation}
+                    disabled={isDetectingLocation}
+                  >
+                    <LocateFixed className="w-4 h-4 mr-2" />
+                    {isDetectingLocation ? "Detecting..." : "Use Current Location"}
+                  </Button>
+                  {locationMessage && (
+                    <p className="text-xs text-muted-foreground">{locationMessage}</p>
+                  )}
+                </div>
+              </div>
               <div className="flex gap-2 pt-2">
                 <Button
                   className="flex-1 rounded-xl"
-                  onClick={() => {
+                  onClick={async () => {
                     setSavedData(formData);
+                    if (formData.location.trim()) {
+                      const response = await fetch("/api/auth/location", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          location: formData.location.trim(),
+                          latitude: 0,
+                          longitude: 0,
+                          accuracy: null,
+                        }),
+                      }).catch(() => {
+                        // Keep manual profile save non-blocking.
+                        return null;
+                      });
+
+                      if (response?.status === 401) {
+                        await handleUnauthorized();
+                        return;
+                      }
+                    }
                     setIsEditing(false);
                     alert("Profile updated!");
                   }}

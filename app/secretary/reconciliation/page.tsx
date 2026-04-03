@@ -1,134 +1,185 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { AlertCircle, Download, Search } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Download, AlertCircle, CheckCircle, Plus, Edit, Trash2, Eye, X, Search } from "lucide-react"
+
+type ReconciliationRow = {
+  id: string
+  date: string
+  account: string
+  systemBalance: string
+  bankBalance: string
+  variance: string
+  status: "Pending" | "Reconciled" | "Under Review"
+}
+
+type DiscrepancyRow = {
+  id: string
+  date: string
+  description: string
+  amount: string
+  status: string
+  resolution: string
+}
+
+type ReconciliationLine = {
+  type: "in" | "out"
+  description: string
+  date: string
+  amount: string
+}
 
 export default function BankReconciliationPage() {
-  type Reconciliation = {
-    id: string
-    date: string
-    account: string
-    systemBalance: string
-    bankBalance: string
-    variance: string
-    status: "Pending" | "Reconciled" | "Under Review"
-  }
-
-  const [reconciliations, setReconciliations] = useState<Reconciliation[]>([])
-
-  const [discrepancies, setDiscrepancies] = useState<Array<{ id: string; date: string; description: string; amount: string; status: string; resolution: string }>>([])
-
-  const [reconciliationData, setReconciliationData] = useState<Array<{ type: "in" | "out"; description: string; date: string; amount: string }>>([])
-
+  const [reconciliations, setReconciliations] = useState<ReconciliationRow[]>([])
+  const [discrepancies, setDiscrepancies] = useState<DiscrepancyRow[]>([])
+  const [reconciliationData, setReconciliationData] = useState<ReconciliationLine[]>([])
   const [searchTerm, setSearchTerm] = useState("")
-  const [showModal, setShowModal] = useState(false)
-  const [modalMode, setModalMode] = useState<"add" | "edit" | "view">("add")
-  const [selectedReconciliation, setSelectedReconciliation] = useState<Reconciliation | null>(null)
-  const [formData, setFormData] = useState({ account: "", date: "", systemBalance: "", bankBalance: "", variance: "", status: "Pending" })
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  const filteredReconciliations = reconciliations.filter(r =>
-    r.account.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    r.id.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  useEffect(() => {
+    const controller = new AbortController()
 
-  const handleAddReconciliation = () => {
-    setFormData({ account: "", date: "", systemBalance: "", bankBalance: "", variance: "", status: "Pending" })
-    setModalMode("add")
-    setSelectedReconciliation(null)
-    setShowModal(true)
-  }
+    const loadReconciliation = async () => {
+      setIsLoading(true)
+      setError(null)
 
-  const handleViewReconciliation = (rec: Reconciliation) => {
-    setSelectedReconciliation(rec)
-    setFormData(rec)
-    setModalMode("view")
-    setShowModal(true)
-  }
+      try {
+        const response = await fetch("/api/secretary/reconciliation", {
+          cache: "no-store",
+          signal: controller.signal,
+        })
+        const payload = await response.json()
 
-  const handleEditReconciliation = (rec: Reconciliation) => {
-    setSelectedReconciliation(rec)
-    setFormData(rec)
-    setModalMode("edit")
-    setShowModal(true)
-  }
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || "Failed to load reconciliation data")
+        }
 
-  const handleSaveReconciliation = () => {
-    if (modalMode === "add") {
-      const newRec = {
-        id: `REC-${String(reconciliations.length + 1).padStart(3, "0")}`,
-        ...formData
+        setReconciliations(
+          Array.isArray(payload?.data?.reconciliations)
+            ? payload.data.reconciliations.map((row: Partial<ReconciliationRow>) => ({
+                id: String(row.id || ""),
+                date: String(row.date || ""),
+                account: String(row.account || "Payment"),
+                systemBalance: String(row.systemBalance || "KES 0"),
+                bankBalance: String(row.bankBalance || "KES 0"),
+                variance: String(row.variance || "KES 0"),
+                status: (String(row.status || "Pending") as ReconciliationRow["status"]),
+              }))
+            : [],
+        )
+
+        setDiscrepancies(
+          Array.isArray(payload?.data?.discrepancies)
+            ? payload.data.discrepancies.map((row: Partial<DiscrepancyRow>) => ({
+                id: String(row.id || ""),
+                date: String(row.date || ""),
+                description: String(row.description || "Discrepancy"),
+                amount: String(row.amount || "KES 0"),
+                status: String(row.status || "Open"),
+                resolution: String(row.resolution || "Review required"),
+              }))
+            : [],
+        )
+
+        setReconciliationData(
+          Array.isArray(payload?.data?.reconciliationData)
+            ? payload.data.reconciliationData.map((row: Partial<ReconciliationLine>) => ({
+                type: row.type === "out" ? "out" : "in",
+                description: String(row.description || "Transaction"),
+                date: String(row.date || ""),
+                amount: String(row.amount || "KES 0"),
+              }))
+            : [],
+        )
+      } catch (err) {
+        if (controller.signal.aborted) return
+        setError(err instanceof Error ? err.message : "Failed to load reconciliation data")
+        setReconciliations([])
+        setDiscrepancies([])
+        setReconciliationData([])
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false)
+        }
       }
-      setReconciliations([newRec, ...reconciliations])
-      console.log("[v0] New reconciliation created:", newRec)
-    } else if (modalMode === "edit") {
-      setReconciliations(reconciliations.map(r => r.id === selectedReconciliation.id ? { ...r, ...formData } : r))
-      console.log("[v0] Reconciliation updated:", formData)
     }
-    setShowModal(false)
-  }
 
-  const handleDeleteReconciliation = (recId: string) => {
-    if (confirm("Are you sure you want to delete this reconciliation?")) {
-      setReconciliations(reconciliations.filter(r => r.id !== recId))
-      console.log("[v0] Reconciliation deleted:", recId)
+    loadReconciliation()
+    const intervalId = window.setInterval(loadReconciliation, 30000)
+
+    return () => {
+      controller.abort()
+      window.clearInterval(intervalId)
     }
-  }
+  }, [])
 
-  const handleExportReconciliation = () => {
+  const filteredReconciliations = useMemo(() => {
+    return reconciliations.filter((item) =>
+      item.account.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.id.toLowerCase().includes(searchTerm.toLowerCase()),
+    )
+  }, [reconciliations, searchTerm])
+
+  const stats = useMemo(() => {
+    const totalVariance = reconciliations.reduce((sum, item) => sum + (item.status === "Reconciled" ? 0 : Number(item.variance.replace(/[^\d.-]/g, "")) || 0), 0)
+    const reconciled = reconciliations.filter((item) => item.status === "Reconciled").length
+    const percentage = reconciliations.length ? Math.round((reconciled / reconciliations.length) * 100) : 0
+
+    return [
+      { label: "System Balance", value: reconciliations[0]?.systemBalance || "KES 0" },
+      { label: "Bank Balance", value: reconciliations[0]?.bankBalance || "KES 0" },
+      { label: "Total Variance", value: `KES ${Math.abs(totalVariance).toLocaleString()}` },
+      { label: "Reconciled %", value: `${percentage}%` },
+    ]
+  }, [reconciliations])
+
+  const exportReconciliation = () => {
     const data = {
       exportDate: new Date().toISOString(),
-      reconciliations: reconciliations,
-      discrepancies: discrepancies
+      reconciliations,
+      discrepancies,
+      reconciliationData,
     }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
     const url = window.URL.createObjectURL(blob)
-    const a = document.createElement('a')
+    const a = document.createElement("a")
     a.href = url
-    a.download = `reconciliation-${new Date().toISOString().split('T')[0]}.json`
+    a.download = `reconciliation-${new Date().toISOString().split("T")[0]}.json`
     a.click()
     window.URL.revokeObjectURL(url)
-    console.log("[v0] Reconciliation exported successfully")
   }
-
-  const stats = [
-    { label: "System Balance", value: "KES 0" },
-    { label: "Bank Balance", value: "KES 0" },
-    { label: "Total Variance", value: "KES 0" },
-    { label: "Reconciled %", value: "N/A" },
-  ]
 
   return (
     <div className="space-y-8 pb-8">
       <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
         <div>
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Bank Reconciliation</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Reconcile bank statements with system records</p>
+          <p className="text-gray-600 dark:text-gray-400 mt-2">Database-backed reconciliation review for finance operations</p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={handleExportReconciliation} variant="outline" className="bg-transparent gap-2">
-            <Download size={18} />
-            Export
-          </Button>
-          <Button onClick={handleAddReconciliation} className="bg-blue-600 hover:bg-blue-700 gap-2">
-            <Plus size={18} />
-            New
-          </Button>
-        </div>
+        <Button onClick={exportReconciliation} variant="outline" className="bg-transparent gap-2">
+          <Download size={18} />
+          Export
+        </Button>
       </div>
 
-      {/* Stats */}
+      {error ? (
+        <Card className="p-4 border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30 text-red-700 dark:text-red-300 text-sm">
+          Failed to load reconciliation data from the database: {error}
+        </Card>
+      ) : null}
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {stats.map((stat, idx) => (
-          <Card key={idx} className="p-6">
+        {stats.map((stat) => (
+          <Card key={stat.label} className="p-6">
             <p className="text-sm text-muted-foreground mb-2">{stat.label}</p>
             <p className="text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</p>
           </Card>
         ))}
       </div>
 
-      {/* Search */}
       <div className="flex gap-2">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-3 w-5 h-5 text-gray-400" />
@@ -142,7 +193,6 @@ export default function BankReconciliationPage() {
         </div>
       </div>
 
-      {/* Reconciliations Table */}
       <Card className="p-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Account Reconciliations</h2>
         <div className="overflow-x-auto">
@@ -155,61 +205,50 @@ export default function BankReconciliationPage() {
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Bank Balance</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Variance</th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Status</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-              {filteredReconciliations.map(rec => (
-                <tr key={rec.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{rec.id}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{rec.account}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{rec.systemBalance}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{rec.bankBalance}</td>
-                  <td className="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-white">{rec.variance}</td>
-                  <td className="px-6 py-4 text-sm">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      rec.status === "Reconciled" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" :
-                      rec.status === "Pending" ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400" :
-                      "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
-                    }`}>
-                      {rec.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 flex gap-2">
-                    <button
-                      onClick={() => handleViewReconciliation(rec)}
-                      className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
-                    >
-                      <Eye size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleEditReconciliation(rec)}
-                      className="p-2 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/30 rounded-lg transition-colors"
-                    >
-                      <Edit size={18} />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteReconciliation(rec.id)}
-                      className="p-2 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+              {isLoading ? (
+                <tr>
+                  <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                    Loading reconciliation data from the database...
                   </td>
                 </tr>
-              ))}
-              {filteredReconciliations.length === 0 && (
+              ) : filteredReconciliations.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                  <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
                     No reconciliations available.
                   </td>
                 </tr>
+              ) : (
+                filteredReconciliations.map((rec) => (
+                  <tr key={rec.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                    <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{rec.id}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{rec.account}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{rec.systemBalance}</td>
+                    <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{rec.bankBalance}</td>
+                    <td className="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-white">{rec.variance}</td>
+                    <td className="px-6 py-4 text-sm">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          rec.status === "Reconciled"
+                            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                            : rec.status === "Pending"
+                              ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
+                              : "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400"
+                        }`}
+                      >
+                        {rec.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
       </Card>
 
-      {/* Reconciliation Details */}
       <Card className="p-6">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Reconciliation Details</h2>
         <div className="space-y-3">
@@ -225,138 +264,37 @@ export default function BankReconciliationPage() {
               <p className="font-semibold text-gray-900 dark:text-white">{item.amount}</p>
             </div>
           ))}
-          {reconciliationData.length === 0 && (
+          {!reconciliationData.length && !isLoading && (
             <p className="text-sm text-gray-500 dark:text-gray-400">No reconciliation line items available.</p>
           )}
         </div>
       </Card>
 
-      {/* Discrepancies */}
-      {discrepancies.length > 0 && (
-        <Card className="p-6 border-2 border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/10">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
-            <AlertCircle className="w-6 h-6 text-yellow-600" />
-            Discrepancies Found ({discrepancies.length})
-          </h2>
-          <div className="space-y-3">
-            {discrepancies.map((item) => (
-              <div key={item.id} className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">{item.description}</p>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">{item.id} • {item.date} • {item.amount}</p>
-                  <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">Resolution: {item.resolution}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    item.status === "Resolved" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" :
-                    "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
-                  }`}>
-                    {item.status}
-                  </span>
-                </div>
+      <Card className="p-6 border-2 border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/10">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+          <AlertCircle className="w-6 h-6 text-yellow-600" />
+          Discrepancies Found ({discrepancies.length})
+        </h2>
+        <div className="space-y-3">
+          {discrepancies.map((item) => (
+            <div key={item.id} className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 rounded-lg">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">{item.description}</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {item.id} • {item.date} • {item.amount}
+                </p>
+                <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">Resolution: {item.resolution}</p>
               </div>
-            ))}
-          </div>
-        </Card>
-      )}
-
-      {/* Reconciliation Modal */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md">
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  {modalMode === "add" ? "New Reconciliation" : modalMode === "edit" ? "Edit Reconciliation" : "View Reconciliation"}
-                </h2>
-                <button
-                  onClick={() => setShowModal(false)}
-                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                >
-                  <X size={20} className="text-gray-600 dark:text-gray-400" />
-                </button>
-              </div>
-
-              <div className="space-y-3">
-                <div>
-                  <label className="text-sm text-gray-600 dark:text-gray-400">Account</label>
-                  <input
-                    type="text"
-                    value={formData.account}
-                    onChange={(e) => setFormData({ ...formData, account: e.target.value })}
-                    disabled={modalMode === "view"}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600 dark:text-gray-400">Date</label>
-                  <input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                    disabled={modalMode === "view"}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600 dark:text-gray-400">System Balance</label>
-                  <input
-                    type="text"
-                    value={formData.systemBalance}
-                    onChange={(e) => setFormData({ ...formData, systemBalance: e.target.value })}
-                    disabled={modalMode === "view"}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600 dark:text-gray-400">Bank Balance</label>
-                  <input
-                    type="text"
-                    value={formData.bankBalance}
-                    onChange={(e) => setFormData({ ...formData, bankBalance: e.target.value })}
-                    disabled={modalMode === "view"}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600 dark:text-gray-400">Variance</label>
-                  <input
-                    type="text"
-                    value={formData.variance}
-                    onChange={(e) => setFormData({ ...formData, variance: e.target.value })}
-                    disabled={modalMode === "view"}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm text-gray-600 dark:text-gray-400">Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                    disabled={modalMode === "view"}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-                  >
-                    <option>Pending</option>
-                    <option>Under Review</option>
-                    <option>Reconciled</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex gap-3 pt-4">
-                <Button variant="outline" className="flex-1 bg-transparent" onClick={() => setShowModal(false)}>
-                  Cancel
-                </Button>
-                {modalMode !== "view" && (
-                  <Button className="flex-1 bg-blue-600 hover:bg-blue-700" onClick={handleSaveReconciliation}>
-                    Save
-                  </Button>
-                )}
-              </div>
+              <span className="px-3 py-1 rounded-full text-xs font-medium bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400">
+                {item.status}
+              </span>
             </div>
-          </Card>
+          ))}
+          {!discrepancies.length && !isLoading && (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No discrepancies found.</p>
+          )}
         </div>
-      )}
+      </Card>
     </div>
   )
 }

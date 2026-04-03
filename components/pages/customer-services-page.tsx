@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useCallback, useState, useEffect } from "react";
+import { useAuthContext } from "@/lib/auth-context";
 import { useLocalization } from "@/lib/hooks/useLocalization";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -65,8 +66,35 @@ import { format } from "date-fns";
 const EMERGENCY_FEE = 2000;
 const DOWNPAYMENT_PERCENT = 0.25;
 
+const serviceIconMap: Record<string, any> = {
+  plumbing: Droplets,
+  electrical: Zap,
+  cleaning: ShoppingBag,
+  painting: PanelTop,
+  carpentry: Wrench,
+  "ac-repair": Flame,
+  hvac: Flame,
+  landscaping: CloudRain,
+  garden: CloudRain,
+  locksmith: Key,
+};
+
+const emergencyIconMap: Record<string, any> = {
+  burst: Droplets,
+  pipe: Droplets,
+  water: Droplets,
+  electrical: Zap,
+  outage: Zap,
+  gas: Flame,
+  fire: Flame,
+  flood: CloudRain,
+  lock: Key,
+  window: PanelTop,
+};
+
 export function CustomerServicesPage() {
   const { currency } = useLocalization();
+  const { user, isAuthenticated, isLoading, logout } = useAuthContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [favorites, setFavorites] = useState<string[]>([]);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
@@ -93,31 +121,17 @@ export function CustomerServicesPage() {
   const [walletBalance, setWalletBalance] = useState(0);
   const [emergencyBooked, setEmergencyBooked] = useState(false);
   const [allServices, setAllServices] = useState<any[]>([]);
+  const [serviceCategories, setServiceCategories] = useState<any[]>([]);
+  const [emergencyCategories, setEmergencyCategories] = useState<any[]>([]);
   const [isLoadingServices, setIsLoadingServices] = useState(true);
+
+  const handleUnauthorized = useCallback(async () => {
+    await logout();
+  }, [logout]);
 
   const categories = [
     { id: "all", name: "All Services", icon: Grid3X3 },
-    { id: "plumbing", name: "Plumbing", icon: Droplets },
-    { id: "electrical", name: "Electrical", icon: Zap },
-    { id: "cleaning", name: "Cleaning", icon: ShoppingBag },
-    { id: "painting", name: "Painting", icon: PanelTop },
-    { id: "carpentry", name: "Carpentry", icon: Wrench },
-    { id: "ac-repair", name: "AC Repair", icon: Flame },
-    { id: "landscaping", name: "Garden", icon: CloudRain },
-  ];
-
-  const emergencyCategories = [
-    { id: "burst-pipe", label: "Burst Pipe", price: 3500, icon: Droplets },
-    { id: "power-outage", label: "Power Outage", price: 4000, icon: Zap },
-    { id: "gas-leak", label: "Gas Leak", price: 5000, icon: Flame },
-    { id: "flooding", label: "Flooding", price: 4500, icon: CloudRain },
-    { id: "lock-out", label: "Lock Out", price: 2500, icon: Key },
-    {
-      id: "broken-window",
-      label: "Broken Window",
-      price: 3000,
-      icon: PanelTop,
-    },
+    ...serviceCategories,
   ];
 
   const trendingProducts = allServices.slice(0, 4).map((service, index) => ({
@@ -140,42 +154,115 @@ export function CustomerServicesPage() {
     "05:00 PM",
   ];
 
-  const detectLocation = () => {
+  const detectLocation = useCallback(() => {
+    if (isLoading || !isAuthenticated || !user?.id) {
+      setCurrentLocation(null);
+      return;
+    }
+
     setIsLocating(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        () => {
-          setCurrentLocation("Westlands, Nairobi");
+        async (position) => {
+          const latitude = Number(position.coords.latitude.toFixed(6));
+          const longitude = Number(position.coords.longitude.toFixed(6));
+          const accuracy = Number(position.coords.accuracy.toFixed(0));
+          const label = `${latitude}, ${longitude}`;
+
+          setCurrentLocation(label);
+
+          const response = await fetch("/api/auth/location", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              location: label,
+              latitude,
+              longitude,
+              accuracy,
+            }),
+          }).catch(() => {
+            // Keep page usable if location sync fails.
+            return null;
+          });
+
+          if (response?.status === 401) {
+            setIsLocating(false);
+            await handleUnauthorized();
+            return;
+          }
+
           setIsLocating(false);
         },
         () => {
-          setCurrentLocation("Location unavailable");
+          setCurrentLocation((previous) => previous);
           setIsLocating(false);
         },
       );
     } else {
-      setCurrentLocation("Geolocation not supported");
+      setCurrentLocation((previous) => previous);
       setIsLocating(false);
     }
-  };
+  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id]);
+
+  const loadSavedLocation = useCallback(async () => {
+    if (isLoading || !isAuthenticated || !user?.id) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/auth/location", { cache: "no-store" });
+      if (response.status === 401) {
+        await handleUnauthorized();
+        return;
+      }
+
+      const payload = await response.json();
+      const location = String(payload?.data?.location || "").trim();
+      if (location) {
+        setCurrentLocation(location);
+      }
+    } catch {
+      // Keep existing location when saved location lookup fails.
+    }
+  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id]);
+
+  useEffect(() => {
+    loadSavedLocation();
+  }, [loadSavedLocation]);
 
   useEffect(() => {
     detectLocation();
-  }, []);
+  }, [detectLocation]);
 
   useEffect(() => {
+    if (isLoading || !isAuthenticated || !user?.id) {
+      setAllServices([]);
+      setServiceCategories([]);
+      setEmergencyCategories([]);
+      setWalletBalance(0);
+      setIsLoadingServices(false);
+      return;
+    }
+
     let active = true;
 
     const loadMarketplace = async () => {
       try {
         setIsLoadingServices(true);
-        const [servicesRes, walletRes] = await Promise.all([
+        const [servicesRes, walletRes, emergencyRes] = await Promise.all([
           fetch("/api/services", { cache: "no-store" }),
           fetch("/api/wallet", { cache: "no-store" }),
+          fetch("/api/services/emergency", { cache: "no-store" }),
         ]);
+
+        if (servicesRes.status === 401 || walletRes.status === 401 || emergencyRes.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
 
         const servicesPayload = await servicesRes.json();
         const walletPayload = await walletRes.json();
+        const emergencyPayload = await emergencyRes.json();
 
         if (!active) return;
 
@@ -202,12 +289,54 @@ export function CustomerServicesPage() {
           })),
         );
 
+        const dynamicCategories = Array.from(
+          new Set(
+            serviceRows
+              .map((row: any) => String(row.category || "").trim().toLowerCase())
+              .filter(Boolean),
+          ),
+        ).map((category) => ({
+          id: category,
+          name: category
+            .split(/[-_\s]+/)
+            .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+            .join(" "),
+          icon: serviceIconMap[category] || BriefcaseBusiness,
+        }));
+
+        setServiceCategories(dynamicCategories);
+
+        const emergencies = Array.isArray(emergencyPayload?.data)
+          ? emergencyPayload.data
+          : [];
+
+        setEmergencyCategories(
+          emergencies.map((row: any) => {
+            const text = [row.label, row.description, row.id]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+            const iconEntry = Object.entries(emergencyIconMap).find(([key]) =>
+              text.includes(key),
+            );
+            return {
+              id: String(row.id),
+              label: String(row.label || "Emergency Service"),
+              price: Number(row.price || 0),
+              description: String(row.description || "Urgent service"),
+              icon: iconEntry ? iconEntry[1] : AlertTriangle,
+            };
+          }),
+        );
+
         if (walletRes.ok && walletPayload?.ok) {
           setWalletBalance(Number(walletPayload?.data?.balance || 0));
         }
       } catch {
         if (!active) return;
         setAllServices([]);
+        setServiceCategories([]);
+        setEmergencyCategories([]);
       } finally {
         if (active) setIsLoadingServices(false);
       }
@@ -217,7 +346,7 @@ export function CustomerServicesPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id]);
 
   const filteredServices = allServices.filter((service) => {
     const matchesSearch =
@@ -274,6 +403,7 @@ export function CustomerServicesPage() {
     Math.ceil(getEmergencyTotal() * DOWNPAYMENT_PERCENT);
   const hasEnoughForEmergency = () =>
     walletBalance >= getEmergencyDownpayment();
+  const displayLocation = currentLocation || "Anywhere";
 
   const handleEmergencySubmit = () => {
     const dp = getEmergencyDownpayment();
@@ -308,7 +438,7 @@ export function CustomerServicesPage() {
                     <Loader2 className="w-3 h-3 animate-spin" /> Detecting...
                   </span>
                 ) : (
-                  <span>{currentLocation}</span>
+                  <span>{displayLocation}</span>
                 )}
                 <button
                   onClick={detectLocation}
@@ -869,7 +999,7 @@ export function CustomerServicesPage() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Location</span>
                       <span className="text-foreground font-medium">
-                        {currentLocation}
+                        {displayLocation}
                       </span>
                     </div>
                   </div>
@@ -1064,7 +1194,7 @@ export function CustomerServicesPage() {
                         className="bg-transparent rounded-xl"
                         onClick={() => {
                           detectLocation();
-                          setEmergencyLocation(currentLocation || "");
+                          setEmergencyLocation(displayLocation === "Anywhere" ? "" : displayLocation);
                         }}
                       >
                         <Navigation className="w-4 h-4" />
@@ -1086,7 +1216,7 @@ export function CustomerServicesPage() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Location</span>
                       <span className="font-medium truncate ml-4">
-                        {emergencyLocation || currentLocation}
+                        {emergencyLocation || displayLocation}
                       </span>
                     </div>
                   </div>

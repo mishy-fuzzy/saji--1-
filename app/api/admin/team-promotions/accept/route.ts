@@ -21,7 +21,7 @@ function normalizeRole(value: string | null | undefined): string {
 }
 
 function resolveLoginPath(role: string): string {
-  if (role === "subadmin") return "/sub-admin";
+  if (role === "subadmin") return "/subadmin";
   if (role === "secretary") return "/secretary";
   if (role === "agent") return "/agent";
   return "/team-login";

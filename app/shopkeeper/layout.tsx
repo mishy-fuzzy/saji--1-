@@ -5,11 +5,12 @@ import React from "react"
 import { useState, useRef, useEffect } from "react"
 import { 
   Store, Package, ShoppingCart, MessageCircle, Wallet, User, Settings, LogOut, 
-  X, Menu, BarChart3, Bell, Users, Star, Tag, Search, ChevronDown, MoreHorizontal
+  X, Menu, BarChart3, Bell, Users, Star, Tag, Search, ChevronDown, MoreHorizontal, AlertCircle
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useAuthContext } from "@/lib/auth-context"
+import { LoadingScreen } from "@/components/loading-screen"
 
 type ShopNotification = {
   id: string
@@ -42,7 +43,7 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
   const moreRef = useRef<HTMLDivElement>(null)
   const pathname = usePathname()
   const router = useRouter()
-  const { logout } = useAuthContext()
+  const { logout, isLoading, isAuthenticated, user } = useAuthContext()
 
   const isActive = (path: string) => pathname === path || (path !== "/shopkeeper" && pathname.startsWith(path + "/"))
   const isExactActive = (path: string) => pathname === path
@@ -50,9 +51,9 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
   const menuItems = [
     { icon: Store, label: "Dashboard", href: "/shopkeeper" },
     { icon: Package, label: "Products", href: "/shopkeeper/products" },
-    { icon: ShoppingCart, label: "Orders", href: "/shopkeeper/orders", badge: 5 },
+    { icon: ShoppingCart, label: "Orders", href: "/shopkeeper/orders" },
     { icon: BarChart3, label: "Analytics", href: "/shopkeeper/analytics" },
-    { icon: MessageCircle, label: "Messages", href: "/shopkeeper/messages", badge: 2 },
+    { icon: MessageCircle, label: "Messages", href: "/shopkeeper/messages" },
     { icon: Users, label: "Endorsements", href: "/shopkeeper/endorsements" },
     { icon: Wallet, label: "Earnings", href: "/shopkeeper/earnings" },
     { icon: Star, label: "Reviews", href: "/shopkeeper/reviews" },
@@ -65,6 +66,34 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
   const moreNavItems = menuItems.slice(4)
 
   const unreadCount = notifications.filter(n => !n.read).length
+  const isRegisterRoute = pathname === "/shopkeeper/register"
+  const registrationComplete = Boolean(user?.shopkeeperRegistrationComplete)
+  const isNavLocked = !registrationComplete
+
+  useEffect(() => {
+    if (isLoading) return
+
+    if (!isAuthenticated || !user) {
+      router.replace(`/auth/login?role=shopkeeper&next=${encodeURIComponent(pathname || "/shopkeeper")}`)
+      return
+    }
+
+    const role = String(user.role || "").toLowerCase()
+    if (role !== "shopkeeper") {
+      router.replace("/")
+      return
+    }
+
+    const registered = Boolean(user.shopkeeperRegistrationComplete)
+    if (!registered && !isRegisterRoute) {
+      router.replace("/shopkeeper/register")
+      return
+    }
+
+    if (registered && isRegisterRoute) {
+      router.replace("/shopkeeper")
+    }
+  }, [isLoading, isAuthenticated, user, isRegisterRoute, pathname, router])
 
   const handleLogout = () => {
     logout()
@@ -164,16 +193,27 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
     return icons[type] || icons.order
   }
 
+  const shouldShowLoading =
+    isLoading ||
+    !isAuthenticated ||
+    !user ||
+    String(user.role || "").toLowerCase() !== "shopkeeper" ||
+    (!user.shopkeeperRegistrationComplete && !isRegisterRoute)
+
+  if (shouldShowLoading) {
+    return <LoadingScreen />
+  }
+
   return (
     <div className="flex min-h-screen bg-gray-50 dark:bg-gray-900">
-      {/* Mobile Sidebar Toggle */}
-      <button
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors shadow-lg"
-        aria-label="Toggle menu"
-      >
-        {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </button>
+        {/* Mobile Sidebar Toggle */}
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-colors shadow-lg"
+          aria-label="Toggle menu"
+        >
+          {sidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
 
       {/* Sidebar */}
       <aside
@@ -200,25 +240,33 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
             {menuItems.map((item) => {
               const IconComponent = item.icon
               const active = item.href === "/shopkeeper" ? isExactActive(item.href) : isActive(item.href)
+              const locked = isNavLocked && item.href !== "/shopkeeper/register"
               return (
-                <Link
+                <button
                   key={item.href}
-                  href={item.href}
-                  onClick={() => setSidebarOpen(false)}
-                  className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm font-medium ${
+                  type="button"
+                  disabled={locked}
+                  onClick={() => {
+                    if (locked) return
+                    router.push(item.href)
+                    setSidebarOpen(false)
+                  }}
+                  title={locked ? "Complete registration to unlock" : undefined}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all text-sm font-medium text-left ${
                     active
                       ? "bg-white/20 shadow-lg"
                       : "hover:bg-white/10"
-                  }`}
+                  } ${locked ? "opacity-60 cursor-not-allowed" : ""}`}
                 >
                   <IconComponent className="w-[18px] h-[18px] flex-shrink-0" />
                   <span className="flex-1">{item.label}</span>
+                  {locked && <AlertCircle className="w-3.5 h-3.5 text-amber-100" />}
                   {item.badge && (
                     <span className="bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center flex-shrink-0">
                       {item.badge}
                     </span>
                   )}
-                </Link>
+                </button>
               )
             })}
           </div>
@@ -226,8 +274,14 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
 
         {/* Footer */}
         <div className="p-3 border-t border-amber-500/40 flex-shrink-0 space-y-1.5">
-          <Link href="/shopkeeper/settings" onClick={() => setSidebarOpen(false)}>
-            <button className="w-full flex items-center justify-center gap-2 bg-white/10 hover:bg-white/20 text-white font-medium py-2.5 rounded-lg text-sm transition-colors">
+          <Link href="/shopkeeper/settings" onClick={(event) => {
+            if (isNavLocked) {
+              event.preventDefault()
+              return
+            }
+            setSidebarOpen(false)
+          }}>
+            <button disabled={isNavLocked} className={`w-full flex items-center justify-center gap-2 text-white font-medium py-2.5 rounded-lg text-sm transition-colors ${isNavLocked ? "bg-white/10 opacity-60 cursor-not-allowed" : "bg-white/10 hover:bg-white/20"}`}>
               <Settings size={16} />
               Settings
             </button>
@@ -334,7 +388,15 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
               </div>
 
               {/* User Avatar */}
-              <Link href="/shopkeeper/profile" className="flex items-center gap-2 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
+              <Link
+                href="/shopkeeper/profile"
+                onClick={(event) => {
+                  if (isNavLocked) {
+                    event.preventDefault()
+                  }
+                }}
+                className={`flex items-center gap-2 p-1.5 rounded-lg transition-colors ${isNavLocked ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-gray-700"}`}
+              >
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-sm font-bold">
                   S
                 </div>
@@ -360,18 +422,25 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
           {bottomNavItems.map((item) => {
             const IconComponent = item.icon
             const active = item.href === "/shopkeeper" ? isExactActive(item.href) : isActive(item.href)
+            const locked = isNavLocked && item.href !== "/shopkeeper/register"
             return (
-              <Link
+              <button
                 key={item.href}
-                href={item.href}
+                type="button"
+                disabled={locked}
+                onClick={() => {
+                  if (locked) return
+                  router.push(item.href)
+                }}
                 className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-lg transition-colors min-w-0 ${
                   active
                     ? "text-amber-600 dark:text-amber-400"
                     : "text-gray-500 dark:text-gray-400"
-                }`}
+                } ${locked ? "opacity-60 cursor-not-allowed" : ""}`}
               >
                 <div className="relative">
                   <IconComponent className="w-5 h-5" />
+                  {locked && <AlertCircle className="w-3 h-3 absolute -top-1 -right-2 text-amber-500" />}
                   {item.badge && (
                     <span className="absolute -top-1.5 -right-2 bg-red-500 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                       {item.badge}
@@ -379,7 +448,7 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
                   )}
                 </div>
                 <span className="text-[10px] font-medium leading-tight">{item.label}</span>
-              </Link>
+              </button>
             )
           })}
 
@@ -404,32 +473,45 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
                   {moreNavItems.map((item) => {
                     const IconComponent = item.icon
                     const active = item.href === "/shopkeeper" ? isExactActive(item.href) : isActive(item.href)
+                    const locked = isNavLocked && item.href !== "/shopkeeper/register"
                     return (
-                      <Link
+                      <button
                         key={item.href}
-                        href={item.href}
-                        onClick={() => setMoreMenuOpen(false)}
+                        type="button"
+                        disabled={locked}
+                        onClick={() => {
+                          if (locked) return
+                          router.push(item.href)
+                          setMoreMenuOpen(false)
+                        }}
                         className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors text-sm ${
                           active
                             ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 font-semibold"
                             : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
-                        }`}
+                        } ${locked ? "w-full opacity-60 cursor-not-allowed" : "w-full"}`}
                       >
                         <IconComponent className="w-4 h-4 flex-shrink-0" />
                         <span>{item.label}</span>
+                        {locked && <AlertCircle className="w-3.5 h-3.5 ml-auto text-amber-500" />}
                         {item.badge && (
                           <span className="ml-auto bg-red-500 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
                             {item.badge}
                           </span>
                         )}
-                      </Link>
+                      </button>
                     )
                   })}
                   <div className="border-t border-gray-200 dark:border-gray-700 mt-1 pt-1">
                     <Link
                       href="/shopkeeper/settings"
-                      onClick={() => setMoreMenuOpen(false)}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                      onClick={(event) => {
+                        if (isNavLocked) {
+                          event.preventDefault()
+                          return
+                        }
+                        setMoreMenuOpen(false)
+                      }}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700 dark:text-gray-300 transition-colors ${isNavLocked ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-50 dark:hover:bg-gray-700"}`}
                     >
                       <Settings className="w-4 h-4 flex-shrink-0" />
                       <span>Settings</span>

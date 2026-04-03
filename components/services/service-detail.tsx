@@ -1,115 +1,24 @@
 "use client"
 
-import { useState } from "react"
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Star, Clock, Shield, CheckCircle, AlertCircle, ChevronRight } from "lucide-react"
-import { BookingModal } from "./booking-modal"
+import { AlertCircle } from "lucide-react"
 
 interface ServiceDetailProps {
   serviceId: string
 }
 
-const mockServiceDetails = {
-  id: "1",
-  name: "Professional Electrical Installation",
-  category: "skilled",
-  provider: {
-    id: 1,
-    name: "John Electrical Services",
-    rating: 4.9,
-    reviews: 128,
-    verified: true,
-    responseTime: "2 hours",
-    joinedYear: 2019,
-    completedJobs: 450,
-  },
-  basePrice: 5000,
-  location: "Nairobi",
-  image: "/electrical-installation.png",
-  description:
-    "Professional electrical installation services for residential and commercial properties. With over 5 years of experience, we provide reliable and safe electrical solutions.",
-  details: {
-    serviceIncludes: [
-      "Site inspection and assessment",
-      "Professional installation",
-      "Testing and certification",
-      "Warranty coverage",
-    ],
-    whatYouNeed: ["Location access", "Clear workspace", "Power access point"],
-    timeline: "2-3 days depending on project scope",
-  },
-  packages: [
-    {
-      id: 1,
-      name: "Basic Installation",
-      price: 5000,
-      description: "Single room or simple installation",
-      scope: ["Up to 5 outlets", "Basic wiring", "Standard fixtures"],
-    },
-    {
-      id: 2,
-      name: "Standard Installation",
-      price: 8000,
-      description: "Full room or apartment",
-      scope: ["Up to 15 outlets", "Comprehensive wiring", "Premium fixtures"],
-    },
-    {
-      id: 3,
-      name: "Premium Installation",
-      price: 15000,
-      description: "Entire house or complex project",
-      scope: ["Unlimited outlets", "Advanced systems", "Smart home ready"],
-    },
-  ],
-  reviews: [
-    {
-      id: 1,
-      author: "Sarah M.",
-      rating: 5,
-      date: "2 weeks ago",
-      text: "Excellent work! Very professional and punctual. Highly recommended!",
-    },
-    {
-      id: 2,
-      author: "David K.",
-      rating: 5,
-      date: "1 month ago",
-      text: "Great service from start to finish. Solved our electrical issues completely.",
-    },
-  ],
-}
-
 export function ServiceDetail({ serviceId }: ServiceDetailProps) {
-  const [selectedPackage, setSelectedPackage] = useState(mockServiceDetails.packages[0])
-  const [isBookingOpen, setIsBookingOpen] = useState(false)
-
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Image */}
-          <div className="rounded-2xl overflow-hidden bg-muted h-96 lg:h-[500px]">
-            <img
-              src={mockServiceDetails.image || "/placeholder.svg"}
-              alt={mockServiceDetails.name}
-              className="w-full h-full object-cover"
-            />
-          </div>
-
-          {/* Title & Basic Info */}
-          <div>
-            <div className="flex items-start justify-between gap-4 mb-4">
-              <div>
-                <h1 className="text-4xl font-bold text-foreground mb-2">{mockServiceDetails.name}</h1>
-                <p className="text-lg text-muted-foreground">{mockServiceDetails.description}</p>
-              </div>
-              <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100 h-fit">
-                {mockServiceDetails.category}
+      <div className="rounded-xl border border-border bg-card p-8 text-center">
+        <AlertCircle className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <h2 className="text-2xl font-bold text-foreground mb-2">Service Details Unavailable</h2>
+        <p className="text-muted-foreground">
+          Service details are loaded from the database. Please browse our available services or contact support for more information.
+        </p>
+      </div>
+    </div>
+  )
+}
               </Badge>
             </div>
 

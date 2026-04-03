@@ -37,6 +37,14 @@ export function CustomerReferralsPage() {
   const [copied, setCopied] = useState(false);
   const referralCode =
     "SAJI-" + (user?.name?.toUpperCase().slice(0, 4) || "USER") + "2024";
+  
+  const getDomainUrl = () => {
+    if (typeof window !== "undefined") {
+      return window.location.origin;
+    }
+    return "https://saji.co.ke";
+  };
+  
   const totalEarned = referrals
     .filter((r) => r.status === "completed")
     .reduce((sum, r) => sum + r.earned, 0);
@@ -50,7 +58,7 @@ export function CustomerReferralsPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const shareMessage = `Join SAJI and get KES ${FRIEND_DISCOUNT} off your first service! Use my referral code: ${referralCode}. Download: https://saji.co.ke`;
+  const shareMessage = `Join SAJI and get KES ${FRIEND_DISCOUNT} off your first service! Use my referral code: ${referralCode}. Download: ${getDomainUrl()}`;
 
   return (
     <div className="min-h-screen bg-background">

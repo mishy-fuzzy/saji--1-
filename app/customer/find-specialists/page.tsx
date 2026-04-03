@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { useAuthContext } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -101,22 +102,9 @@ const vibeBadges: Record<
   },
 };
 
-const skills = [
-  "All",
-  "Electrician",
-  "Plumber",
-  "Carpenter",
-  "Painter",
-  "Cleaner",
-  "Landscaper",
-  "HVAC",
-  "Roofer",
-  "Mason",
-  "Welder",
-];
-
 export default function FindSpecialistsPage() {
   const router = useRouter();
+  const { user, isAuthenticated, isLoading, logout } = useAuthContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSkill, setSelectedSkill] = useState("All");
   const [selectedLocation, setSelectedLocation] = useState("Detecting...");
@@ -129,23 +117,106 @@ export default function FindSpecialistsPage() {
   const [isFavorite, setIsFavorite] = useState(false);
   const [liveSpecialists, setLiveSpecialists] = useState<Specialist[]>([]);
 
+  const handleUnauthorized = useCallback(async () => {
+    await logout();
+  }, [logout]);
+
+  const skills = useMemo(() => {
+    const dynamic = Array.from(
+      new Set(
+        liveSpecialists
+          .flatMap((specialist) => specialist.skills || [])
+          .map((skill) => String(skill || "").trim())
+          .filter(Boolean),
+      ),
+    ).sort((a, b) => a.localeCompare(b));
+
+    return ["All", ...dynamic];
+  }, [liveSpecialists]);
+
   const detectLocation = useCallback(() => {
-    if (!navigator.geolocation) {
+    if (isLoading || !isAuthenticated || !user?.id) {
       setSelectedLocation("Anywhere");
       return;
     }
+
+    if (!navigator.geolocation) {
+      setSelectedLocation((previous) =>
+        previous && previous !== "Detecting..." ? previous : "Anywhere",
+      );
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
-      () => setSelectedLocation("Near You"),
-      () => setSelectedLocation("Anywhere"),
+      async (position) => {
+        const latitude = Number(position.coords.latitude.toFixed(6));
+        const longitude = Number(position.coords.longitude.toFixed(6));
+        const accuracy = Number(position.coords.accuracy.toFixed(0));
+        const locationLabel = `${latitude}, ${longitude}`;
+
+        setSelectedLocation(locationLabel);
+
+        const response = await fetch("/api/auth/location", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            location: locationLabel,
+            latitude,
+            longitude,
+            accuracy,
+          }),
+        }).catch(() => {
+          // Keep UI responsive if location persistence fails.
+          return null;
+        });
+
+        if (response?.status === 401) {
+          await handleUnauthorized();
+        }
+      },
+      () =>
+        setSelectedLocation((previous) =>
+          previous && previous !== "Detecting..." ? previous : "Anywhere",
+        ),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
     );
-  }, []);
+  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id]);
+
+  const loadSavedLocation = useCallback(async () => {
+    if (isLoading || !isAuthenticated || !user?.id) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/auth/location", { cache: "no-store" });
+      if (response.status === 401) {
+        await handleUnauthorized();
+        return;
+      }
+
+      const payload = await response.json();
+      const location = String(payload?.data?.location || "").trim();
+      if (location) {
+        setSelectedLocation(location);
+      }
+    } catch {
+      // Keep current UI state if saved location lookup fails.
+    }
+  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id]);
+
+  useEffect(() => {
+    loadSavedLocation();
+  }, [loadSavedLocation]);
 
   useEffect(() => {
     detectLocation();
   }, [detectLocation]);
 
   useEffect(() => {
+    if (isLoading || !isAuthenticated || !user?.id) {
+      setLiveSpecialists([]);
+      return;
+    }
+
     const loadSpecialists = async () => {
       try {
         const params = new URLSearchParams({
@@ -159,6 +230,12 @@ export default function FindSpecialistsPage() {
             cache: "no-store",
           },
         );
+
+        if (response.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
+
         const payload = await response.json();
         setLiveSpecialists(Array.isArray(payload?.data) ? payload.data : []);
       } catch {
@@ -169,7 +246,7 @@ export default function FindSpecialistsPage() {
     loadSpecialists();
     const intervalId = window.setInterval(loadSpecialists, 25000);
     return () => window.clearInterval(intervalId);
-  }, [searchQuery, selectedSkill, availableOnly]);
+  }, [availableOnly, handleUnauthorized, isAuthenticated, isLoading, searchQuery, selectedSkill, user?.id]);
 
   const filtered = liveSpecialists.filter((s) => {
     if (

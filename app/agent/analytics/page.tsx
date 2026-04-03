@@ -1,68 +1,178 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
+import { Clock, Download, DollarSign, Star, TrendingUp, Users } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Download, TrendingUp, Clock, Star, DollarSign } from "lucide-react"
-import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, AreaChart, Area, PieChart, Pie, Cell
-} from "recharts"
 
-const monthlyPerformance = [
-  { month: "Sep", cases: 85, resolved: 78, satisfaction: 91 },
-  { month: "Oct", cases: 97, resolved: 90, satisfaction: 93 },
-  { month: "Nov", cases: 108, resolved: 101, satisfaction: 92 },
-  { month: "Dec", cases: 115, resolved: 110, satisfaction: 95 },
-  { month: "Jan", cases: 122, resolved: 117, satisfaction: 94 },
-  { month: "Feb", cases: 127, resolved: 122, satisfaction: 96 },
-]
+type DashboardDispute = {
+  id: string
+  customer: string
+  provider: string
+  status: "Open" | "In Progress" | "Resolved"
+  severity: "High" | "Medium" | "Low"
+  amount: string
+  date: string
+  description: string
+  resolution: string
+}
 
-const weeklyResolution = [
-  { day: "Mon", resolved: 6, pending: 2, avgTime: 2.1 },
-  { day: "Tue", resolved: 8, pending: 1, avgTime: 1.8 },
-  { day: "Wed", resolved: 5, pending: 3, avgTime: 2.5 },
-  { day: "Thu", resolved: 7, pending: 2, avgTime: 2.0 },
-  { day: "Fri", resolved: 9, pending: 1, avgTime: 1.6 },
-  { day: "Sat", resolved: 3, pending: 1, avgTime: 3.2 },
-  { day: "Sun", resolved: 2, pending: 0, avgTime: 2.8 },
-]
+type PerformanceMetric = {
+  label: string
+  value: string
+  benchmark: string
+}
 
-const earningsData = [
-  { month: "Sep", earnings: 32000, bonus: 5000 },
-  { month: "Oct", earnings: 35200, bonus: 6200 },
-  { month: "Nov", earnings: 38800, bonus: 7100 },
-  { month: "Dec", earnings: 40100, bonus: 8500 },
-  { month: "Jan", earnings: 42500, bonus: 9000 },
-  { month: "Feb", earnings: 45500, bonus: 10200 },
-]
+type ActivityItem = {
+  type: string
+  description: string
+  time: string
+}
 
-const disputeCategories = [
-  { name: "Payment", value: 42, color: "#3b82f6" },
-  { name: "Quality", value: 28, color: "#f59e0b" },
-  { name: "Delay", value: 18, color: "#10b981" },
-  { name: "Fraud", value: 8, color: "#ef4444" },
-  { name: "Other", value: 4, color: "#8b5cf6" },
-]
-
-const agentComparison = [
-  { name: "You", cases: 127, rating: 4.8, earnings: 45500 },
-  { name: "Sarah", cases: 118, rating: 4.7, earnings: 42100 },
-  { name: "David", cases: 105, rating: 4.6, earnings: 38800 },
-  { name: "Grace", cases: 98, rating: 4.5, earnings: 35200 },
-  { name: "Tom", cases: 87, rating: 4.4, earnings: 31500 },
-]
+type ComparisonAgent = {
+  rank: number
+  name: string
+  cases: number
+  rating: number
+  earnings: number
+}
 
 export default function AgentAnalyticsPage() {
-  const [dateRange, setDateRange] = useState("month")
+  const [dashboardDisputes, setDashboardDisputes] = useState<DashboardDispute[]>([])
+  const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetric[]>([])
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
+  const [comparisonAgents, setComparisonAgents] = useState<ComparisonAgent[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const controller = new AbortController()
+
+    const loadAnalytics = async () => {
+      setIsLoading(true)
+      setError(null)
+
+      try {
+        const [dashboardResponse, comparisonResponse] = await Promise.all([
+          fetch("/api/agent/dashboard", {
+            cache: "no-store",
+            headers: {
+              "x-user-role": "agent",
+            },
+            signal: controller.signal,
+          }),
+          fetch("/api/agent/analytics/comparison", {
+            cache: "no-store",
+            headers: {
+              "x-user-role": "agent",
+            },
+            signal: controller.signal,
+          }),
+        ])
+
+        const [dashboardPayload, comparisonPayload] = await Promise.all([
+          dashboardResponse.json(),
+          comparisonResponse.json(),
+        ])
+
+        if (!dashboardResponse.ok || !dashboardPayload?.ok) {
+          throw new Error(dashboardPayload?.error || "Failed to load agent dashboard data")
+        }
+
+        if (!comparisonResponse.ok || !comparisonPayload?.ok || !Array.isArray(comparisonPayload?.data?.agents)) {
+          throw new Error(comparisonPayload?.error || "Failed to load comparison data")
+        }
+
+        setDashboardDisputes(
+          Array.isArray(dashboardPayload?.disputes)
+            ? dashboardPayload.disputes.map((row: Partial<DashboardDispute>) => ({
+                id: String(row.id || ""),
+                customer: String(row.customer || "Unknown"),
+                provider: String(row.provider || "Unassigned"),
+                status: String(row.status || "Open") as DashboardDispute["status"],
+                severity: String(row.severity || "Low") as DashboardDispute["severity"],
+                amount: String(row.amount || "KES 0"),
+                date: String(row.date || ""),
+                description: String(row.description || "Dispute requires review"),
+                resolution: String(row.resolution || "Pending"),
+              }))
+            : [],
+        )
+
+        setPerformanceMetrics(
+          Array.isArray(dashboardPayload?.performanceMetrics)
+            ? dashboardPayload.performanceMetrics.map((row: Partial<PerformanceMetric>) => ({
+                label: String(row.label || "Metric"),
+                value: String(row.value || "0"),
+                benchmark: String(row.benchmark || "N/A"),
+              }))
+            : [],
+        )
+
+        setRecentActivity(
+          Array.isArray(dashboardPayload?.recentActivity)
+            ? dashboardPayload.recentActivity.map((row: Partial<ActivityItem>) => ({
+                type: String(row.type || "update"),
+                description: String(row.description || "Activity recorded"),
+                time: String(row.time || "Now"),
+              }))
+            : [],
+        )
+
+        setComparisonAgents(
+          comparisonPayload.data.agents.map((row: Partial<ComparisonAgent>) => ({
+            rank: Number(row.rank || 0),
+            name: String(row.name || "Agent"),
+            cases: Number(row.cases || 0),
+            rating: Number(row.rating || 0),
+            earnings: Number(row.earnings || 0),
+          })),
+        )
+      } catch (err) {
+        if (controller.signal.aborted) return
+        const message = err instanceof Error ? err.message : "Failed to load analytics"
+        setError(message)
+        setDashboardDisputes([])
+        setPerformanceMetrics([])
+        setRecentActivity([])
+        setComparisonAgents([])
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    loadAnalytics()
+    const intervalId = window.setInterval(loadAnalytics, 30000)
+
+    return () => {
+      controller.abort()
+      window.clearInterval(intervalId)
+    }
+  }, [])
+
+  const summaryCards = useMemo(() => {
+    const openDisputes = dashboardDisputes.filter((dispute) => dispute.status === "Open").length
+    const inProgress = dashboardDisputes.filter((dispute) => dispute.status === "In Progress").length
+    const resolved = dashboardDisputes.filter((dispute) => dispute.status === "Resolved").length
+
+    return [
+      { icon: TrendingUp, label: "Open Disputes", value: String(openDisputes), sub: "Live queue", color: "text-blue-600" },
+      { icon: Users, label: "Customers Helped", value: performanceMetrics.find((metric) => metric.label === "Cases Handled")?.value || String(dashboardDisputes.length), sub: "Database-backed", color: "text-emerald-600" },
+      { icon: Clock, label: "Pending Queries", value: String(inProgress), sub: "Live queue", color: "text-amber-600" },
+      { icon: Star, label: "Resolved Today", value: String(resolved), sub: "Live queue", color: "text-violet-600" },
+    ]
+  }, [dashboardDisputes, performanceMetrics])
 
   const handleExport = () => {
     const data = {
       exportDate: new Date().toISOString(),
-      period: dateRange,
-      monthlyPerformance,
-      earningsData,
-      disputeCategories,
+      summaryCards,
+      performanceMetrics,
+      recentActivity,
+      comparisonAgents,
+      disputes: dashboardDisputes,
     }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
     const url = window.URL.createObjectURL(blob)
@@ -78,148 +188,148 @@ export default function AgentAnalyticsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">Agent Analytics</h1>
-          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Detailed performance metrics and insights</p>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Real-time performance metrics from the database</p>
         </div>
-        <div className="flex gap-2">
-          {["week", "month", "quarter"].map((range) => (
-            <Button
-              key={range}
-              onClick={() => setDateRange(range)}
-              variant={dateRange === range ? "default" : "outline"}
-              size="sm"
-              className={dateRange === range ? "bg-indigo-600 hover:bg-indigo-700 text-white" : "bg-transparent"}
-            >
-              {range.charAt(0).toUpperCase() + range.slice(1)}
-            </Button>
-          ))}
-          <Button onClick={handleExport} variant="outline" className="bg-transparent gap-2" size="sm">
-            <Download size={16} /> Export
-          </Button>
-        </div>
+        <Button onClick={handleExport} variant="outline" className="bg-transparent gap-2 text-sm">
+          <Download size={16} /> Export
+        </Button>
       </div>
 
-      {/* KPI Cards */}
+      {error ? (
+        <Card className="p-4 border border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/30 text-red-700 dark:text-red-300 text-sm">
+          Failed to load analytics from the database: {error}
+        </Card>
+      ) : null}
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { icon: TrendingUp, label: "Total Cases", value: "127", sub: "+12% this month", color: "text-blue-600" },
-          { icon: Clock, label: "Avg Resolution", value: "2.3h", sub: "-0.5h improvement", color: "text-amber-600" },
-          { icon: Star, label: "Satisfaction", value: "96%", sub: "+2% growth", color: "text-emerald-600" },
-          { icon: DollarSign, label: "Earnings", value: "KES 45.5K", sub: "+18% this period", color: "text-indigo-600" },
-        ].map((s, i) => (
-          <Card key={i} className="p-4 border-0 shadow-sm">
-            <s.icon className={`w-5 h-5 ${s.color} mb-2`} />
-            <p className="text-xs text-gray-500">{s.label}</p>
-            <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{s.value}</p>
-            <p className="text-[10px] text-gray-400">{s.sub}</p>
+        {summaryCards.map((card, index) => (
+          <Card key={index} className="p-4 border-0 shadow-sm">
+            <card.icon className={`w-5 h-5 ${card.color} mb-2`} />
+            <p className="text-xs text-gray-500">{card.label}</p>
+            <p className="text-xl font-bold text-gray-900 dark:text-white mt-1">{card.value}</p>
+            <p className="text-[10px] text-gray-400">{card.sub}</p>
           </Card>
         ))}
       </div>
 
-      {/* Performance Trend - Area Chart */}
-      <Card className="p-4 lg:p-5 border-0 shadow-sm">
-        <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Performance Trend (6 months)</h2>
-        <ResponsiveContainer width="100%" height={280}>
-          <AreaChart data={monthlyPerformance}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="month" stroke="#9ca3af" fontSize={12} />
-            <YAxis stroke="#9ca3af" fontSize={12} />
-            <Tooltip
-              contentStyle={{ backgroundColor: "#1f2937", border: "none", borderRadius: "8px", color: "#fff", fontSize: "12px" }}
-            />
-            <Area type="monotone" dataKey="cases" stroke="#6366f1" fill="#6366f1" fillOpacity={0.1} name="Total Cases" />
-            <Area type="monotone" dataKey="resolved" stroke="#10b981" fill="#10b981" fillOpacity={0.1} name="Resolved" />
-          </AreaChart>
-        </ResponsiveContainer>
-      </Card>
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Weekly Resolution - Bar Chart */}
         <Card className="p-4 lg:p-5 border-0 shadow-sm">
-          <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Weekly Resolution</h2>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={weeklyResolution}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="day" stroke="#9ca3af" fontSize={12} />
-              <YAxis stroke="#9ca3af" fontSize={12} />
-              <Tooltip
-                contentStyle={{ backgroundColor: "#1f2937", border: "none", borderRadius: "8px", color: "#fff", fontSize: "12px" }}
-              />
-              <Bar dataKey="resolved" fill="#6366f1" radius={[6, 6, 0, 0]} name="Resolved" />
-              <Bar dataKey="pending" fill="#f59e0b" radius={[6, 6, 0, 0]} name="Pending" />
-            </BarChart>
-          </ResponsiveContainer>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Performance Metrics</h2>
+          <div className="space-y-3">
+            {isLoading ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Loading performance metrics...</p>
+            ) : performanceMetrics.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No performance metrics found.</p>
+            ) : (
+              performanceMetrics.map((metric) => (
+                <div key={metric.label} className="flex items-center justify-between rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-2">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{metric.label}</p>
+                    <p className="text-[10px] text-gray-500">Benchmark: {metric.benchmark}</p>
+                  </div>
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white">{metric.value}</p>
+                </div>
+              ))
+            )}
+          </div>
         </Card>
 
-        {/* Dispute Categories - Pie Chart */}
         <Card className="p-4 lg:p-5 border-0 shadow-sm">
-          <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Dispute Categories</h2>
-          <div className="flex flex-col sm:flex-row items-center gap-4">
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie
-                  data={disputeCategories}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={3}
-                  dataKey="value"
-                >
-                  {disputeCategories.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{ backgroundColor: "#1f2937", border: "none", borderRadius: "8px", color: "#fff", fontSize: "12px" }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="flex flex-wrap sm:flex-col gap-2">
-              {disputeCategories.map((cat) => (
-                <div key={cat.name} className="flex items-center gap-2 text-xs">
-                  <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
-                  <span className="text-gray-600 dark:text-gray-400">{cat.name}</span>
-                  <span className="font-semibold text-gray-900 dark:text-white">{cat.value}%</span>
+          <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Recent Activity</h2>
+          <div className="space-y-3">
+            {isLoading ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Loading activity...</p>
+            ) : recentActivity.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No recent activity found.</p>
+            ) : (
+              recentActivity.map((activity, index) => (
+                <div key={`${activity.type}-${index}`} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${activity.type === "success" ? "bg-emerald-100 dark:bg-emerald-900/30" : activity.type === "warning" ? "bg-amber-100 dark:bg-amber-900/30" : "bg-blue-100 dark:bg-blue-900/30"}`}>
+                    <TrendingUp className={`w-4 h-4 ${activity.type === "success" ? "text-emerald-600" : activity.type === "warning" ? "text-amber-600" : "text-blue-600"}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">{activity.description}</p>
+                    <p className="text-xs text-gray-500">{activity.time}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
+              ))
+            )}
           </div>
         </Card>
       </div>
 
-      {/* Earnings Trend - Line Chart */}
-      <Card className="p-4 lg:p-5 border-0 shadow-sm">
-        <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Earnings Trend</h2>
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={earningsData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis dataKey="month" stroke="#9ca3af" fontSize={12} />
-            <YAxis stroke="#9ca3af" fontSize={12} tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`} />
-            <Tooltip
-              contentStyle={{ backgroundColor: "#1f2937", border: "none", borderRadius: "8px", color: "#fff", fontSize: "12px" }}
-              formatter={(value: number) => [`KES ${value.toLocaleString()}`, ""]}
-            />
-            <Line type="monotone" dataKey="earnings" stroke="#6366f1" strokeWidth={2} dot={{ r: 4 }} name="Base Earnings" />
-            <Line type="monotone" dataKey="bonus" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} name="Bonus" />
-          </LineChart>
-        </ResponsiveContainer>
-      </Card>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <Card className="p-4 lg:p-5 border-0 shadow-sm">
+          <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Live Disputes</h2>
+          <div className="space-y-3">
+            {isLoading ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">Loading live disputes...</p>
+            ) : dashboardDisputes.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">No disputes assigned to you.</p>
+            ) : (
+              dashboardDisputes.slice(0, 5).map((dispute) => (
+                <div key={dispute.id} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white">{dispute.customer}</p>
+                      <p className="text-[10px] text-gray-500">{dispute.provider} · {dispute.date || "N/A"}</p>
+                    </div>
+                    <span className="text-xs font-semibold text-gray-900 dark:text-white">{dispute.amount}</span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">{dispute.description}</p>
+                  <div className="flex items-center gap-2 mt-2 text-[10px]">
+                    <span className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">{dispute.status}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">{dispute.severity}</span>
+                    <span className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">{dispute.resolution}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </Card>
 
-      {/* Agent Comparison - Horizontal Bar */}
-      <Card className="p-4 lg:p-5 border-0 shadow-sm">
-        <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Agent Comparison</h2>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={agentComparison} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-            <XAxis type="number" stroke="#9ca3af" fontSize={12} />
-            <YAxis dataKey="name" type="category" stroke="#9ca3af" fontSize={12} width={50} />
-            <Tooltip
-              contentStyle={{ backgroundColor: "#1f2937", border: "none", borderRadius: "8px", color: "#fff", fontSize: "12px" }}
-            />
-            <Bar dataKey="cases" fill="#6366f1" radius={[0, 6, 6, 0]} name="Cases Handled" />
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
+        <Card className="p-4 lg:p-5 border-0 shadow-sm">
+          <h2 className="text-base font-bold text-gray-900 dark:text-white mb-4">Agent Comparison</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Rank</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Agent</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Cases</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Rating</th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold text-gray-700 dark:text-gray-300">Earnings</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                      Loading comparison data...
+                    </td>
+                  </tr>
+                ) : comparisonAgents.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-3 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                      No comparison data available.
+                    </td>
+                  </tr>
+                ) : (
+                  comparisonAgents.map((agent) => (
+                    <tr key={`${agent.rank}-${agent.name}`} className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                      <td className="px-3 py-3 text-sm font-semibold text-gray-900 dark:text-white">#{agent.rank}</td>
+                      <td className="px-3 py-3 text-sm text-gray-700 dark:text-gray-300">{agent.name}</td>
+                      <td className="px-3 py-3 text-sm text-gray-700 dark:text-gray-300">{agent.cases}</td>
+                      <td className="px-3 py-3 text-sm text-gray-700 dark:text-gray-300">{agent.rating.toFixed(1)}</td>
+                      <td className="px-3 py-3 text-sm text-gray-700 dark:text-gray-300">KES {agent.earnings.toLocaleString()}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
     </div>
   )
 }

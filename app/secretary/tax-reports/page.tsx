@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Download, FileSpreadsheet, Calendar, Filter, Eye, Printer, ArrowUpRight, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Download, FileSpreadsheet, Eye, Printer, AlertCircle, CheckCircle2 } from "lucide-react"
 
 type TaxReport = {
   id: string
@@ -29,25 +29,113 @@ export default function SecretaryTaxReportsPage() {
   const [filter, setFilter] = useState("all")
   const [typeFilter, setTypeFilter] = useState("all")
   const [localReports, setLocalReports] = useState<TaxReport[]>(reports)
+  const [summary, setSummary] = useState(taxSummary)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  const filtered = localReports.filter(r => {
-    if (filter !== "all" && r.status.toLowerCase() !== filter) return false
-    if (typeFilter !== "all" && r.type !== typeFilter) return false
-    return true
-  })
+  const loadReports = useCallback(async () => {
+    setIsLoading(true)
+    setError(null)
+    try {
+      const response = await fetch("/api/secretary/tax-reports", {
+        cache: "no-store",
+      })
+      const payload = await response.json()
 
-  const handleGenerateReport = () => {
-    const newReport = {
-      id: `TR-${new Date().getFullYear()}-NEW-${String(localReports.length + 1).padStart(2, "0")}`,
-      period: "Current Period",
-      type: "Monthly VAT",
-      status: "Draft",
-      dueDate: "TBD",
-      filedDate: "-",
-      amount: "KES 0",
-      taxDue: "KES 0",
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        throw new Error(payload?.error || "Failed to load tax reports")
+      }
+
+      setLocalReports(
+        Array.isArray(payload.data.reports)
+          ? payload.data.reports.map((item: Partial<TaxReport>) => ({
+              id: String(item.id || ""),
+              period: String(item.period || "N/A"),
+              type: String(item.type || "Monthly VAT"),
+              status: String(item.status || "Draft"),
+              dueDate: String(item.dueDate || "TBD"),
+              filedDate: String(item.filedDate || "-"),
+              amount: String(item.amount || "KES 0"),
+              taxDue: String(item.taxDue || "KES 0"),
+            }))
+          : [],
+      )
+
+      setSummary(
+        Array.isArray(payload.data.summary) && payload.data.summary.length
+          ? payload.data.summary.map((row: any) => ({
+              label: String(row.label || ""),
+              value: String(row.value || ""),
+              change: String(row.change || ""),
+            }))
+          : taxSummary,
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load tax reports"
+      setError(message)
+      setLocalReports([])
+      setSummary(taxSummary)
+    } finally {
+      setIsLoading(false)
     }
-    setLocalReports((prev) => [newReport, ...prev])
+  }, [])
+
+  useEffect(() => {
+    loadReports()
+  }, [loadReports])
+
+  const reportTypes = useMemo(() => {
+    return [
+      "all",
+      ...Array.from(
+        new Set(localReports.map((item) => item.type).filter(Boolean)),
+      ),
+    ]
+  }, [localReports])
+
+  const filtered = useMemo(() => {
+    return localReports.filter((r) => {
+      if (filter !== "all" && r.status.toLowerCase() !== filter) return false
+      if (typeFilter !== "all" && r.type !== typeFilter) return false
+      return true
+    })
+  }, [filter, localReports, typeFilter])
+
+  const handleGenerateReport = async () => {
+    setIsGenerating(true)
+    setError(null)
+    try {
+      const response = await fetch("/api/secretary/tax-reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "Monthly VAT" }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        throw new Error(payload?.error || "Failed to generate report")
+      }
+
+      setLocalReports((prev) => [
+        {
+          id: String(payload.data.id),
+          period: String(payload.data.period || "Current Period"),
+          type: String(payload.data.type || "Monthly VAT"),
+          status: String(payload.data.status || "Draft"),
+          dueDate: String(payload.data.dueDate || "TBD"),
+          filedDate: String(payload.data.filedDate || "-"),
+          amount: String(payload.data.amount || "KES 0"),
+          taxDue: String(payload.data.taxDue || "KES 0"),
+        },
+        ...prev,
+      ])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to generate report"
+      setError(message)
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   const handleViewReport = (id: string) => {
@@ -88,15 +176,21 @@ export default function SecretaryTaxReportsPage() {
           <h1 className="text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">Tax Reports</h1>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Manage tax filings, VAT, PAYE, and compliance</p>
         </div>
-        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 gap-1.5 text-xs w-fit" onClick={handleGenerateReport}>
+          <Button disabled={isGenerating} size="sm" className="bg-blue-600 hover:bg-blue-700 gap-1.5 text-xs w-fit" onClick={handleGenerateReport}>
           <FileSpreadsheet size={14} />
-          Generate New Report
+            {isGenerating ? "Generating..." : "Generate New Report"}
         </Button>
       </div>
 
+        {error ? (
+          <Card className="p-4 border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-900/20 text-sm text-red-700 dark:text-red-300">
+            {error}
+          </Card>
+        ) : null}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {taxSummary.map((s, i) => (
+          {summary.map((s, i) => (
           <Card key={i} className="p-4">
             <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">{s.label}</p>
             <p className="text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">{s.value}</p>
@@ -128,7 +222,7 @@ export default function SecretaryTaxReportsPage() {
           ))}
         </div>
         <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-0.5">
-          {["all", "Monthly VAT", "PAYE", "Quarterly", "Annual"].map(t => (
+          {reportTypes.map(t => (
             <button key={t} onClick={() => setTypeFilter(t)} className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${typeFilter === t ? "bg-white dark:bg-gray-600 text-gray-900 dark:text-white shadow-sm" : "text-gray-500 dark:text-gray-400"}`}>
               {t === "all" ? "All Types" : t}
             </button>
@@ -152,6 +246,11 @@ export default function SecretaryTaxReportsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-700/50">
+              {isLoading ? (
+                <tr>
+                  <td colSpan={7} className="py-8 px-4 text-center text-sm text-gray-500 dark:text-gray-400">Loading tax reports...</td>
+                </tr>
+              ) : null}
               {filtered.map(r => (
                 <tr key={r.id} className="hover:bg-gray-50 dark:hover:bg-gray-800/30">
                   <td className="py-3 px-4 font-mono text-xs font-medium text-gray-900 dark:text-white">{r.id}</td>
@@ -178,7 +277,7 @@ export default function SecretaryTaxReportsPage() {
             </tbody>
           </table>
         </div>
-        {filtered.length === 0 && (
+        {!isLoading && filtered.length === 0 && (
           <div className="p-8 text-center text-sm text-gray-400">No reports match the selected filters</div>
         )}
       </Card>

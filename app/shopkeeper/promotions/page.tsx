@@ -85,11 +85,23 @@ export default function ShopkeeperPromotionsPage() {
     return matchesSearch && promo.status === activeFilter
   })
 
+  const appliesToOptions = Array.from(
+    new Set([
+      "All Products",
+      ...promotions
+        .map((promo) => String(promo.products || "").trim())
+        .filter(Boolean),
+    ]),
+  )
+
   const stats = {
     active: promotions.filter(p => p.status === "active").length,
     totalUsed: promotions.reduce((acc, p) => acc + p.usedCount, 0),
     totalRevenue: "KES " + (promotions.reduce((acc, p) => acc + (p.usedCount * p.value), 0)).toLocaleString(),
-    conversionRate: "12.4%"
+    conversionRate:
+      promotions.reduce((acc, p) => acc + (p.maxUses || 0), 0) > 0
+        ? `${Math.round((promotions.reduce((acc, p) => acc + p.usedCount, 0) / promotions.reduce((acc, p) => acc + (p.maxUses || 0), 0)) * 100)}%`
+        : "0%"
   }
 
   const getStatusConfig = (status: string) => {
@@ -448,11 +460,11 @@ export default function ShopkeeperPromotionsPage() {
                   onChange={(e) => setNewPromo({ ...newPromo, products: e.target.value })}
                   className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
                 >
-                  <option>All Products</option>
-                  <option>Electronics</option>
-                  <option>Appliances</option>
-                  <option>Hardware</option>
-                  <option>Furniture</option>
+                  {appliesToOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>

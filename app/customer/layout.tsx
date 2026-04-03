@@ -1,8 +1,8 @@
-"use client"
+"use client";
 
-import React from "react"
+import React from "react";
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuthContext } from "@/lib/auth-context"
@@ -12,7 +12,7 @@ import {
   HelpCircle, Gift
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
 import Image from "next/image"
 
 type CustomerNotification = {
@@ -37,10 +37,14 @@ function formatRelativeTime(value?: string) {
 
 export default function CustomerLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const { user, logout } = useAuthContext()
+  const { user, logout, isAuthenticated, isLoading } = useAuthContext()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [notifications, setNotifications] = useState<CustomerNotification[]>([])
+
+  const handleUnauthorized = useCallback(async () => {
+    await logout()
+  }, [logout])
 
   const navItems = [
     { icon: Home, label: "Home", href: "/customer/home" },
@@ -48,13 +52,21 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
     { icon: Briefcase, label: "My Jobs", href: "/customer/jobs" },
     { icon: Users, label: "Community", href: "/customer/community" },
     { icon: MessageCircle, label: "Chat", href: "/customer/messages" },
-  ]
+  ];
 
   const sidebarItems = [
     ...navItems,
-    { icon: UserSearch, label: "Find Specialists", href: "/customer/find-specialists" },
+    {
+      icon: UserSearch,
+      label: "Find Specialists",
+      href: "/customer/find-specialists",
+    },
     { icon: Heart, label: "Favorites", href: "/customer/favorites" },
-    { icon: MapPin, label: "Saved Addresses", href: "/customer/saved-addresses" },
+    {
+      icon: MapPin,
+      label: "Saved Addresses",
+      href: "/customer/saved-addresses",
+    },
     { icon: Wallet, label: "Wallet", href: "/customer/wallet" },
     { icon: Gift, label: "Refer & Earn", href: "/customer/referrals" },
     { icon: HelpCircle, label: "Help & Support", href: "/customer/help" },
@@ -63,9 +75,20 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
 
   useEffect(() => {
     const loadNotifications = async () => {
+      if (isLoading || !isAuthenticated || !user?.id) {
+        setNotifications([])
+        return
+      }
+
       try {
         const response = await fetch("/api/notifications", { cache: "no-store" })
+        if (response.status === 401) {
+          await handleUnauthorized()
+          return
+        }
+
         const payload = await response.json()
+
         if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
           setNotifications([])
           return
@@ -88,22 +111,45 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
     loadNotifications()
     const intervalId = window.setInterval(loadNotifications, 3000)
     return () => window.clearInterval(intervalId)
-  }, [])
+  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id])
 
   const markAllNotificationsRead = async () => {
     try {
-      await fetch("/api/notifications", {
+      const response = await fetch("/api/notifications", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ markAllRead: true }),
       })
+
+      if (response.status === 401) {
+        await handleUnauthorized()
+        return
+      }
+
       setNotifications((prev) => prev.map((item) => ({ ...item, unread: false })))
     } catch {
       // no-op
     }
   }
 
-  const unreadCount = notifications.filter(n => n.unread).length
+  const markNotificationAsRead = async (id: string) => {
+    setNotifications((prev) => prev.map((item) => (item.id === id ? { ...item, unread: false } : item)))
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      })
+
+      if (response.status === 401) {
+        await handleUnauthorized()
+      }
+    } catch {
+      // no-op
+    }
+  }
+
+  const unreadCount = notifications.filter((n) => n.unread).length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,7 +159,9 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
         <div className="flex items-center h-16 px-6 border-b border-border">
           <Link href="/customer/home" className="flex items-center gap-2">
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-lg">S</span>
+              <span className="text-primary-foreground font-bold text-lg">
+                S
+              </span>
             </div>
             <span className="font-bold text-xl text-foreground">SAJI</span>
           </Link>
@@ -121,17 +169,30 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
 
         {/* User Profile Quick View */}
         <div className="p-4 border-b border-border">
-          <Link href="/customer/profile" className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors">
+          <Link
+            href="/customer/profile"
+            className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
+          >
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
               {user?.avatar ? (
-                <Image src={user.avatar || "/placeholder.svg"} alt="" width={40} height={40} className="object-cover" />
+                <Image
+                  src={user.avatar || "/placeholder.svg"}
+                  alt=""
+                  width={40}
+                  height={40}
+                  className="object-cover"
+                />
               ) : (
                 <User className="w-5 h-5 text-primary" />
               )}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="font-semibold text-sm text-foreground truncate">{user?.name || "Guest User"}</p>
-              <p className="text-xs text-muted-foreground truncate">{user?.email || "guest@example.com"}</p>
+              <p className="font-semibold text-sm text-foreground truncate">
+                {user?.name || "Guest User"}
+              </p>
+              <p className="text-xs text-muted-foreground truncate">
+                {user?.email || "guest@example.com"}
+              </p>
             </div>
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </Link>
@@ -140,28 +201,29 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
         {/* Navigation */}
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
           {sidebarItems.map((item) => {
-            const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+            const isActive =
+              pathname === item.href || pathname.startsWith(item.href + "/");
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                  isActive 
-                    ? "bg-primary text-primary-foreground shadow-md" 
+                  isActive
+                    ? "bg-primary text-primary-foreground shadow-md"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
                 <item.icon className="w-5 h-5" />
                 {item.label}
               </Link>
-            )
+            );
           })}
         </nav>
 
         {/* Logout Button */}
         <div className="p-4 border-t border-border">
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             onClick={logout}
             className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           >
@@ -184,52 +246,75 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-0">
+                <SheetTitle className="sr-only">
+                  Customer Navigation Menu
+                </SheetTitle>
                 <div className="flex items-center h-16 px-6 border-b border-border">
-                  <Link href="/customer/home" className="flex items-center gap-2">
+                  <Link
+                    href="/customer/home"
+                    className="flex items-center gap-2"
+                  >
                     <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                      <span className="text-primary-foreground font-bold text-lg">S</span>
+                      <span className="text-primary-foreground font-bold text-lg">
+                        S
+                      </span>
                     </div>
-                    <span className="font-bold text-xl text-foreground">SAJI</span>
+                    <span className="font-bold text-xl text-foreground">
+                      SAJI
+                    </span>
                   </Link>
                 </div>
                 <div className="p-4 border-b border-border">
-                  <Link href="/customer/profile" className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors">
+                  <Link
+                    href="/customer/profile"
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-muted transition-colors"
+                  >
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
                       {user?.avatar ? (
-                        <Image src={user.avatar || "/placeholder.svg"} alt="" width={40} height={40} className="object-cover" />
+                        <Image
+                          src={user.avatar || "/placeholder.svg"}
+                          alt=""
+                          width={40}
+                          height={40}
+                          className="object-cover"
+                        />
                       ) : (
                         <User className="w-5 h-5 text-primary" />
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm text-foreground truncate">{user?.name || "Guest User"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{user?.email || "guest@example.com"}</p>
+                      <p className="font-semibold text-sm text-foreground truncate">
+                        {user?.name || "Guest User"}
+                      </p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {user?.email || "guest@example.com"}
+                      </p>
                     </div>
                   </Link>
                 </div>
                 <nav className="flex-1 px-4 py-4 space-y-1">
                   {sidebarItems.map((item) => {
-                    const isActive = pathname === item.href
+                    const isActive = pathname === item.href;
                     return (
                       <Link
                         key={item.href}
                         href={item.href}
                         onClick={() => setSidebarOpen(false)}
                         className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all ${
-                          isActive 
-                            ? "bg-primary text-primary-foreground" 
+                          isActive
+                            ? "bg-primary text-primary-foreground"
                             : "text-muted-foreground hover:bg-muted hover:text-foreground"
                         }`}
                       >
                         <item.icon className="w-5 h-5" />
                         {item.label}
                       </Link>
-                    )
+                    );
                   })}
                 </nav>
                 <div className="p-4 border-t border-border">
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     onClick={logout}
                     className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive"
                   >
@@ -243,15 +328,26 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
             {/* Page Title - Desktop Only */}
             <div className="hidden lg:block">
               <h1 className="text-lg font-semibold text-foreground">
-                {sidebarItems.find(item => pathname === item.href || pathname.startsWith(item.href + "/"))?.label 
-                  || (pathname.includes("/notifications") ? "Notifications" : "Dashboard")}
+                {sidebarItems.find(
+                  (item) =>
+                    pathname === item.href ||
+                    pathname.startsWith(item.href + "/"),
+                )?.label ||
+                  (pathname.includes("/notifications")
+                    ? "Notifications"
+                    : "Dashboard")}
               </h1>
             </div>
 
             {/* Mobile Logo */}
-            <Link href="/customer/home" className="lg:hidden flex items-center gap-2">
+            <Link
+              href="/customer/home"
+              className="lg:hidden flex items-center gap-2"
+            >
               <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-lg">S</span>
+                <span className="text-primary-foreground font-bold text-lg">
+                  S
+                </span>
               </div>
               <span className="font-bold text-lg text-foreground">SAJI</span>
             </Link>
@@ -260,8 +356,8 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
             <div className="flex items-center gap-2">
               {/* Notifications */}
               <div className="relative">
-                <Button 
-                  variant="ghost" 
+                <Button
+                  variant="ghost"
                   size="icon"
                   onClick={() => setShowNotifications(!showNotifications)}
                   className="relative"
@@ -277,9 +373,9 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                 {/* Notifications Dropdown */}
                 {showNotifications && (
                   <>
-                    <div 
-                      className="fixed inset-0 z-40" 
-                      onClick={() => setShowNotifications(false)} 
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowNotifications(false)}
                     />
                     <div className="absolute right-0 top-12 w-80 bg-card rounded-xl shadow-xl border border-border z-50 overflow-hidden">
                       <div className="p-4 border-b border-border flex items-center justify-between">
@@ -290,8 +386,9 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                       </div>
                       <div className="max-h-80 overflow-y-auto">
                         {notifications.map((notification) => (
-                          <div 
+                          <div
                             key={notification.id}
+                            onClick={() => markNotificationAsRead(notification.id)}
                             className={`p-4 border-b border-border last:border-0 hover:bg-muted transition-colors cursor-pointer ${
                               notification.unread ? "bg-primary/5" : ""
                             }`}
@@ -300,16 +397,24 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                               {notification.unread && (
                                 <div className="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0" />
                               )}
-                              <div className={notification.unread ? "" : "ml-5"}>
-                                <p className="font-medium text-sm text-foreground">{notification.title}</p>
-                                <p className="text-xs text-muted-foreground mt-1">{notification.message}</p>
-                                <p className="text-xs text-muted-foreground mt-1">{notification.time}</p>
+                              <div
+                                className={notification.unread ? "" : "ml-5"}
+                              >
+                                <p className="font-medium text-sm text-foreground">
+                                  {notification.title}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {notification.message}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {notification.time}
+                                </p>
                               </div>
                             </div>
                           </div>
                         ))}
                       </div>
-                      <Link 
+                      <Link
                         href="/customer/notifications"
                         className="block p-3 text-center text-sm text-primary font-medium hover:bg-muted transition-colors"
                         onClick={() => setShowNotifications(false)}
@@ -326,7 +431,13 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                 <Button variant="ghost" size="icon" className="rounded-full">
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center overflow-hidden">
                     {user?.avatar ? (
-                      <Image src={user.avatar || "/placeholder.svg"} alt="" width={32} height={32} className="object-cover" />
+                      <Image
+                        src={user.avatar || "/placeholder.svg"}
+                        alt=""
+                        width={32}
+                        height={32}
+                        className="object-cover"
+                      />
                     ) : (
                       <User className="w-4 h-4 text-primary" />
                     )}
@@ -338,15 +449,14 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
         </header>
 
         {/* Page Content */}
-        <main className="pb-20 lg:pb-6">
-          {children}
-        </main>
+        <main className="pb-20 lg:pb-6">{children}</main>
 
         {/* Mobile Bottom Navigation */}
         <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-card border-t border-border z-40">
           <div className="flex items-center justify-around h-16 px-2">
             {navItems.map((item) => {
-              const isActive = pathname === item.href || pathname.startsWith(item.href + "/")
+              const isActive =
+                pathname === item.href || pathname.startsWith(item.href + "/");
               return (
                 <Link
                   key={item.href}
@@ -355,14 +465,18 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
                     isActive ? "text-primary" : "text-muted-foreground"
                   }`}
                 >
-                  <item.icon className={`w-5 h-5 ${isActive ? "text-primary" : ""}`} />
-                  <span className="text-[10px] mt-1 font-medium">{item.label}</span>
+                  <item.icon
+                    className={`w-5 h-5 ${isActive ? "text-primary" : ""}`}
+                  />
+                  <span className="text-[10px] mt-1 font-medium">
+                    {item.label}
+                  </span>
                 </Link>
-              )
+              );
             })}
           </div>
         </nav>
       </div>
     </div>
-  )
+  );
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/server/db";
+import { getSessionActor, hasAnyRole } from "@/lib/server/api-auth";
 
 function relativeTime(when: Date): string {
   const diffMs = Date.now() - when.getTime();
@@ -29,7 +30,16 @@ function toSeverity(reason: string): "High" | "Medium" | "Low" {
   return "Low";
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { actor, error } = await getSessionActor(request);
+  if (error) return error;
+  if (!actor || !hasAnyRole(actor, ["agent", "admin", "sub-admin", "subadmin"])) {
+    return NextResponse.json(
+      { ok: false, error: "Forbidden" },
+      { status: 403 },
+    );
+  }
+
   const [disputes, allUsers, messages] = await Promise.all([
     db.dispute.findMany({
       orderBy: { createdAt: "desc" },

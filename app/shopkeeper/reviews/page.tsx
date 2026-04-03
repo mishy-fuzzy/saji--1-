@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { 
   Star, Search, Filter, MessageSquare, ThumbsUp, ThumbsDown, 
   Clock, CheckCircle2, Flag, ChevronDown, TrendingUp, BarChart3
@@ -26,15 +26,42 @@ type Review = {
   replyDate: string
 }
 
-const reviewsData: Review[] = []
-
 export default function ShopkeeperReviewsPage() {
   const [activeFilter, setActiveFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [showReplyModal, setShowReplyModal] = useState(false)
   const [selectedReview, setSelectedReview] = useState<Review | null>(null)
   const [replyText, setReplyText] = useState("")
-  const [reviews, setReviews] = useState(reviewsData)
+  const [reviews, setReviews] = useState<Review[]>([])
+
+  useEffect(() => {
+    const loadReviews = async () => {
+      try {
+        const response = await fetch("/api/shopkeeper/reviews", { cache: "no-store" })
+        const payload = await response.json()
+        const rows = Array.isArray(payload?.data?.reviews) ? payload.data.reviews : []
+        setReviews(
+          rows.map((row: any) => ({
+            id: Number(row?.id || 0),
+            customer: String(row?.customer || "Customer"),
+            avatar: String(row?.avatar || "/placeholder.svg"),
+            product: String(row?.product || "Service"),
+            rating: Number(row?.rating || 0),
+            text: String(row?.text || ""),
+            date: String(row?.date || ""),
+            helpful: Number(row?.helpful || 0),
+            replied: Boolean(row?.replied),
+            reply: String(row?.reply || ""),
+            replyDate: String(row?.replyDate || ""),
+          })),
+        )
+      } catch {
+        setReviews([])
+      }
+    }
+
+    loadReviews()
+  }, [])
 
   const ratingFilters = [
     { key: "all", label: "All Reviews" },
@@ -144,7 +171,9 @@ export default function ShopkeeperReviewsPage() {
                   <Clock className="w-4 h-4 text-blue-500" />
                   <span className="text-xs text-gray-500 dark:text-gray-400">Avg Reply Time</span>
                 </div>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">4h</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {reviews.some((r) => r.replied) ? "<24h" : "N/A"}
+                </p>
               </div>
             </div>
           </Card>

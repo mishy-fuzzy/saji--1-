@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useAuthContext } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ import {
 import Image from "next/image";
 
 export default function CommunityPage() {
+  const { user, isAuthenticated, isLoading, logout } = useAuthContext();
   const [activeTab, setActiveTab] = useState<
     "feed" | "trending" | "following" | "groups"
   >("feed");
@@ -51,12 +53,30 @@ export default function CommunityPage() {
   const [suggestedGroups, setSuggestedGroups] = useState<any[]>([]);
   const [suggestedUsers, setSuggestedUsers] = useState<any[]>([]);
 
+  const handleUnauthorized = useCallback(async () => {
+    await logout();
+  }, [logout]);
+
   useEffect(() => {
+    if (isLoading || !isAuthenticated || !user?.id) {
+      setPosts([]);
+      setTrendingTopics([]);
+      setSuggestedGroups([]);
+      setSuggestedUsers([]);
+      return;
+    }
+
     const loadCommunity = async () => {
       try {
         const response = await fetch("/api/community/posts", {
           cache: "no-store",
         });
+
+        if (response.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
+
         const payload = await response.json();
         const data = payload?.data || {};
         setPosts(Array.isArray(data.posts) ? data.posts : []);
@@ -80,7 +100,7 @@ export default function CommunityPage() {
     loadCommunity();
     const intervalId = window.setInterval(loadCommunity, 25000);
     return () => window.clearInterval(intervalId);
-  }, []);
+  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id]);
 
   const trendingPosts = posts.filter((p) => p.likes > 200);
 

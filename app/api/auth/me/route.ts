@@ -18,6 +18,8 @@ export async function GET(request: Request) {
       email: string;
       phone: string | null;
       role: string;
+      image: string | null;
+      emailVerified: boolean;
       createdAt: Date;
       isSuspended: boolean;
     } | null = null;
@@ -34,6 +36,8 @@ export async function GET(request: Request) {
           email: true,
           phone: true,
           role: true,
+          image: true,
+          emailVerified: true,
           createdAt: true,
           isSuspended: true,
         },
@@ -51,6 +55,9 @@ export async function GET(request: Request) {
           email: session.email,
           phone: "",
           role: session.role,
+          avatar: "",
+          shopkeeperRegistrationComplete: false,
+          shopkeeperRegistrationStatus: "not_submitted",
           createdAt: new Date(0),
         },
       });
@@ -63,6 +70,28 @@ export async function GET(request: Request) {
       );
     }
 
+    let shopkeeperRegistrationStatus: "not_submitted" | "pending" | "approved" | "rejected" = "not_submitted";
+    if (String(user.role || "").toLowerCase() === "shopkeeper") {
+      const latestRegistration = await db.authLog.findFirst({
+        where: {
+          provider: "local",
+          mode: "shopkeeper-registration",
+          email: user.email,
+        },
+        orderBy: { createdAt: "desc" },
+        select: { status: true },
+      });
+
+      const normalized = String(latestRegistration?.status || "").toLowerCase();
+      if (normalized === "approved") {
+        shopkeeperRegistrationStatus = "approved";
+      } else if (normalized === "rejected") {
+        shopkeeperRegistrationStatus = "rejected";
+      } else if (normalized === "pending") {
+        shopkeeperRegistrationStatus = "pending";
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       data: {
@@ -71,6 +100,13 @@ export async function GET(request: Request) {
         email: user.email,
         phone: user.phone || "",
         role: user.role,
+        avatar: user.image || "",
+        emailVerified: user.emailVerified,
+        shopkeeperRegistrationComplete:
+          String(user.role || "").toLowerCase() === "shopkeeper"
+            ? shopkeeperRegistrationStatus !== "not_submitted"
+            : true,
+        shopkeeperRegistrationStatus,
         createdAt: user.createdAt,
       },
     });

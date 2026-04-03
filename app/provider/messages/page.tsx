@@ -330,18 +330,18 @@ export default function ProviderMessagesPage() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-linear-to-b from-blue-50/30 to-transparent dark:from-blue-950/10">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.08),_transparent_35%)] dark:bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.14),_transparent_35%)]">
                 {messages.map((msg) => (
                   <div
                     key={msg.id}
                     className={`flex ${msg.sender === "provider" ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[75%] px-4 py-2.5 rounded-2xl ${msg.sender === "provider" ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white"}`}
+                      className={`max-w-[78%] px-4 py-2.5 rounded-2xl shadow-sm ${msg.sender === "provider" ? "bg-emerald-500 text-white rounded-br-sm" : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-sm border border-gray-100 dark:border-gray-700"}`}
                     >
                       <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
                       <div
-                        className={`flex items-center justify-end gap-1 mt-1 ${msg.sender === "provider" ? "text-blue-100" : "text-muted-foreground"}`}
+                        className={`flex items-center justify-end gap-1 mt-1 ${msg.sender === "provider" ? "text-emerald-50" : "text-muted-foreground"}`}
                       >
                         <span className="text-[10px]">{msg.time}</span>
                         {msg.sender === "provider" &&

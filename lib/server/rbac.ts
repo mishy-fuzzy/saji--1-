@@ -18,6 +18,14 @@ function getRequestRole(request: Request): string {
 }
 
 export function authorizeRoles(request: Request, allowedRoles: string[]) {
+  const session = getSessionFromRequest(request)
+  if (!session?.userId) {
+    return NextResponse.json(
+      { ok: false, error: "Unauthorized" },
+      { status: 401 },
+    )
+  }
+
   const role = getRequestRole(request)
   const normalizedAllowed = allowedRoles.map((r) => normalizeRole(r))
 

@@ -66,9 +66,10 @@ function safeParse(value: string | null | undefined): Record<string, unknown> {
 }
 
 function resolveAppUrl(requestOrigin?: string): string {
+  // Prefer the active request origin to avoid stale env hosts causing 404 links.
+  if (requestOrigin) return requestOrigin.replace(/\/$/, "");
   const explicit = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (explicit) return explicit.replace(/\/$/, "");
-  if (requestOrigin) return requestOrigin.replace(/\/$/, "");
   return "http://localhost:3500";
 }
 
@@ -311,14 +312,25 @@ export async function POST(request: Request) {
       },
     });
 
-  await queueTeamInviteEmail({
-    email: created.email,
-    name: created.name || "Team member",
-    phone: created.phone,
-    role,
-    invitedByEmail: actor.email,
-    inviteUrl,
-  });
+  let invitationStatus: "sent" | "email_failed" = "sent";
+  let invitationError: string | undefined;
+
+  try {
+    await queueTeamInviteEmail({
+      email: created.email,
+      name: created.name || "Team member",
+      phone: created.phone,
+      role,
+      invitedByEmail: actor.email,
+      inviteUrl,
+    });
+  } catch (emailError) {
+    invitationStatus = "email_failed";
+    invitationError =
+      emailError instanceof Error
+        ? emailError.message
+        : "Failed to send invite email";
+  }
 
   await createInAppNotification({
     userId: created.id,
@@ -334,12 +346,14 @@ export async function POST(request: Request) {
       provider: "local",
       mode: "admin-team-promotion-email",
       email: created.email,
-      status: "SUCCESS",
+      status: invitationStatus === "sent" ? "SUCCESS" : "FAILED",
       response: JSON.stringify({
         by: actor.email,
         targetRole: role,
         inviteId: invite.inviteId,
         inviteUrl,
+        invitationStatus,
+        invitationError,
       }),
     },
   });
@@ -358,8 +372,9 @@ export async function POST(request: Request) {
     invitation: {
       email: created.email,
       loginUrl: inviteUrl,
-      status: "sent",
+      status: invitationStatus,
       expiresAt: invite.expiresAt,
+      error: invitationError,
     },
   });
   } catch (error) {
@@ -438,16 +453,27 @@ export async function PATCH(request: Request) {
   });
 
   const appUrl = resolveAppUrl(new URL(request.url).origin);
-  const inviteUrl = `${appUrl}/api/admin/team-promotions/accept?token=${encodeURIComponent(invite.token)}`;
+    const inviteUrl = `${appUrl}/team-invite?token=${encodeURIComponent(invite.token)}`;
 
-  await queueTeamInviteEmail({
-    email: member.email,
-    name: member.name || "Team member",
-    phone: member.phone,
-    role,
-    invitedByEmail: actor.email,
-    inviteUrl,
-  });
+  let invitationStatus: "sent" | "email_failed" = "sent";
+  let invitationError: string | undefined;
+
+  try {
+    await queueTeamInviteEmail({
+      email: member.email,
+      name: member.name || "Team member",
+      phone: member.phone,
+      role,
+      invitedByEmail: actor.email,
+      inviteUrl,
+    });
+  } catch (emailError) {
+    invitationStatus = "email_failed";
+    invitationError =
+      emailError instanceof Error
+        ? emailError.message
+        : "Failed to resend invite email";
+  }
 
   await prismaDb.authLog.create({
     data: {
@@ -460,11 +486,22 @@ export async function PATCH(request: Request) {
         role: member.role,
         inviteId: invite.inviteId,
         inviteUrl,
+        invitationStatus,
+        invitationError,
       }),
     },
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    ok: true,
+    invitation: {
+      email: member.email,
+      loginUrl: inviteUrl,
+      status: invitationStatus,
+      error: invitationError,
+      expiresAt: invite.expiresAt,
+    },
+  });
 }
 
 export async function DELETE(request: Request) {

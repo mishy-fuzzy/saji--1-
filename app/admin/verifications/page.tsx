@@ -12,13 +12,15 @@ type Verification = {
   email: string
   role: string
   documents: string
-  status: "Pending" | "Under Review" | "Approved" | "Rejected"
+  documentUrl: string | null
+  notes: string | null
+  status: "pending" | "approved" | "rejected"
   submittedDate: string
 }
 
 export default function VerificationsPage() {
   const [searchTerm, setSearchTerm] = useState("")
-  const [activeFilter, setActiveFilter] = useState("All")
+  const [activeFilter, setActiveFilter] = useState("all")
   const [verifications, setVerifications] = useState<Verification[]>([])
   const [selectedVerification, setSelectedVerification] = useState<Verification | null>(null)
   const [showModal, setShowModal] = useState(false)
@@ -36,7 +38,9 @@ export default function VerificationsPage() {
           email: String(row.user?.email || ""),
           role: String(row.user?.role || ""),
           documents: row.documentUrl ? "Yes" : "No",
-          status: String(row.status || "pending").charAt(0).toUpperCase() + String(row.status || "pending").slice(1) === "Pending" ? "Pending" : String(row.status || "pending").charAt(0).toUpperCase() + String(row.status || "pending").slice(1),
+          documentUrl: row.documentUrl || null,
+          notes: row.notes || null,
+          status: (row.status || "pending").toLowerCase() as "pending" | "approved" | "rejected",
           submittedDate: row.createdAt ? new Date(row.createdAt).toLocaleDateString() : "",
         }))
 
@@ -52,34 +56,41 @@ export default function VerificationsPage() {
   }, [])
 
   const filters = [
-    { label: "All", type: "All", count: verifications.length },
-    { label: "Pending", type: "Pending", count: verifications.filter(v => v.status === "Pending").length },
-    { label: "Under Review", type: "Under Review", count: verifications.filter(v => v.status === "Under Review").length },
-    { label: "Approved", type: "Approved", count: verifications.filter(v => v.status === "Approved").length },
-    { label: "Rejected", type: "Rejected", count: verifications.filter(v => v.status === "Rejected").length },
+    { label: "All", type: "all", count: verifications.length },
+    { label: "Pending", type: "pending", count: verifications.filter(v => v.status === "pending").length },
+    { label: "Approved", type: "approved", count: verifications.filter(v => v.status === "approved").length },
+    { label: "Rejected", type: "rejected", count: verifications.filter(v => v.status === "rejected").length },
   ]
 
   const filteredVerifications = verifications.filter(v => {
-    const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) || v.id.includes(searchTerm.toUpperCase())
-    const matchesFilter = activeFilter === "All" || v.status === activeFilter
+    const matchesSearch = v.name.toLowerCase().includes(searchTerm.toLowerCase()) || v.email.toLowerCase().includes(searchTerm.toLowerCase()) || v.id.includes(searchTerm)
+    const matchesFilter = activeFilter === "all" || v.status === activeFilter
     return matchesSearch && matchesFilter
   })
 
   const getStatusColor = (status: string) => {
     switch(status) {
-      case "Approved": return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
-      case "Pending": return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
-      case "Under Review": return "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
-      case "Rejected": return "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+      case "approved": return "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400"
+      case "pending": return "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
+      case "rejected": return "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
       default: return "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+    }
+  }
+
+  const getStatusLabel = (status: string) => {
+    switch(status) {
+      case "pending": return "Pending"
+      case "approved": return "Approved"
+      case "rejected": return "Rejected"
+      default: return status
     }
   }
 
   const stats = [
     { label: "Total Submissions", value: verifications.length, icon: UserCheck, color: "from-blue-50 to-blue-100" },
-    { label: "Approved", value: verifications.filter(v => v.status === "Approved").length, icon: CheckCircle, color: "from-emerald-50 to-emerald-100" },
-    { label: "Pending Review", value: verifications.filter(v => v.status === "Pending" || v.status === "Under Review").length, icon: Clock, color: "from-yellow-50 to-yellow-100" },
-    { label: "Rejected", value: verifications.filter(v => v.status === "Rejected").length, icon: AlertCircle, color: "from-red-50 to-red-100" },
+    { label: "Approved", value: verifications.filter(v => v.status === "approved").length, icon: CheckCircle, color: "from-emerald-50 to-emerald-100" },
+    { label: "Pending Review", value: verifications.filter(v => v.status === "pending").length, icon: Clock, color: "from-yellow-50 to-yellow-100" },
+    { label: "Rejected", value: verifications.filter(v => v.status === "rejected").length, icon: AlertCircle, color: "from-red-50 to-red-100" },
   ]
 
   const handleApprove = (id: string) => {
@@ -93,7 +104,7 @@ export default function VerificationsPage() {
         const payload = await response.json()
         if (!response.ok || !payload?.ok)
           throw new Error(payload?.error || "Failed to approve verification")
-        setVerifications(verifications.map(v => v.id === id ? { ...v, status: "Approved" } : v))
+        setVerifications(verifications.map(v => v.id === id ? { ...v, status: "approved" } : v))
         setShowModal(false)
       } catch (error) {
         alert(error instanceof Error ? error.message : "Failed to approve verification")
@@ -112,7 +123,7 @@ export default function VerificationsPage() {
         const payload = await response.json()
         if (!response.ok || !payload?.ok)
           throw new Error(payload?.error || "Failed to reject verification")
-        setVerifications(verifications.map(v => v.id === id ? { ...v, status: "Rejected" } : v))
+        setVerifications(verifications.map(v => v.id === id ? { ...v, status: "rejected" } : v))
         setShowModal(false)
       } catch (error) {
         alert(error instanceof Error ? error.message : "Failed to reject verification")
@@ -232,7 +243,7 @@ export default function VerificationsPage() {
                   <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">{verification.documents}</td>
                   <td className="px-6 py-4">
                     <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(verification.status)}`}>
-                      {verification.status}
+                      {getStatusLabel(verification.status)}
                     </span>
                   </td>
                   <td className="px-6 py-4">
@@ -283,9 +294,33 @@ export default function VerificationsPage() {
                   <span className="font-semibold">{selectedVerification.role}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-sm text-muted-foreground">Documents:</span>
-                  <span className="font-semibold">{selectedVerification.documents}</span>
+                  <span className="text-sm text-muted-foreground">Status:</span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusColor(selectedVerification.status)}`}>
+                    {getStatusLabel(selectedVerification.status)}
+                  </span>
                 </div>
+                <div className="flex justify-between items-start">
+                  <span className="text-sm text-muted-foreground">Documents:</span>
+                  <div className="text-right">
+                    <p className="font-semibold">{selectedVerification.documents}</p>
+                    {selectedVerification.documentUrl && (
+                      <a 
+                        href={selectedVerification.documentUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-600 hover:underline"
+                      >
+                        View Document
+                      </a>
+                    )}
+                  </div>
+                </div>
+                {selectedVerification.notes && (
+                  <div className="flex justify-between items-start">
+                    <span className="text-sm text-muted-foreground">Notes:</span>
+                    <span className="font-semibold text-right max-w-xs">{selectedVerification.notes}</span>
+                  </div>
+                )}
               </div>
               <div className="flex gap-3">
                 <Button 

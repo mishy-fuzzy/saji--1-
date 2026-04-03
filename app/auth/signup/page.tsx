@@ -34,6 +34,8 @@ function SignupContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuthContext();
+  const referralCode = searchParams.get("ref");
+  const referrerId = searchParams.get("rid");
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     name: "",
@@ -116,6 +118,8 @@ function SignupContent() {
           phone: formData.phone,
           role: formData.role,
           password: formData.password,
+          referralCode: referralCode || undefined,
+          referrerId: referrerId || undefined,
         }),
       });
 
@@ -257,6 +261,12 @@ function SignupContent() {
           {error && (
             <div className="mb-4 p-3 rounded-xl bg-destructive/10 border border-destructive/20 text-destructive text-sm">
               {error}
+            </div>
+          )}
+
+          {(referralCode || referrerId) && (
+            <div className="mb-4 p-3 rounded-xl bg-primary/10 border border-primary/20 text-primary text-sm">
+              You are joining via a referral link.
             </div>
           )}
 

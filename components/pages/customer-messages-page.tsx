@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -60,7 +61,7 @@ export function CustomerMessagesPage({
 }: {
   initialProviderId?: string;
 }) {
-  const { user } = useAuthContext();
+  const { user, isAuthenticated, isLoading, logout } = useAuthContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeChat, setActiveChat] = useState<string | null>(
     initialProviderId || null,
@@ -70,6 +71,10 @@ export function CustomerMessagesPage({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleUnauthorized = useCallback(async () => {
+    await logout();
+  }, [logout]);
 
   const selectedConversation = useMemo(
     () =>
@@ -96,11 +101,20 @@ export function CustomerMessagesPage({
   );
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (isLoading || !isAuthenticated || !user?.id) {
+      setConversations([]);
+      return;
+    }
 
     const loadConversations = async () => {
       try {
         const response = await fetch("/api/messages", { cache: "no-store" });
+
+        if (response.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
+
         const payload = await response.json();
         const rows = Array.isArray(payload?.data) ? payload.data : [];
 
@@ -133,9 +147,14 @@ export function CustomerMessagesPage({
     loadConversations();
     const intervalId = window.setInterval(loadConversations, 5000); // Poll every 5 seconds for faster updates
     return () => window.clearInterval(intervalId);
-  }, [activeChat, user?.id]);
+  }, [activeChat, handleUnauthorized, isAuthenticated, isLoading, user?.id]);
 
   useEffect(() => {
+    if (isLoading || !isAuthenticated || !user?.id) {
+      setMessages([]);
+      return;
+    }
+
     if (!activeChat) {
       setMessages([]);
       return;
@@ -147,6 +166,12 @@ export function CustomerMessagesPage({
           `/api/messages?withUserId=${encodeURIComponent(activeChat)}`,
           { cache: "no-store" },
         );
+
+        if (response.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
+
         const payload = await response.json();
         const rows = Array.isArray(payload?.data) ? payload.data : [];
 
@@ -173,7 +198,7 @@ export function CustomerMessagesPage({
     loadThread();
     const intervalId = window.setInterval(loadThread, 3000); // Poll every 3 seconds for active chat thread
     return () => window.clearInterval(intervalId);
-  }, [activeChat]);
+  }, [activeChat, handleUnauthorized, isAuthenticated, isLoading, user?.id]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -201,6 +226,13 @@ export function CustomerMessagesPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ receiverId: activeChat, text }),
       });
+
+      if (response.status === 401) {
+        await handleUnauthorized();
+        setMessages((prev) => prev.filter((msg) => msg.id !== optimistic.id));
+        return;
+      }
+
       const payload = await response.json();
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.error || "Failed to send message");
@@ -383,20 +415,20 @@ export function CustomerMessagesPage({
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-linear-to-b from-blue-50/30 to-transparent dark:from-blue-950/10">
+              <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.08),_transparent_35%)] dark:bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.14),_transparent_35%)]">
                 {messages.map((message) => (
                   <div
                     key={message.id}
                     className={`flex ${message.sender === "customer" ? "justify-end" : "justify-start"}`}
                   >
                     <div
-                      className={`max-w-[75%] px-4 py-2.5 rounded-2xl ${message.sender === "customer" ? "bg-blue-600 text-white" : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white"}`}
+                      className={`max-w-[78%] px-4 py-2.5 rounded-2xl shadow-sm ${message.sender === "customer" ? "bg-emerald-500 text-white rounded-br-sm" : "bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-sm border border-gray-100 dark:border-gray-700"}`}
                     >
                       <p className="text-sm whitespace-pre-wrap">
                         {message.text}
                       </p>
                       <div
-                        className={`flex items-center justify-end gap-1 mt-1 ${message.sender === "customer" ? "text-blue-100" : "text-muted-foreground"}`}
+                        className={`flex items-center justify-end gap-1 mt-1 ${message.sender === "customer" ? "text-emerald-50" : "text-muted-foreground"}`}
                       >
                         <span className="text-[10px]">{message.time}</span>
                         {message.sender === "customer" &&

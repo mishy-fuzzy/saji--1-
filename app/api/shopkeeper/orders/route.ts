@@ -42,6 +42,7 @@ export async function GET(request: Request) {
       status: toOrderStatus(String(row.status || "pending")),
       location: "Kenya",
       date: new Date(row.createdAt).toLocaleString(),
+      createdAt: row.createdAt,
       paymentMethod: "Wallet",
       notes: "",
     }));

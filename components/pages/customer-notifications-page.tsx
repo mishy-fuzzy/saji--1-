@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { useAuthContext } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -32,10 +32,14 @@ const typeConfig: Record<string, { icon: typeof Bell; color: string; bg: string 
 type FilterType = "all" | "unread" | "job" | "message" | "payment"
 
 export function CustomerNotificationsPage() {
-  const { user } = useAuthContext()
+  const { user, isAuthenticated, isLoading: isAuthLoading, logout } = useAuthContext()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [filter, setFilter] = useState<FilterType>("all")
+
+  const handleUnauthorized = useCallback(async () => {
+    await logout()
+  }, [logout])
 
   const unreadCount = useMemo(() => notifications.filter(n => !n.read).length, [notifications])
 
@@ -53,9 +57,21 @@ export function CustomerNotificationsPage() {
   }
 
   const loadNotifications = async () => {
+    if (isAuthLoading || !isAuthenticated || !user?.id) {
+      setNotifications([])
+      setIsLoading(false)
+      return
+    }
+
     setIsLoading(true)
     try {
       const response = await fetch("/api/notifications", { cache: "no-store" })
+
+      if (response.status === 401) {
+        await handleUnauthorized()
+        return
+      }
+
       const payload = await response.json()
       if (!response.ok || !payload?.ok) {
         throw new Error(payload?.error || "Failed to fetch notifications")
@@ -85,10 +101,10 @@ export function CustomerNotificationsPage() {
   }
 
   useEffect(() => {
-    if (user?.id) {
+    if (!isAuthLoading && isAuthenticated && user?.id) {
       loadNotifications()
     }
-  }, [user?.id])
+  }, [isAuthenticated, isAuthLoading, user?.id])
 
   const filtered = notifications.filter(n => {
     if (filter === "unread") return !n.read
@@ -101,25 +117,36 @@ export function CustomerNotificationsPage() {
 
   const markAsRead = async (id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
-    await fetch("/api/notifications", {
+    const response = await fetch("/api/notifications", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     })
+
+    if (response.status === 401) {
+      await handleUnauthorized()
+    }
   }
 
   const markAllAsRead = async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
-    await fetch("/api/notifications", {
+    const response = await fetch("/api/notifications", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ markAllRead: true }),
     })
+
+    if (response.status === 401) {
+      await handleUnauthorized()
+    }
   }
 
   const deleteNotif = async (id: string) => {
     setNotifications((prev) => prev.filter((n) => n.id !== id))
-    await fetch(`/api/notifications?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+    const response = await fetch(`/api/notifications?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+    if (response.status === 401) {
+      await handleUnauthorized()
+    }
   }
 
   const filters: { id: FilterType; label: string }[] = [

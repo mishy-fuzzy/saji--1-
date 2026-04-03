@@ -17,39 +17,6 @@ interface ProviderDashboardProps {
   }
 }
 
-const mockJobs = [
-  {
-    id: 1,
-    title: "Electrical Installation - Living Room",
-    customer: "Sarah M.",
-    status: "in-progress",
-    date: "2025-01-08",
-    amount: 5000,
-    rating: null,
-    progress: 65,
-  },
-  {
-    id: 2,
-    title: "Full Building Wiring",
-    customer: "David K.",
-    status: "awaiting-confirmation",
-    date: "2025-01-10",
-    amount: 12000,
-    rating: null,
-    progress: 100,
-  },
-  {
-    id: 3,
-    title: "Office Rewiring Project",
-    customer: "Tech Corp Ltd",
-    status: "completed",
-    date: "2025-01-05",
-    amount: 8000,
-    rating: 5,
-    progress: 100,
-  },
-]
-
 const statusConfig = {
   "in-progress": {
     color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100",
@@ -70,8 +37,9 @@ const statusConfig = {
 
 export function ProviderDashboard({ provider }: ProviderDashboardProps) {
   const [selectedTab, setSelectedTab] = useState("active")
-  const [selectedJob, setSelectedJob] = useState<(typeof mockJobs)[0] | null>(null)
+  const [selectedJob, setSelectedJob] = useState<any | null>(null)
   const [isJobDetailOpen, setIsJobDetailOpen] = useState(false)
+  const mockJobs: any[] = []
 
   const activeJobs = mockJobs.filter((j) => j.status !== "completed").length
   const completedJobs = mockJobs.filter((j) => j.status === "completed").length

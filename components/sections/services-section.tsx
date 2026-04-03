@@ -5,69 +5,6 @@ import { Badge } from "@/components/ui/badge"
 import { Star, ArrowRight } from "lucide-react"
 import { useLocalization } from "@/lib/hooks/useLocalization"
 
-const mockServices = [
-  {
-    id: 1,
-    name: "Electrical Installation",
-    category: "skilled",
-    provider: "John Electrical Services",
-    rating: 4.9,
-    reviews: 128,
-    basePrice: 5000,
-    image: "/electrical-installation.png",
-  },
-  {
-    id: 2,
-    name: "Plumbing Repairs",
-    category: "semi-skilled",
-    provider: "Pipe Master",
-    rating: 4.8,
-    reviews: 95,
-    basePrice: 2000,
-    image: "/plumbing-repair.jpg",
-  },
-  {
-    id: 3,
-    name: "Home Cleaning",
-    category: "non-skilled",
-    provider: "Clean Sweep Team",
-    rating: 4.7,
-    reviews: 203,
-    basePrice: 1500,
-    image: "/home-cleaning-tools.png",
-  },
-  {
-    id: 4,
-    name: "Software Development",
-    category: "skilled",
-    provider: "Dev Labs",
-    rating: 5.0,
-    reviews: 67,
-    basePrice: 50000,
-    image: "/software-development-collaboration.png",
-  },
-  {
-    id: 5,
-    name: "Appliance Repair",
-    category: "semi-skilled",
-    provider: "Tech Repairs",
-    rating: 4.6,
-    reviews: 156,
-    basePrice: 3000,
-    image: "/appliance-repair-scene.png",
-  },
-  {
-    id: 6,
-    name: "House Moving",
-    category: "non-skilled",
-    provider: "Move Easy",
-    rating: 4.8,
-    reviews: 234,
-    basePrice: 8000,
-    image: "/house-moving.jpg",
-  },
-]
-
 const categoryColors = {
   skilled: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100",
   "semi-skilled": "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100",
@@ -90,7 +27,7 @@ export function ServicesSection() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {mockServices.map((service) => (
+          {[].map((service) => (
             <Card
               key={service.id}
               className="overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col group cursor-pointer"

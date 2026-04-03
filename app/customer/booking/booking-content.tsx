@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useAuthContext } from "@/lib/auth-context";
 import { useLocalization } from "@/lib/hooks/useLocalization";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,11 @@ export default function BookingContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { currency } = useLocalization();
-  const { user } = useAuthContext();
+  const { user, isAuthenticated, isLoading, logout } = useAuthContext();
+
+  const handleUnauthorized = useCallback(async () => {
+    await logout();
+  }, [logout]);
 
   const providerId = searchParams.get("provider");
   const serviceId = searchParams.get("service");
@@ -39,6 +43,12 @@ export default function BookingContent() {
   });
 
   useEffect(() => {
+    if (isLoading || !isAuthenticated || !user?.id) {
+      setServiceDetails(null);
+      setIsLoadingService(false);
+      return;
+    }
+
     let active = true;
 
     const loadService = async () => {
@@ -50,6 +60,12 @@ export default function BookingContent() {
       try {
         setIsLoadingService(true);
         const response = await fetch("/api/services", { cache: "no-store" });
+
+        if (response.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
+
         const payload = await response.json();
         const rows = Array.isArray(payload?.data) ? payload.data : [];
         const match = rows.find(
@@ -83,10 +99,10 @@ export default function BookingContent() {
     return () => {
       active = false;
     };
-  }, [serviceId, providerId, bookingType]);
+  }, [bookingType, handleUnauthorized, isAuthenticated, isLoading, providerId, serviceId, user?.id]);
 
   const handleConfirmBooking = async () => {
-    if (!user?.id) {
+    if (isLoading || !isAuthenticated || !user?.id) {
       alert("Please log in to continue");
       return;
     }
@@ -115,6 +131,11 @@ export default function BookingContent() {
           currency,
         }),
       });
+
+      if (response.status === 401) {
+        await handleUnauthorized();
+        return;
+      }
 
       const payload = await response.json();
       if (!response.ok || !payload?.ok || !payload?.data?.id) {

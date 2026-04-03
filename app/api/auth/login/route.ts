@@ -32,8 +32,10 @@ export async function POST(request: Request) {
         email: true,
         phone: true,
         role: true,
+        image: true,
         passwordHash: true,
         isSuspended: true,
+        emailVerified: true,
         createdAt: true,
       },
     });
@@ -70,6 +72,28 @@ export async function POST(request: Request) {
       );
     }
 
+    let shopkeeperRegistrationStatus: "not_submitted" | "pending" | "approved" | "rejected" = "not_submitted";
+    if (String(user.role || "").toLowerCase() === "shopkeeper") {
+      const latestRegistration = await prismaDb.authLog.findFirst({
+        where: {
+          provider: "local",
+          mode: "shopkeeper-registration",
+          email: user.email,
+        },
+        orderBy: { createdAt: "desc" },
+        select: { status: true },
+      });
+
+      const normalized = String(latestRegistration?.status || "").toLowerCase();
+      if (normalized === "approved") {
+        shopkeeperRegistrationStatus = "approved";
+      } else if (normalized === "rejected") {
+        shopkeeperRegistrationStatus = "rejected";
+      } else if (normalized === "pending") {
+        shopkeeperRegistrationStatus = "pending";
+      }
+    }
+
     await prismaDb.authLog.create({
       data: {
         provider: "local",
@@ -88,6 +112,13 @@ export async function POST(request: Request) {
         email: user.email,
         phone: user.phone || "",
         role: user.role,
+        avatar: user.image || "",
+        emailVerified: user.emailVerified,
+        shopkeeperRegistrationComplete:
+          String(user.role || "").toLowerCase() === "shopkeeper"
+            ? shopkeeperRegistrationStatus !== "not_submitted"
+            : true,
+        shopkeeperRegistrationStatus,
         createdAt: user.createdAt,
       },
     });

@@ -36,12 +36,14 @@ export async function GET(request: Request) {
       .join("");
 
     const referralCode = `${prefix || "SAJI"}-SAJI-${actor.id.slice(-4).toUpperCase()}`;
+    const origin = new URL(request.url).origin;
+    const referralLink = `${origin}/join?ref=${encodeURIComponent(referralCode)}&rid=${encodeURIComponent(actor.id)}&role=provider`;
 
     return NextResponse.json({
       ok: true,
       data: {
         referralCode,
-        referralLink: `https://saji.app/join?ref=${encodeURIComponent(referralCode)}`,
+        referralLink,
         referrals,
       },
     });

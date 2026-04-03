@@ -286,6 +286,20 @@ model AuthLog {
   @@index([createdAt])
 }
 
+model VirtualGift {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  icon      String   @default("🎁")
+  price     Int
+  description String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([price])
+  @@index([isActive])
+}
+
 model playing_with_neon {
   id    Int    @id @default(autoincrement())
   name  String

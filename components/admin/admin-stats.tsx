@@ -4,36 +4,7 @@ import { Card } from "@/components/ui/card"
 import { Users, Briefcase, DollarSign, TrendingUp } from "lucide-react"
 
 export function AdminStats() {
-  const stats = [
-    {
-      label: "Total Users",
-      value: "2,450",
-      change: "+12%",
-      icon: Users,
-      color: "from-blue-500 to-blue-600",
-    },
-    {
-      label: "Active Jobs",
-      value: "324",
-      change: "+8%",
-      icon: Briefcase,
-      color: "from-primary to-secondary",
-    },
-    {
-      label: "Total Revenue",
-      value: "KES 4.2M",
-      change: "+23%",
-      icon: DollarSign,
-      color: "from-green-500 to-green-600",
-    },
-    {
-      label: "Commission Collected",
-      value: "KES 840K",
-      change: "+15%",
-      icon: TrendingUp,
-      color: "from-purple-500 to-purple-600",
-    },
-  ]
+  const stats = []
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

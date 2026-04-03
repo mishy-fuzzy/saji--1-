@@ -1,52 +1,77 @@
 import { NextRequest, NextResponse } from "next/server"
+import { db } from "@/lib/server/db"
+
+const prismaDb: any = db
 
 export async function GET(req: NextRequest) {
   try {
-    // Emergency services with standard pricing
-    const emergencyServices = [
-      {
-        id: "burst-pipe",
-        label: "Burst Pipe",
-        price: 3500,
-        icon: "Droplets",
-        description: "Urgent water pipe repair",
-      },
-      {
-        id: "power-outage",
-        label: "Power Outage",
-        price: 4000,
-        icon: "Zap",
-        description: "Electrical emergency",
-      },
-      {
-        id: "gas-leak",
-        label: "Gas Leak",
-        price: 5000,
-        icon: "Flame",
-        description: "Gas emergency repair",
-      },
-      {
-        id: "flooding",
-        label: "Flooding",
-        price: 4500,
-        icon: "CloudRain",
-        description: "Water damage emergency",
-      },
-      {
-        id: "lock-out",
-        label: "Lock Out",
-        price: 2500,
-        icon: "Key",
-        description: "Emergency locksmith",
-      },
-      {
-        id: "broken-window",
-        label: "Broken Window",
-        price: 3000,
-        icon: "PanelTop",
-        description: "Window repair",
-      },
+    const emergencyKeywords = [
+      "emergency",
+      "urgent",
+      "burst",
+      "pipe",
+      "outage",
+      "leak",
+      "flood",
+      "lock",
+      "repair",
+      "fire",
     ]
+
+    const services = await prismaDb.service.findMany({
+      where: {
+        OR: [
+          { name: { contains: "emergency", mode: "insensitive" } },
+          { description: { contains: "emergency", mode: "insensitive" } },
+          { category: { contains: "emergency", mode: "insensitive" } },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        category: true,
+        basePrice: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 40,
+    })
+
+    const fallbackServices =
+      services.length > 0
+        ? services
+        : await prismaDb.service.findMany({
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              category: true,
+              basePrice: true,
+            },
+            orderBy: { createdAt: "desc" },
+            take: 100,
+          })
+
+    const matchedEmergencyServices = fallbackServices
+      .filter((service: any) => {
+        const text = [service.name, service.category, service.description]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+        return emergencyKeywords.some((keyword) => text.includes(keyword))
+      })
+      .slice(0, 12)
+
+    const emergencyServices =
+      (matchedEmergencyServices.length > 0
+        ? matchedEmergencyServices
+        : fallbackServices.slice(0, 12))
+      .map((service: any) => ({
+        id: String(service.id),
+        label: String(service.name || "Emergency Service"),
+        price: Number(service.basePrice || 0),
+        description: String(service.description || service.category || "Urgent support"),
+      }))
 
     return NextResponse.json({
       ok: true,

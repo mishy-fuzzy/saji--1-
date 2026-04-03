@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocalization } from "@/lib/hooks/useLocalization";
 import { useAuthContext } from "@/lib/auth-context";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search,
   Play,
@@ -111,14 +113,22 @@ function QuickFixCard() {
   );
 }
 
-function EmergencyBanner() {
+type EmergencyAlert = {
+  title: string;
+  category: string;
+  message: string;
+};
+
+function EmergencyBanner({ emergency }: { emergency: EmergencyAlert | null }) {
+  if (!emergency) return null;
+
   return (
     <div className="mb-5 relative overflow-hidden rounded-2xl border-2 border-red-400/60 dark:border-red-500/40 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/20">
       <div className="flex items-center gap-3 px-4 py-3">
         <div className="flex items-center gap-2 flex-shrink-0">
           <AlertTriangle className="w-5 h-5 text-red-500" />
           <span className="font-bold text-red-600 dark:text-red-400 text-sm">
-            EMERGENCY: Burst Pipe
+            EMERGENCY: {emergency.title}
           </span>
         </div>
         <div className="flex-1 flex items-center justify-end">
@@ -139,8 +149,35 @@ function EmergencyBanner() {
         </div>
       </div>
       <p className="text-xs text-muted-foreground px-4 pb-2.5 text-right">
-        Auto enforcement
+        {emergency.category} • {emergency.message}
       </p>
+    </div>
+  );
+}
+
+function CustomerHomeSkeleton() {
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="max-w-7xl mx-auto px-4 py-5 space-y-5">
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-80" />
+        </div>
+        <Skeleton className="h-12 w-full rounded-2xl" />
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Skeleton className="h-32 w-full rounded-2xl" />
+          <Skeleton className="h-24 w-full rounded-2xl" />
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
+          {Array.from({ length: 6 }).map((_, idx) => (
+            <Skeleton key={idx} className="h-24 w-full rounded-2xl" />
+          ))}
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Skeleton className="h-52 w-full rounded-2xl" />
+          <Skeleton className="h-52 w-full rounded-2xl" />
+        </div>
+      </div>
     </div>
   );
 }
@@ -333,52 +370,7 @@ function FeaturedShopsSection({ shops }: { shops: any[] }) {
 }
 
 function LiveProviderBubble() {
-  return (
-    <div className="mt-4 flex items-center gap-3 p-3 rounded-2xl bg-card border border-border shadow-md">
-      <div className="relative flex-shrink-0">
-        <div className="w-12 h-12 rounded-full p-[2px] bg-gradient-to-tr from-red-500 to-orange-400">
-          <div className="w-full h-full rounded-full overflow-hidden border-2 border-card">
-            <Image
-              src="https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=100&h=100&fit=crop"
-              alt="Mary Wanjiku"
-              width={48}
-              height={48}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        </div>
-        <span className="absolute -bottom-0.5 left-1/2 -translate-x-1/2 px-1 py-px bg-red-500 text-white text-[7px] font-bold rounded-full leading-none">
-          LIVE
-        </span>
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <p className="font-semibold text-foreground text-sm">Mary Wanjiku</p>
-          <span className="text-[10px] px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-full font-medium">
-            LIVE NOW
-          </span>
-        </div>
-        <div className="flex items-center gap-2 mt-0.5">
-          <Badge
-            variant="secondary"
-            className="text-[10px] px-1.5 py-0 h-4 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 border-0"
-          >
-            Best 2099
-          </Badge>
-          <span className="text-xs text-muted-foreground">106 Jobs</span>
-        </div>
-        <p className="text-[10px] text-primary mt-0.5 flex items-center gap-0.5">
-          <Sparkles className="w-3 h-3" /> Matched by Saji AI
-        </p>
-      </div>
-      <Button
-        size="sm"
-        className="bg-primary hover:bg-primary/90 text-primary-foreground rounded-xl h-8 text-xs px-3"
-      >
-        View Here
-      </Button>
-    </div>
-  );
+  return null;
 }
 
 function CategoryTabs({
@@ -454,8 +446,10 @@ function ServiceCategoriesGrid({
 export function CustomerHome() {
   const { currency } = useLocalization();
   const { user } = useAuthContext();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("Professional");
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // Story / Live stream modals
   const [activeStoryIndex, setActiveStoryIndex] = useState(0);
@@ -476,29 +470,57 @@ export function CustomerHome() {
   const [serviceCategoriesData, setServiceCategoriesData] = useState<any[]>([]);
   const [projectStoriesData, setProjectStoriesData] = useState<any[]>([]);
   const [liveExpertsData, setLiveExpertsData] = useState<any[]>([]);
+  const [liveGifts, setLiveGifts] = useState<any[]>([]);
+  const [emergencyAlertData, setEmergencyAlertData] =
+    useState<EmergencyAlert | null>(null);
+  const hasShownLoadError = useRef(false);
 
-  const liveGifts = [
-    { id: 1, name: "Thumbs Up", icon: "👍", price: 10 },
-    { id: 2, name: "Clap", icon: "👏", price: 20 },
-    { id: 3, name: "Heart", icon: "❤️", price: 50 },
-    { id: 4, name: "Fire", icon: "🔥", price: 100 },
-    { id: 5, name: "Star", icon: "⭐", price: 200 },
-    { id: 6, name: "Diamond", icon: "💎", price: 500 },
-    { id: 7, name: "Crown", icon: "👑", price: 1000 },
-    { id: 8, name: "Rocket", icon: "🚀", price: 2000 },
-  ];
+  const fetchWithRetry = async (
+    url: string,
+    retries = 2,
+    delayMs = 400,
+  ): Promise<Response> => {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (!response.ok) {
+          throw new Error(`Request failed (${response.status}) for ${url}`);
+        }
+        return response;
+      } catch (error) {
+        if (attempt === retries) {
+          throw error;
+        }
+        await new Promise((resolve) =>
+          window.setTimeout(resolve, delayMs * (attempt + 1)),
+        );
+      }
+    }
+
+    throw new Error(`Request retries exhausted for ${url}`);
+  };
 
   useEffect(() => {
     const loadHome = async () => {
       try {
-        const [homeRes, walletRes] = await Promise.all([
-          fetch("/api/customer/home", { cache: "no-store" }),
-          fetch("/api/wallet", { cache: "no-store" }),
+        if (isInitialLoading) {
+          setIsInitialLoading(true);
+        }
+
+        const [homeRes, walletRes, giftsRes] = await Promise.all([
+          fetchWithRetry("/api/customer/home"),
+          fetchWithRetry("/api/wallet"),
+          fetchWithRetry("/api/gifts"),
         ]);
 
         const homePayload = await homeRes.json();
         const walletPayload = await walletRes.json();
+        const giftsPayload = await giftsRes.json();
         const data = homePayload?.data || {};
+
+        if (giftsRes.ok && Array.isArray(giftsPayload?.data)) {
+          setLiveGifts(giftsPayload.data);
+        }
 
         setLiveProvidersData(
           Array.isArray(data.liveProviders) ? data.liveProviders : [],
@@ -524,16 +546,34 @@ export function CustomerHome() {
         setProjectStoriesData(
           Array.isArray(data.projectStories) ? data.projectStories : [],
         );
+        setEmergencyAlertData(data.emergencyAlert || null);
 
         if (walletRes.ok && walletPayload?.ok) {
           setWalletBalance(Number(walletPayload?.data?.balance || 0));
         }
+
+        hasShownLoadError.current = false;
       } catch {
         setLiveProvidersData([]);
         setFeaturedShopsData([]);
         setServiceCategoriesData([]);
         setProjectStoriesData([]);
         setLiveExpertsData([]);
+        setEmergencyAlertData(null);
+
+        if (!hasShownLoadError.current) {
+          hasShownLoadError.current = true;
+          toast({
+            title: "Unable to refresh home data",
+            description:
+              "We couldn't load live data right now. Please check your connection and try again.",
+            variant: "destructive",
+          });
+        }
+      } finally {
+        if (isInitialLoading) {
+          setIsInitialLoading(false);
+        }
       }
     };
 
@@ -545,11 +585,7 @@ export function CustomerHome() {
   const handleJoinLive = (stream: any) => {
     if (stream.isFree) {
       setJoinedLive(stream);
-      setLiveComments([
-        { user: "John D.", text: "Great work!" },
-        { user: "Mary K.", text: "How long did this take?" },
-        { user: "Peter M.", text: "Amazing tips!" },
-      ]);
+      setLiveComments([]);
       setSentGifts([]);
     } else {
       setShowJoinConfirm(stream);
@@ -565,10 +601,7 @@ export function CustomerHome() {
       setWalletBalance((prev) => prev - price);
       setJoinedLive(showJoinConfirm);
       setShowJoinConfirm(null);
-      setLiveComments([
-        { user: "System", text: `You joined for ${showJoinConfirm.tipAmount}` },
-        { user: "Mary K.", text: "Welcome! Great content here." },
-      ]);
+      setLiveComments([]);
       setSentGifts([]);
     }
   };
@@ -596,6 +629,10 @@ export function CustomerHome() {
     }
   };
 
+  if (isInitialLoading) {
+    return <CustomerHomeSkeleton />;
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 py-5">
@@ -618,7 +655,7 @@ export function CustomerHome() {
         {/* Desktop: 2-column top area for Quick Fix + Emergency. Mobile: stacked */}
         <div className="lg:grid lg:grid-cols-2 lg:gap-4 lg:mb-6">
           <QuickFixCard />
-          <EmergencyBanner />
+          <EmergencyBanner emergency={emergencyAlertData} />
         </div>
 
         {/* Live Now Avatars Row */}

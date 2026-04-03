@@ -5,6 +5,13 @@ import { createInAppNotification } from "@/lib/server/in-app-notifications";
 
 const prismaDb: any = db;
 
+function getMessagesHrefForRole(role: string): string {
+  const normalized = String(role || "").toLowerCase();
+  if (normalized === "subadmin") return "/subadmin/messages";
+  if (normalized === "sub-admin") return "/sub-admin/messages";
+  return `/${normalized || "customer"}/messages`;
+}
+
 function toPositiveInt(value: string | null, fallback: number): number {
   const parsed = Number.parseInt(String(value || ""), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
@@ -231,7 +238,7 @@ export async function POST(request: Request) {
       type: "message",
       title: `New message from ${actor.name}`,
       message: text.length > 96 ? `${text.slice(0, 93)}...` : text,
-      actionHref: "/customer/messages",
+      actionHref: getMessagesHrefForRole(String(receiver.role || "")),
       metadata: { senderId: actor.id, messageId: row.id },
     });
 

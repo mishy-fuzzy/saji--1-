@@ -52,6 +52,8 @@ export default function TeamPage() {
   const [inviteNotice, setInviteNotice] = useState<{
     email: string;
     loginUrl: string;
+    status?: "sent" | "email_failed";
+    error?: string;
   } | null>(null);
   const [newMember, setNewMember] = useState({
     name: "",
@@ -66,6 +68,16 @@ export default function TeamPage() {
       agent: teamMembers.filter((m) => m.role === "agent").length,
     };
   }, [teamMembers]);
+
+  function openInviteLink(rawUrl: string) {
+    try {
+      const parsed = new URL(rawUrl, window.location.origin);
+      const localUrl = `${window.location.origin}${parsed.pathname}${parsed.search}${parsed.hash}`;
+      window.open(localUrl, "_blank", "noopener,noreferrer");
+    } catch {
+      window.open(rawUrl, "_blank", "noopener,noreferrer");
+    }
+  }
 
   async function loadTeamMembers(showLoading = false) {
     if (showLoading) setIsRefreshing(true);
@@ -136,6 +148,14 @@ export default function TeamPage() {
         setInviteNotice({
           email: String(payload.invitation.email),
           loginUrl: String(payload.invitation.loginUrl),
+          status:
+            payload?.invitation?.status === "email_failed"
+              ? "email_failed"
+              : "sent",
+          error:
+            typeof payload?.invitation?.error === "string"
+              ? payload.invitation.error
+              : undefined,
         });
       }
       setShowModal(false);
@@ -192,7 +212,18 @@ export default function TeamPage() {
           item.id === member.id ? { ...item, credentialsSent: true } : item,
         ),
       );
-      setInviteNotice({ email: member.email, loginUrl: `/${member.role}` });
+      setInviteNotice({
+        email: member.email,
+        loginUrl: String(payload?.invitation?.loginUrl || `/${member.role}`),
+        status:
+          payload?.invitation?.status === "email_failed"
+            ? "email_failed"
+            : "sent",
+        error:
+          typeof payload?.invitation?.error === "string"
+            ? payload.invitation.error
+            : undefined,
+      });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to resend invite";
@@ -357,7 +388,7 @@ export default function TeamPage() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-50 backdrop-blur-[1px]">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full mx-4">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
               Add Team Member
@@ -416,41 +447,78 @@ export default function TeamPage() {
       )}
 
       {inviteNotice && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-slate-950/70 flex items-center justify-center z-50 p-4 backdrop-blur-[1px]">
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-              Promotion Email Sent
+              ✓ Team Member Invited
             </h2>
             <div className="space-y-4 mb-6">
-              <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg space-y-3">
+              <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-4 rounded-lg space-y-3">
                 <div>
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                    Recipient Email
+                    Sent to
                   </p>
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
                     {inviteNotice.email}
                   </p>
+                  {inviteNotice.status === "email_failed" ? (
+                    <p className="text-xs text-red-600 dark:text-red-400 mt-1">
+                      Email delivery failed. Share the direct link manually.
+                    </p>
+                  ) : (
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                      Invitation email has been sent
+                    </p>
+                  )}
                 </div>
-                <div className="pt-2 border-t border-gray-200 dark:border-gray-600">
-                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
-                    Acceptance Link
+                <div className="pt-3 border-t border-green-200 dark:border-green-800">
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                    Direct link (for manual sharing)
                   </p>
-                  <p className="text-sm text-blue-600 dark:text-blue-400 break-all">
-                    {inviteNotice.loginUrl}
-                  </p>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={inviteNotice.loginUrl}
+                      readOnly
+                      className="flex-1 text-xs px-3 py-2 border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white rounded font-mono break-all"
+                    />
+                    <button
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(inviteNotice.loginUrl);
+                          alert("Link copied to clipboard!");
+                        } catch {
+                          alert("Could not copy automatically. Please copy the link manually.");
+                        }
+                      }}
+                      className="px-3 py-2 bg-blue-600 text-white rounded text-xs font-medium hover:bg-blue-700 whitespace-nowrap"
+                    >
+                      Copy
+                    </button>
+                  </div>
                 </div>
+                {inviteNotice.error ? (
+                  <p className="text-xs text-red-600 dark:text-red-400">
+                    Delivery error: {inviteNotice.error}
+                  </p>
+                ) : null}
               </div>
-              <p className="text-xs text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 p-3 rounded">
-                The user must click this email link to accept the promotion.
-                Their role changes only after acceptance.
+              <p className="text-xs text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 p-3 rounded border border-blue-200 dark:border-blue-800">
+                📧 The team member will receive an email with the invitation link. They must click the link to accept and create their account.
               </p>
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => setInviteNotice(null)}
-                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                onClick={() => openInviteLink(inviteNotice.loginUrl)}
+                className="flex-1 px-4 py-2 border border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 font-medium"
               >
-                Close
+                Open Link
+              </button>
+              <button
+                onClick={() => setInviteNotice(null)}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+              >
+                Done
               </button>
             </div>
           </div>

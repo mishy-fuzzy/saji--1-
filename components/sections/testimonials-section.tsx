@@ -4,29 +4,7 @@ import { Card } from "@/components/ui/card"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Star } from "lucide-react"
 
-const testimonials = [
-  {
-    name: "Sarah Johnson",
-    role: "Business Owner",
-    avatar: "/placeholder-user.jpg",
-    rating: 5,
-    text: "SAJI made it incredibly easy to find a reliable electrician. The payment was secure and the service was exactly as promised.",
-  },
-  {
-    name: "David Kipchoge",
-    role: "Homeowner",
-    avatar: "/placeholder-user.jpg",
-    rating: 5,
-    text: "As a provider, I've earned consistent income through SAJI. The platform is transparent, fair, and very easy to use.",
-  },
-  {
-    name: "Maria Garcia",
-    role: "Property Manager",
-    avatar: "/placeholder-user.jpg",
-    rating: 5,
-    text: "We manage multiple properties and SAJI has become our go-to for maintenance services. Reliable, affordable, and professional.",
-  },
-]
+const testimonials = []
 
 export function TestimonialsSection() {
   return (
