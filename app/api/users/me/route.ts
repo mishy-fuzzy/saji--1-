@@ -18,5 +18,22 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, user: sessionUser })
   }
 
-  return NextResponse.json({ ok: true, user })
+  const phoneVerification = await db.authLog.findFirst({
+    where: {
+      provider: "local",
+      mode: "verified-phone",
+      email: user.email,
+      status: "SUCCESS",
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true },
+  })
+
+  return NextResponse.json({
+    ok: true,
+    user: {
+      ...user,
+      phoneVerified: Boolean(phoneVerification),
+    },
+  })
 }

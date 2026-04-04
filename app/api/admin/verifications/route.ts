@@ -1,7 +1,14 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/server/db"
+import { getSessionActor, hasAnyRole } from "@/lib/server/api-auth"
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { actor, error } = await getSessionActor(request)
+  if (error) return error
+  if (!actor || !hasAnyRole(actor, ["admin", "sub-admin", "subadmin"])) {
+    return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 })
+  }
+
   const verifications = await db.verification.findMany({
     orderBy: { createdAt: "desc" },
     include: {
@@ -22,6 +29,12 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   try {
+    const { actor, error } = await getSessionActor(request)
+    if (error) return error
+    if (!actor || !hasAnyRole(actor, ["admin", "sub-admin", "subadmin"])) {
+      return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 })
+    }
+
     const body = await request.json()
     const { verificationId, status, notes } = body
 

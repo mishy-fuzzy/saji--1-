@@ -3,6 +3,8 @@
 import { ArrowLeft, Check, Clock } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 type VerificationItem = {
   id: string;
@@ -13,6 +15,10 @@ type VerificationItem = {
 
 export default function VerificationPage() {
   const [verifications, setVerifications] = useState<VerificationItem[]>([]);
+  const [codes, setCodes] = useState({ email: "", phone: "" });
+  const [requested, setRequested] = useState({ email: false, phone: false });
+  const [busy, setBusy] = useState<string | null>(null);
+  const [message, setMessage] = useState<string>("");
 
   useEffect(() => {
     const loadVerification = async () => {
@@ -34,7 +40,7 @@ export default function VerificationPage() {
           {
             id: "phone",
             type: "Phone",
-            status: user?.phone ? "verified" : "pending",
+            status: user?.phoneVerified ? "verified" : "pending",
             date: createdDate,
           },
         ];
@@ -47,6 +53,84 @@ export default function VerificationPage() {
 
     loadVerification();
   }, []);
+
+  const requestCode = async (type: "email" | "phone") => {
+    setBusy(`request-${type}`);
+    setMessage("");
+    try {
+      const response = await fetch("/api/users/verify/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to request verification code");
+      }
+      setRequested((prev) => ({ ...prev, [type]: true }));
+      const devCode = String(payload?.data?.devCode || "").trim();
+      setMessage(
+        devCode
+          ? `Code sent for ${type} verification. Dev OTP: ${devCode}`
+          : `Code sent for ${type} verification.`
+      );
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to request verification code");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const confirmCode = async (type: "email" | "phone") => {
+    const code = String(codes[type] || "").trim();
+    if (!/^\d{6}$/.test(code)) {
+      setMessage("Enter a valid 6-digit code.");
+      return;
+    }
+
+    setBusy(`confirm-${type}`);
+    setMessage("");
+    try {
+      const response = await fetch("/api/users/verify/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type, code }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to verify code");
+      }
+
+      setCodes((prev) => ({ ...prev, [type]: "" }));
+      setMessage(`${type} verified successfully.`);
+
+      const refresh = await fetch("/api/users/me", { cache: "no-store" });
+      const next = await refresh.json();
+      const user = next?.user || {};
+      const createdDate = user?.createdAt
+        ? new Date(user.createdAt).toLocaleDateString()
+        : "-";
+
+      setVerifications([
+        {
+          id: "email",
+          type: "Email",
+          status: user?.emailVerified ? "verified" : "pending",
+          date: createdDate,
+        },
+        {
+          id: "phone",
+          type: "Phone",
+          status: user?.phoneVerified ? "verified" : "pending",
+          date: createdDate,
+        },
+      ]);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Failed to verify code");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20 lg:pb-0">
@@ -63,13 +147,16 @@ export default function VerificationPage() {
       {/* Content */}
       <div className="p-4 max-w-2xl mx-auto lg:max-w-4xl">
         <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border dark:border-gray-700">
+          {message ? (
+            <p className="mb-4 text-sm text-blue-600 dark:text-blue-400">{message}</p>
+          ) : null}
           <div className="space-y-3">
             {verifications.map((verification) => (
               <div
                 key={verification.id}
                 className="flex items-center justify-between p-4 border dark:border-gray-700 rounded-lg"
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-start gap-3">
                   {verification.status === "verified" ? (
                     <div className="w-10 h-10 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
                       <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
@@ -86,6 +173,39 @@ export default function VerificationPage() {
                     <p className="text-xs text-gray-600 dark:text-gray-400">
                       {verification.date}
                     </p>
+
+                    {verification.status === "pending" ? (
+                      <div className="mt-3 flex flex-col sm:flex-row gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => requestCode(verification.id as "email" | "phone")}
+                          disabled={busy !== null}
+                        >
+                          {busy === `request-${verification.id}` ? "Sending..." : "Send Code"}
+                        </Button>
+
+                        <Input
+                          placeholder="Enter 6-digit code"
+                          value={codes[verification.id as "email" | "phone"]}
+                          onChange={(e) =>
+                            setCodes((prev) => ({
+                              ...prev,
+                              [verification.id]: e.target.value.replace(/\D/g, "").slice(0, 6),
+                            }))
+                          }
+                          className="h-9 w-40"
+                        />
+
+                        <Button
+                          size="sm"
+                          onClick={() => confirmCode(verification.id as "email" | "phone")}
+                          disabled={busy !== null}
+                        >
+                          {busy === `confirm-${verification.id}` ? "Verifying..." : "Verify Code"}
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 <span
