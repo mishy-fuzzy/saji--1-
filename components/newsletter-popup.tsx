@@ -9,6 +9,8 @@ import { Mail, X, Loader2, CheckCircle2 } from "lucide-react";
 
 const STORAGE_KEY = "saji-newsletter-popup-dismissed-at";
 const RESHOW_MS = 7 * 24 * 60 * 60 * 1000;
+const SUBSCRIBED_KEY = "saji-newsletter-subscribed";
+const SESSION_DISMISSED_KEY = "saji-newsletter-dismissed-session";
 
 export function NewsletterPopup() {
   const { user } = useAuthContext();
@@ -22,12 +24,26 @@ export function NewsletterPopup() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const forceShow = params.get("newsletter") === "1";
+    const subscribed = localStorage.getItem(SUBSCRIBED_KEY) === "1";
+
+    if (subscribed && !forceShow) {
+      setOpen(false);
+      setShowLauncher(false);
+      return;
+    }
+
+    setShowLauncher(true);
+
+    const sessionDismissed = sessionStorage.getItem(SESSION_DISMISSED_KEY) === "1";
     const dismissedAtRaw = localStorage.getItem(STORAGE_KEY);
     const dismissedAt = Number(dismissedAtRaw || "0");
     const allowShow = forceShow || !dismissedAt || Date.now() - dismissedAt > RESHOW_MS;
 
     if (!allowShow) {
-      setShowLauncher(true);
+      return;
+    }
+
+    if (sessionDismissed && !forceShow) {
       return;
     }
 
@@ -46,6 +62,7 @@ export function NewsletterPopup() {
 
   const closePopup = () => {
     localStorage.setItem(STORAGE_KEY, String(Date.now()));
+    sessionStorage.setItem(SESSION_DISMISSED_KEY, "1");
     setOpen(false);
     setShowLauncher(true);
   };
@@ -73,6 +90,8 @@ export function NewsletterPopup() {
       }
 
       setSubscribed(true);
+      localStorage.setItem(SUBSCRIBED_KEY, "1");
+      sessionStorage.removeItem(SESSION_DISMISSED_KEY);
       setTimeout(() => {
         closePopup();
       }, 1200);

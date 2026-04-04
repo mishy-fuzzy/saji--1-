@@ -24,43 +24,29 @@ export async function GET(request: Request) {
       isSuspended: boolean;
     } | null = null;
 
-    try {
-      user = await db.user.findFirst({
-        where: {
-          id: session.userId,
-          deletedAt: null,
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
-          role: true,
-          image: true,
-          emailVerified: true,
-          createdAt: true,
-          isSuspended: true,
-        },
-      });
-    } catch {
-      user = null;
-    }
+    user = await db.user.findFirst({
+      where: {
+        id: session.userId,
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        role: true,
+        image: true,
+        emailVerified: true,
+        createdAt: true,
+        isSuspended: true,
+      },
+    });
 
     if (!user) {
-      return NextResponse.json({
-        ok: true,
-        data: {
-          id: session.userId,
-          name: "User",
-          email: session.email,
-          phone: "",
-          role: session.role,
-          avatar: "",
-          shopkeeperRegistrationComplete: false,
-          shopkeeperRegistrationStatus: "not_submitted",
-          createdAt: new Date(0),
-        },
-      });
+      return NextResponse.json(
+        { ok: false, error: "User not found" },
+        { status: 404 },
+      );
     }
 
     if (user.isSuspended) {
