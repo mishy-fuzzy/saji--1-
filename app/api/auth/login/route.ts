@@ -8,23 +8,41 @@ const prismaDb: any = db;
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    const identifier = String(body?.identifier || "").trim();
     const email = String(body?.email || "")
       .trim()
       .toLowerCase();
     const phone = String(body?.phone || "").trim();
+    const name = String(body?.name || "").trim();
     const password = String(body?.password || "");
 
-    if ((!email && !phone) || !password) {
+    if ((!email && !phone && !identifier && !name) || !password) {
       return NextResponse.json(
         { ok: false, error: "credentials are required" },
         { status: 400 },
       );
     }
 
+    const resolvedEmail =
+      email || (identifier.includes("@") ? identifier.toLowerCase() : "");
+    const resolvedPhone =
+      phone ||
+      (!resolvedEmail && /^\+?[0-9\s\-()]{7,}$/.test(identifier)
+        ? identifier
+        : "");
+    const resolvedName =
+      name || (!resolvedEmail && !resolvedPhone ? identifier : "");
+
+    const whereClause = resolvedEmail
+      ? { email: resolvedEmail }
+      : resolvedPhone
+        ? { phone: resolvedPhone }
+        : { name: resolvedName };
+
     const user = await prismaDb.user.findFirst({
       where: {
         deletedAt: null,
-        ...(email ? { email } : { phone }),
+        ...whereClause,
       },
       select: {
         id: true,
@@ -40,9 +58,9 @@ export async function POST(request: Request) {
       },
     });
 
-    if (!user && email) {
+    if (!user && resolvedEmail) {
       const archived = await prismaDb.user.findUnique({
-        where: { email },
+        where: { email: resolvedEmail },
         select: { id: true, deletedAt: true },
       });
 

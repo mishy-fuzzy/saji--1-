@@ -17,6 +17,7 @@ interface TeamMember {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   role: TeamRole;
   status: "active" | "inactive";
   joinedDate: string;
@@ -51,13 +52,17 @@ export default function TeamPage() {
   const [showModal, setShowModal] = useState(false);
   const [inviteNotice, setInviteNotice] = useState<{
     email: string;
+    phone?: string;
     loginUrl: string;
+    temporaryPassword?: string;
     status?: "sent" | "email_failed";
     error?: string;
   } | null>(null);
   const [newMember, setNewMember] = useState({
     name: "",
     email: "",
+    phone: "",
+    password: "",
     role: "sub-admin" as TeamRole,
   });
 
@@ -97,6 +102,7 @@ export default function TeamPage() {
         id: member.id,
         name: member.name,
         email: member.email,
+        phone: String(member.phone || ""),
         role: normalizeRole(String(member.role || "")),
         status: member.status === "inactive" ? "inactive" : "active",
         joinedDate: String(member.joinedDate || "").split("T")[0],
@@ -119,8 +125,13 @@ export default function TeamPage() {
   }, []);
 
   async function handleAddMember() {
-    if (!newMember.name.trim() || !newMember.email.trim()) {
-      setError("Name and email are required");
+    if (!newMember.name.trim() || !newMember.email.trim() || !newMember.password.trim()) {
+      setError("Name, email and admin-set password are required");
+      return;
+    }
+
+    if (newMember.password.trim().length < 8) {
+      setError("Password must be at least 8 characters");
       return;
     }
 
@@ -134,6 +145,8 @@ export default function TeamPage() {
         body: JSON.stringify({
           name: newMember.name.trim(),
           email: newMember.email.trim(),
+          phone: newMember.phone.trim(),
+          password: newMember.password,
           role: newMember.role,
         }),
       });
@@ -147,7 +160,15 @@ export default function TeamPage() {
       if (payload?.invitation?.email && payload?.invitation?.loginUrl) {
         setInviteNotice({
           email: String(payload.invitation.email),
+          phone:
+            typeof payload?.invitation?.phone === "string"
+              ? payload.invitation.phone
+              : undefined,
           loginUrl: String(payload.invitation.loginUrl),
+          temporaryPassword:
+            typeof payload?.invitation?.temporaryPassword === "string"
+              ? payload.invitation.temporaryPassword
+              : undefined,
           status:
             payload?.invitation?.status === "email_failed"
               ? "email_failed"
@@ -159,7 +180,7 @@ export default function TeamPage() {
         });
       }
       setShowModal(false);
-      setNewMember({ name: "", email: "", role: "sub-admin" });
+      setNewMember({ name: "", email: "", phone: "", password: "", role: "sub-admin" });
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to send promotion email";
@@ -303,6 +324,9 @@ export default function TeamPage() {
                   Email
                 </th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
+                  Phone
+                </th>
+                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
                   Role
                 </th>
                 <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
@@ -330,6 +354,9 @@ export default function TeamPage() {
                   </td>
                   <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
                     {member.email}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600 dark:text-gray-400">
+                    {member.phone || "-"}
                   </td>
                   <td className="px-6 py-4 text-sm">
                     <span className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-full text-xs font-medium capitalize">
@@ -412,6 +439,24 @@ export default function TeamPage() {
                 }
                 className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
               />
+              <input
+                type="tel"
+                placeholder="Phone (optional)"
+                value={newMember.phone}
+                onChange={(e) =>
+                  setNewMember({ ...newMember, phone: e.target.value })
+                }
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
+              <input
+                type="password"
+                placeholder="Password to give team member"
+                value={newMember.password}
+                onChange={(e) =>
+                  setNewMember({ ...newMember, password: e.target.value })
+                }
+                className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
               <select
                 value={newMember.role}
                 onChange={(e) =>
@@ -461,19 +506,34 @@ export default function TeamPage() {
                   <p className="text-sm font-medium text-gray-900 dark:text-white">
                     {inviteNotice.email}
                   </p>
+                  {inviteNotice.phone ? (
+                    <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
+                      Phone: {inviteNotice.phone}
+                    </p>
+                  ) : null}
                   {inviteNotice.status === "email_failed" ? (
                     <p className="text-xs text-red-600 dark:text-red-400 mt-1">
                       Email delivery failed. Share the direct link manually.
                     </p>
                   ) : (
                     <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">
-                      Invitation email has been sent
+                      Credentials email has been sent
                     </p>
                   )}
                 </div>
+                {inviteNotice.temporaryPassword ? (
+                  <div>
+                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                      Password given by admin
+                    </p>
+                    <p className="text-sm font-mono bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-3 py-2 rounded">
+                      {inviteNotice.temporaryPassword}
+                    </p>
+                  </div>
+                ) : null}
                 <div className="pt-3 border-t border-green-200 dark:border-green-800">
                   <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
-                    Direct link (for manual sharing)
+                    Team login URL
                   </p>
                   <div className="flex gap-2">
                     <input
@@ -504,7 +564,7 @@ export default function TeamPage() {
                 ) : null}
               </div>
               <p className="text-xs text-gray-600 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 p-3 rounded border border-blue-200 dark:border-blue-800">
-                📧 The team member will receive an email with the invitation link. They must click the link to accept and create their account.
+                📧 Team members can sign in anytime with the email/phone and password provided by admin. The URL is shared here for convenience.
               </p>
             </div>
             <div className="flex gap-2">

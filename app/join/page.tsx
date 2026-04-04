@@ -8,11 +8,32 @@ export default function JoinPage() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
+    const trackOpen = async (payload: {
+      referrerId: string;
+      referralCode?: string;
+      role?: string;
+    }) => {
+      try {
+        await fetch("/api/referrals/track-open", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+          keepalive: true,
+        });
+      } catch {
+        // Keep redirect reliable even if analytics tracking fails.
+      }
+    };
+
     const params = new URLSearchParams();
 
     const role = String(searchParams.get("role") || "").trim().toLowerCase();
     const ref = String(searchParams.get("ref") || "").trim();
     const rid = String(searchParams.get("rid") || "").trim();
+
+    if (rid) {
+      trackOpen({ referrerId: rid, referralCode: ref || undefined, role: role || undefined });
+    }
 
     if (role === "customer" || role === "provider" || role === "shopkeeper") {
       params.set("role", role);

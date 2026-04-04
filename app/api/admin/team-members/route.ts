@@ -4,6 +4,8 @@ import { getSessionActor, hasAnyRole } from "@/lib/server/api-auth";
 import { createInAppNotification } from "@/lib/server/in-app-notifications";
 import { sendEmail } from "@/lib/server/mailer";
 import { createPromotionInvite } from "@/lib/server/team-promotion-invites";
+import { resolveAppUrlFromRequest } from "@/lib/server/app-url";
+import { hashPassword } from "@/lib/server/password";
 
 const prismaDb: any = db;
 
@@ -63,14 +65,6 @@ function safeParse(value: string | null | undefined): Record<string, unknown> {
   } catch {
     return {};
   }
-}
-
-function resolveAppUrl(requestOrigin?: string): string {
-  // Prefer the active request origin to avoid stale env hosts causing 404 links.
-  if (requestOrigin) return requestOrigin.replace(/\/$/, "");
-  const explicit = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (explicit) return explicit.replace(/\/$/, "");
-  return "http://localhost:3500";
 }
 
 async function getPreviousRoleFromLatestPromotion(
@@ -161,6 +155,96 @@ async function queueTeamInviteEmail(params: {
   }
 }
 
+async function queueTeamCredentialsEmail(params: {
+  email: string;
+  name: string;
+  phone?: string | null;
+  role: string;
+  invitedByEmail: string | null;
+  loginUrl: string;
+  temporaryPassword: string;
+}) {
+  const roleLabel = mapTeamRoleForUi(params.role).replace("-", " ");
+  const subject = `Team Account Ready: SAJI ${roleLabel}`;
+  const phoneInfo = params.phone ? `\nPhone: ${params.phone}` : "";
+  const text = [
+    `Hello ${params.name},`,
+    "",
+    `${params.invitedByEmail || "An administrator"} has created your SAJI ${roleLabel} account.`,
+    `Email: ${params.email}${phoneInfo}`,
+    `Temporary password: ${params.temporaryPassword}`,
+    "",
+    "Login URL:",
+    params.loginUrl,
+    "",
+    "You can now sign in directly using these credentials.",
+  ].join("\n");
+
+  const phoneHtml = params.phone ? `<p><strong>Phone:</strong> ${params.phone}</p>` : "";
+  const html = `
+    <p>Hello ${params.name},</p>
+    <p>${params.invitedByEmail || "An administrator"} has created your SAJI <strong>${roleLabel}</strong> account.</p>
+    <p><strong>Email:</strong> ${params.email}</p>
+    ${phoneHtml}
+    <p><strong>Temporary password:</strong> ${params.temporaryPassword}</p>
+    <p><a href="${params.loginUrl}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;">Open Team Login</a></p>
+    <p>You can now sign in directly using these credentials.</p>
+  `;
+
+  try {
+    const result = await sendEmail({
+      to: params.email,
+      subject,
+      text,
+      html,
+    });
+
+    await prismaDb.notificationLog.create({
+      data: {
+        provider: "smtp",
+        channel: "email",
+        recipient: params.email,
+        message: subject,
+        status: "SENT",
+        response: JSON.stringify(result),
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Email send failed";
+    await prismaDb.notificationLog.create({
+      data: {
+        provider: "smtp",
+        channel: "email",
+        recipient: params.email,
+        message: subject,
+        status: "FAILED",
+        error: message,
+      },
+    });
+    throw error;
+  }
+}
+
+async function ensureTeamRoleProfile(role: string, userId: string) {
+  if (role === "secretary") {
+    await prismaDb.secretary.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+    return;
+  }
+
+  if (role === "agent") {
+    await prismaDb.agent.upsert({
+      where: { userId },
+      update: {},
+      create: { userId },
+    });
+  }
+}
+
 export async function GET(request: Request) {
   const { actor, error } = await getSessionActor(request);
   if (error) return error;
@@ -181,6 +265,7 @@ export async function GET(request: Request) {
       id: true,
       name: true,
       email: true,
+      phone: true,
       role: true,
       isSuspended: true,
       createdAt: true,
@@ -191,6 +276,7 @@ export async function GET(request: Request) {
     id: row.id,
     name: row.name || "Unnamed User",
     email: row.email,
+    phone: row.phone || "",
     role: mapTeamRoleForUi(String(row.role || "")),
     status: row.isSuspended ? "inactive" : "active",
     joinedDate: new Date(row.createdAt).toISOString().split("T")[0],
@@ -217,11 +303,19 @@ export async function POST(request: Request) {
       .trim()
       .toLowerCase();
     const phone = String(body?.phone || "").trim() || null;
+    const temporaryPassword = String(body?.password || "").trim();
     const role = normalizeRole(body?.role);
 
     if (!name || !email || !role) {
       return NextResponse.json(
         { ok: false, error: "name, email and role are required" },
+        { status: 400 },
+      );
+    }
+
+    if (temporaryPassword && temporaryPassword.length < 8) {
+      return NextResponse.json(
+        { ok: false, error: "password must be at least 8 characters" },
         { status: 400 },
       );
     }
@@ -257,6 +351,8 @@ export async function POST(request: Request) {
       update: {
         name,
         phone,
+        ...(temporaryPassword ? { passwordHash: hashPassword(temporaryPassword) } : {}),
+        ...(temporaryPassword ? { role } : {}),
         isSuspended: false,
         deletedAt: null,
       },
@@ -264,6 +360,8 @@ export async function POST(request: Request) {
         name,
         email,
         phone,
+        ...(temporaryPassword ? { passwordHash: hashPassword(temporaryPassword) } : {}),
+        ...(temporaryPassword ? { role } : {}),
         isSuspended: false,
       },
       select: {
@@ -276,6 +374,79 @@ export async function POST(request: Request) {
         createdAt: true,
       },
     });
+
+    const appUrl = resolveAppUrlFromRequest(request);
+
+    if (temporaryPassword) {
+      await ensureTeamRoleProfile(role, created.id);
+
+      let invitationStatus: "sent" | "email_failed" = "sent";
+      let invitationError: string | undefined;
+
+      try {
+        await queueTeamCredentialsEmail({
+          email: created.email,
+          name: created.name || "Team member",
+          phone: created.phone,
+          role,
+          invitedByEmail: actor.email,
+          loginUrl: `${appUrl}/team-login`,
+          temporaryPassword,
+        });
+      } catch (emailError) {
+        invitationStatus = "email_failed";
+        invitationError =
+          emailError instanceof Error
+            ? emailError.message
+            : "Failed to send credentials email";
+      }
+
+      await prismaDb.authLog.create({
+        data: {
+          provider: "local",
+          mode: "admin-team-create-direct",
+          email: created.email,
+          status: "SUCCESS",
+          response: JSON.stringify({
+            by: actor.email,
+            targetRole: role,
+            invitationStatus,
+            invitationError,
+          }),
+        },
+      });
+
+      await createInAppNotification({
+        userId: created.id,
+        type: "success",
+        title: "Team account ready",
+        message: `Your ${mapTeamRoleForUi(role).replace("-", " ")} account is active. Use your admin-provided credentials to sign in at Team Login.`,
+        actionHref: "/team-login",
+        metadata: { invitedBy: actor.email },
+      });
+
+      return NextResponse.json({
+        ok: true,
+        data: {
+          id: created.id,
+          name: created.name || "Unnamed User",
+          email: created.email,
+          phone: created.phone || "",
+          role: mapTeamRoleForUi(role),
+          status: "active",
+          joinedDate: new Date(created.createdAt).toISOString().split("T")[0],
+          credentialsSent: invitationStatus === "sent",
+        },
+        invitation: {
+          email: created.email,
+          phone: created.phone || "",
+          loginUrl: `${appUrl}/team-login`,
+          status: invitationStatus,
+          error: invitationError,
+          temporaryPassword,
+        },
+      });
+    }
 
     const currentRole = normalizeRole(created.role);
     let previousRole = normalizeRestorableRole(existing?.role);
@@ -294,7 +465,6 @@ export async function POST(request: Request) {
       invitedBy: actor.email,
     });
 
-    const appUrl = resolveAppUrl(new URL(request.url).origin);
     const inviteUrl = `${appUrl}/team-invite?token=${encodeURIComponent(invite.token)}`;
 
     await prismaDb.authLog.create({
@@ -371,6 +541,7 @@ export async function POST(request: Request) {
     },
     invitation: {
       email: created.email,
+      phone: created.phone || "",
       loginUrl: inviteUrl,
       status: invitationStatus,
       expiresAt: invite.expiresAt,
@@ -452,7 +623,7 @@ export async function PATCH(request: Request) {
     invitedBy: actor.email,
   });
 
-  const appUrl = resolveAppUrl(new URL(request.url).origin);
+  const appUrl = resolveAppUrlFromRequest(request);
     const inviteUrl = `${appUrl}/team-invite?token=${encodeURIComponent(invite.token)}`;
 
   let invitationStatus: "sent" | "email_failed" = "sent";

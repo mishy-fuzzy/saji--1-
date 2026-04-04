@@ -6,6 +6,7 @@ import {
   markInviteState,
   resolveInviteByToken,
 } from "@/lib/server/team-promotion-invites";
+import { resolveAppUrlFromRequest } from "@/lib/server/app-url";
 
 const TEAM_ROLES = new Set(["subadmin", "secretary", "agent"]);
 
@@ -25,12 +26,6 @@ function resolveLoginPath(role: string): string {
   if (role === "secretary") return "/secretary";
   if (role === "agent") return "/agent";
   return "/team-login";
-}
-
-function resolveAppUrl(requestOrigin: string): string {
-  const explicit = process.env.NEXT_PUBLIC_APP_URL?.trim();
-  if (explicit) return explicit.replace(/\/$/, "");
-  return requestOrigin.replace(/\/$/, "");
 }
 
 async function ensureRoleProfile(
@@ -57,10 +52,10 @@ async function ensureRoleProfile(
 }
 
 export async function GET(request: Request) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
   const token = String(searchParams.get("token") || "").trim();
 
-  const appUrl = resolveAppUrl(origin);
+  const appUrl = resolveAppUrlFromRequest(request);
 
   if (!token) {
     console.error("[INVITE] No token provided");

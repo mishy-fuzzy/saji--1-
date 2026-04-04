@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/server/db";
 import { getSessionFromRequest } from "@/lib/server/session";
+import { normalizeRole } from "@/lib/role-utils";
 
 const prismaDb: any = db;
 
@@ -28,6 +29,18 @@ export async function GET(request: Request) {
       return NextResponse.json(
         { ok: false, error: "User not found" },
         { status: 404 }
+      );
+    }
+
+    const actor = await prismaDb.user.findUnique({
+      where: { id: session.userId },
+      select: { role: true },
+    });
+
+    if (!actor || normalizeRole(actor.role) !== "agent") {
+      return NextResponse.json(
+        { ok: false, error: "Forbidden" },
+        { status: 403 }
       );
     }
 

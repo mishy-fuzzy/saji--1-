@@ -4,6 +4,7 @@ import type React from "react"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuthContext } from "@/lib/auth-context"
+import { normalizeRole } from "@/lib/role-utils"
 import { LoadingScreen } from "@/components/loading-screen"
 import {
   LayoutDashboard, CreditCard, User, LogOut, Menu, X, FileText,
@@ -40,17 +41,20 @@ export default function SecretaryLayout({ children }: { children: React.ReactNod
   const [showNotifications, setShowNotifications] = useState(false)
   const [showMore, setShowMore] = useState(false)
   const [notifications, setNotifications] = useState<SecretaryNotification[]>([])
+  const hasSecretaryAccess = normalizeRole(user?.role) === "secretary"
 
   useEffect(() => { setMounted(true) }, [])
 
   useEffect(() => {
-    if (mounted && !isLoading && (!isAuthenticated || user?.role !== "secretary")) {
+    if (!mounted || isLoading) return
+
+    if (mounted && !isLoading && (!isAuthenticated || !hasSecretaryAccess)) {
       router.push("/")
     }
-  }, [isAuthenticated, isLoading, user, router, mounted])
+  }, [isAuthenticated, isLoading, hasSecretaryAccess, router, mounted])
 
   if (isLoading || !mounted) return <LoadingScreen />
-  if (!isAuthenticated || user?.role !== "secretary") return null
+  if (!isAuthenticated || !hasSecretaryAccess) return null
 
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/secretary" },

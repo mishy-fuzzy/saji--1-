@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuthContext } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -11,15 +11,16 @@ import {
   CheckCircle,
   Users,
   Wallet,
-  ArrowRight,
+  ArrowDown,
   Share2,
   MessageCircle,
   Clock,
+  Link2,
 } from "lucide-react";
 import Image from "next/image";
 
 interface Referral {
-  id: number;
+  id: string;
   name: string;
   avatar: string;
   date: string;
@@ -27,38 +28,82 @@ interface Referral {
   earned: number;
 }
 
-const referrals: Referral[] = [];
-
 const REWARD_AMOUNT = 500;
 const FRIEND_DISCOUNT = 300;
 
 export function CustomerReferralsPage() {
   const { user } = useAuthContext();
-  const [copied, setCopied] = useState(false);
-  const referralCode =
-    "SAJI-" + (user?.name?.toUpperCase().slice(0, 4) || "USER") + "2024";
-  
-  const getDomainUrl = () => {
-    if (typeof window !== "undefined") {
-      return window.location.origin;
-    }
-    return "https://saji.co.ke";
-  };
-  
-  const totalEarned = referrals
-    .filter((r) => r.status === "completed")
-    .reduce((sum, r) => sum + r.earned, 0);
-  const completedCount = referrals.filter(
-    (r) => r.status === "completed",
-  ).length;
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [referralCode, setReferralCode] = useState("CUS-SAJI-0000");
+  const [referralLink, setReferralLink] = useState("https://saji.co.ke/join");
+  const [stats, setStats] = useState({ invited: 0, completed: 0, earned: 0 });
+
+  const fallbackReferralLink = useMemo(() => {
+    if (typeof window === "undefined") return "https://saji.co.ke/join";
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/join?ref=${encodeURIComponent(referralCode)}${user?.id ? `&rid=${encodeURIComponent(user.id)}` : ""}&role=customer`;
+  }, [referralCode, user?.id]);
+
+  useEffect(() => {
+    const loadReferrals = async () => {
+      try {
+        const response = await fetch("/api/customer/referrals", {
+          cache: "no-store",
+          headers: {
+            "x-user-role": "customer",
+          },
+        });
+        const payload = await response.json();
+
+        if (!response.ok || !payload?.ok || !payload?.data) {
+          setReferrals([]);
+          setReferralLink(fallbackReferralLink);
+          setStats({ invited: 0, completed: 0, earned: 0 });
+          return;
+        }
+
+        setReferralCode(String(payload?.data?.referralCode || "CUS-SAJI-0000"));
+        setReferralLink(String(payload?.data?.referralLink || fallbackReferralLink));
+        setReferrals(
+          Array.isArray(payload?.data?.referrals) ? payload.data.referrals : [],
+        );
+        setStats({
+          invited: Number(payload?.data?.stats?.invited || 0),
+          completed: Number(payload?.data?.stats?.completed || 0),
+          earned: Number(payload?.data?.stats?.earned || 0),
+        });
+      } catch {
+        setReferrals([]);
+        setReferralLink(fallbackReferralLink);
+        setStats({ invited: 0, completed: 0, earned: 0 });
+      }
+    };
+
+    loadReferrals();
+
+    const interval = window.setInterval(loadReferrals, 15000);
+    return () => window.clearInterval(interval);
+  }, [fallbackReferralLink]);
 
   const copyCode = () => {
     navigator.clipboard.writeText(referralCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  const shareMessage = `Join SAJI and get KES ${FRIEND_DISCOUNT} off your first service! Use my referral code: ${referralCode}. Download: ${getDomainUrl()}`;
+  const copyLink = () => {
+    navigator.clipboard.writeText(referralLink);
+    setCopiedLink(true);
+    setTimeout(() => setCopiedLink(false), 2000);
+  };
+
+  const shareMessage = useMemo(
+    () =>
+      `Join SAJI and get KES ${FRIEND_DISCOUNT} off your first service! Use my referral code: ${referralCode}. Sign up here: ${referralLink}`,
+    [referralCode, referralLink],
+  );
 
   return (
     <div className="min-h-screen bg-background">
@@ -92,11 +137,35 @@ export function CustomerReferralsPage() {
                   onClick={copyCode}
                   className="bg-white text-primary hover:bg-white/90 h-12 px-4 rounded-lg"
                 >
-                  {copied ? (
+                  {copiedCode ? (
                     <CheckCircle className="w-5 h-5" />
                   ) : (
                     <Copy className="w-5 h-5" />
                   )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Referral Link */}
+            <div className="mt-3 bg-white/10 backdrop-blur-sm rounded-xl p-3 border border-white/20">
+              <p className="text-[11px] text-primary-foreground/70 mb-2 uppercase tracking-wider font-medium">
+                Your referral link
+              </p>
+              <p className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-400/20 px-2 py-1 text-[11px] font-medium text-emerald-200">
+                <Link2 className="h-3 w-3" />
+                Configured
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={referralLink}
+                  className="h-10 bg-white/15 border-white/30 text-primary-foreground placeholder:text-primary-foreground/70"
+                />
+                <Button
+                  onClick={copyLink}
+                  className="bg-white text-primary hover:bg-white/90 h-10 px-3 rounded-lg"
+                >
+                  {copiedLink ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                 </Button>
               </div>
             </div>
@@ -108,21 +177,21 @@ export function CustomerReferralsPage() {
           <Card className="p-4 border-0 shadow-sm text-center">
             <Users className="w-5 h-5 text-primary mx-auto mb-1.5" />
             <p className="text-xl font-bold text-foreground">
-              {referrals.length}
+              {stats.invited}
             </p>
             <p className="text-[11px] text-muted-foreground">Invited</p>
           </Card>
           <Card className="p-4 border-0 shadow-sm text-center">
             <CheckCircle className="w-5 h-5 text-emerald-600 mx-auto mb-1.5" />
             <p className="text-xl font-bold text-foreground">
-              {completedCount}
+              {stats.completed}
             </p>
             <p className="text-[11px] text-muted-foreground">Completed</p>
           </Card>
           <Card className="p-4 border-0 shadow-sm text-center">
             <Wallet className="w-5 h-5 text-amber-600 mx-auto mb-1.5" />
             <p className="text-xl font-bold text-foreground">
-              KES {totalEarned.toLocaleString()}
+              KES {stats.earned.toLocaleString()}
             </p>
             <p className="text-[11px] text-muted-foreground">Earned</p>
           </Card>
@@ -187,20 +256,23 @@ export function CustomerReferralsPage() {
                 desc: `KES ${REWARD_AMOUNT} is added to your wallet`,
               },
             ].map((item, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                  <span className="text-sm font-bold text-primary">
-                    {item.step}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">
-                    {item.title}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{item.desc}</p>
+              <div key={i}>
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0 shadow-sm">
+                    <span className="text-sm font-bold">{item.step}</span>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {item.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground">{item.desc}</p>
+                  </div>
                 </div>
                 {i < 3 && (
-                  <ArrowRight className="w-4 h-4 text-muted-foreground/30 mt-2 shrink-0 hidden sm:block" />
+                  <div className="ml-3.5 mt-1 flex items-center gap-2 text-primary">
+                    <ArrowDown className="h-4 w-4 animate-pulse" />
+                    <span className="text-[11px] font-medium">Next step</span>
+                  </div>
                 )}
               </div>
             ))}

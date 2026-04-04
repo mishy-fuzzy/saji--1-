@@ -4,7 +4,7 @@ import { authorizeRoles } from "@/lib/server/rbac"
 
 // Agent view: operational focus on customers and providers, with agent accounts included.
 export async function GET(request: Request) {
-  const denied = authorizeRoles(request, ["agent", "admin", "sub-admin", "subadmin"])
+  const denied = authorizeRoles(request, ["agent"])
   if (denied) return denied
 
   try {

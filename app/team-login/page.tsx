@@ -1,21 +1,35 @@
 "use client"
 
+import { useEffect } from "react"
 import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useAuthContext } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Mail, Lock, AlertCircle, Eye, EyeOff, Shield, Users, KeyRound } from "lucide-react"
+import { User, Lock, AlertCircle, Eye, EyeOff, Shield, Users, KeyRound } from "lucide-react"
 
 export default function TeamLoginPage() {
   const router = useRouter()
   const { login } = useAuthContext()
-  const [email, setEmail] = useState("")
+  const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    const resetSession = async () => {
+      try {
+        await fetch("/api/auth/logout", { method: "POST" })
+      } catch {
+        // Ignore network errors and still clear local auth snapshot.
+      }
+      localStorage.removeItem("saji_user")
+    }
+
+    resetSession()
+  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,7 +42,7 @@ export default function TeamLoginPage() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identifier, password }),
       })
       const payload = await response.json()
 
@@ -130,15 +144,15 @@ export default function TeamLoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label htmlFor="email" className="text-sm font-medium text-foreground mb-1.5 block">Email Address</label>
+              <label htmlFor="identifier" className="text-sm font-medium text-foreground mb-1.5 block">Email, Phone, or Name</label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your.email@example.com"
+                  id="identifier"
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="name, phone, or email"
                   className="pl-9 h-10 rounded-xl border-border bg-card"
                   required
                 />

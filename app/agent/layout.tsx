@@ -4,6 +4,7 @@ import type React from "react"
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { useAuthContext } from "@/lib/auth-context"
+import { normalizeRole } from "@/lib/role-utils"
 import { LoadingScreen } from "@/components/loading-screen"
 import Link from "next/link"
 import {
@@ -34,11 +35,16 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   const [notifOpen, setNotifOpen] = useState(false)
   const [showMore, setShowMore] = useState(false)
   const [notifications, setNotifications] = useState<AgentNotification[]>([])
+  const hasAgentAccess = normalizeRole(user?.role) === "agent"
 
   useEffect(() => { setMounted(true) }, [])
   useEffect(() => {
-    if (mounted && !isLoading && (!isAuthenticated || user?.role !== "agent")) router.push("/")
-  }, [isAuthenticated, isLoading, user, router, mounted])
+    if (!mounted || isLoading) return
+
+    if (mounted && !isLoading && (!isAuthenticated || !hasAgentAccess)) {
+      router.push("/")
+    }
+  }, [isAuthenticated, isLoading, hasAgentAccess, router, mounted])
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -73,7 +79,7 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   }, [])
 
   if (isLoading || !mounted) return <LoadingScreen />
-  if (!isAuthenticated || user?.role !== "agent") return null
+  if (!isAuthenticated || !hasAgentAccess) return null
 
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/agent" },

@@ -18,6 +18,7 @@ export default function ReferralsPage() {
   const [referralCode, setReferralCode] = useState("SAJI-SAJI-0000");
   const [referralLink, setReferralLink] = useState("https://saji.app/join");
   const [referrals, setReferrals] = useState<ReferralItem[]>([]);
+  const [stats, setStats] = useState({ invited: 0, completed: 0, earned: 0 });
 
   useEffect(() => {
     const loadReferrals = async () => {
@@ -28,6 +29,7 @@ export default function ReferralsPage() {
         const payload = await response.json();
         if (!response.ok || !payload?.ok) {
           setReferrals([]);
+          setStats({ invited: 0, completed: 0, earned: 0 });
           return;
         }
 
@@ -40,21 +42,30 @@ export default function ReferralsPage() {
         setReferrals(
           Array.isArray(payload?.data?.referrals) ? payload.data.referrals : [],
         );
+        setStats({
+          invited: Number(payload?.data?.stats?.invited || 0),
+          completed: Number(payload?.data?.stats?.completed || 0),
+          earned: Number(payload?.data?.stats?.earned || 0),
+        });
       } catch {
         setReferrals([]);
+        setStats({ invited: 0, completed: 0, earned: 0 });
       }
     };
 
     loadReferrals();
+
+    const interval = window.setInterval(loadReferrals, 15000);
+    return () => window.clearInterval(interval);
   }, []);
 
   const totals = useMemo(() => {
     return {
-      count: referrals.length,
-      active: referrals.filter((row) => row.status === "active").length,
-      earned: referrals.reduce((sum, row) => sum + Number(row.earned || 0), 0),
+      count: stats.invited,
+      active: stats.completed,
+      earned: stats.earned,
     };
-  }, [referrals]);
+  }, [stats]);
 
   const handleCopy = async () => {
     try {

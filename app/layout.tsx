@@ -2,6 +2,7 @@ import type React from "react";
 import type { Metadata, Viewport } from "next";
 import { Analytics } from "@vercel/analytics/next";
 import { ThemeProvider } from "@/components/theme-provider";
+import { NewsletterPopup } from "@/components/newsletter-popup";
 import { LocalizationProvider } from "@/lib/localization-context";
 import { AuthProvider } from "@/lib/auth-context";
 import "./globals.css";
@@ -59,7 +60,10 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <LocalizationProvider>
-            <AuthProvider>{children}</AuthProvider>
+            <AuthProvider>
+              {children}
+              <NewsletterPopup />
+            </AuthProvider>
           </LocalizationProvider>
         </ThemeProvider>
         <Analytics />

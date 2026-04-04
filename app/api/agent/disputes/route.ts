@@ -8,7 +8,7 @@ export async function GET(request: Request) {
   try {
     const { actor, error } = await getSessionActor(request)
     if (error) return error
-    if (!actor || !hasAnyRole(actor, ["agent", "admin", "sub-admin", "subadmin"])) {
+    if (!actor || !hasAnyRole(actor, ["agent"])) {
       return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 })
     }
 

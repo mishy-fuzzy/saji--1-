@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { db } from "@/lib/server/db"
 import { getSessionFromRequest } from "@/lib/server/session"
+import { normalizeRole } from "@/lib/role-utils"
 
 const prismaDb: any = db
 
@@ -10,6 +11,16 @@ export async function GET(request: Request) {
     if (!session?.userId) {
       return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 })
     }
+
+    const actor = await prismaDb.user.findUnique({
+      where: { id: session.userId },
+      select: { role: true },
+    })
+
+    if (!actor || normalizeRole(actor.role) !== "agent") {
+      return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 })
+    }
+
     const agents = await prismaDb.user.findMany({
       where: { role: "agent" },
       select: { id: true, name: true },
