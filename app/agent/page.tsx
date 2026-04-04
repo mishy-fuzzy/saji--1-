@@ -1,234 +1,200 @@
-"use client";
+"use client"
 
-import { useEffect, useMemo, useState } from "react";
-import { useLocalization } from "@/lib/hooks/useLocalization";
+import { useEffect, useMemo, useState } from "react"
+import { useLocalization } from "@/lib/hooks/useLocalization"
+import { useAuthContext } from "@/lib/auth-context"
 import {
   AlertTriangle,
   Users,
   MessageSquare,
   CheckCircle,
   TrendingUp,
-  Calendar,
   Download,
   Filter,
   Eye,
   X,
-} from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+} from "lucide-react"
+import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type Dispute = {
-  id: string;
-  provider: string;
-  customer: string;
-  status: "Open" | "In Progress" | "Resolved";
-  severity: "High" | "Medium" | "Low";
-  amount: string;
-  date: string;
-  description: string;
-  resolution: string;
-};
+  id: string
+  provider: string
+  customer: string
+  status: "Open" | "In Progress" | "Resolved"
+  severity: "High" | "Medium" | "Low"
+  amount: string
+  date: string
+  description: string
+  resolution: string
+}
 
 type PerformanceMetric = {
-  label: string;
-  value: string;
-  benchmark: string;
-};
+  label: string
+  value: string
+  benchmark: string
+}
 
 type ActivityItem = {
-  type: string;
-  description: string;
-  time: string;
-};
+  type: string
+  description: string
+  time: string
+}
 
 function normalizeDisputeStatus(status: string): Dispute["status"] {
-  const value = String(status || "open").toLowerCase();
-  if (value === "resolved") return "Resolved";
-  if (value === "in progress" || value === "under_review") return "In Progress";
-  return "Open";
+  const value = String(status || "open").toLowerCase()
+  if (value === "resolved") return "Resolved"
+  if (value === "in progress" || value === "under_review") return "In Progress"
+  return "Open"
 }
 
 export default function AgentDashboard() {
-  const { currency } = useLocalization();
-  const [agentUsersCount, setAgentUsersCount] = useState(0);
-  const [customerUsersCount, setCustomerUsersCount] = useState(0);
-  const [selectedPeriod, setSelectedPeriod] = useState("week");
-
-  const [selectedDispute, setSelectedDispute] = useState<Dispute | null>(null);
-  const [showDisputeModal, setShowDisputeModal] = useState(false);
-  const [showOpenOnly, setShowOpenOnly] = useState(false);
-  const [disputes, setDisputes] = useState<Dispute[]>([]);
-  const [performanceMetrics, setPerformanceMetrics] = useState<
-    PerformanceMetric[]
-  >([]);
-  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([]);
+  const { currency } = useLocalization()
+  const { user } = useAuthContext()
+  const [agentUsersCount, setAgentUsersCount] = useState(0)
+  const [customerUsersCount, setCustomerUsersCount] = useState(0)
+  const [selectedPeriod, setSelectedPeriod] = useState("week")
+  const [selectedDispute, setSelectedDispute] = useState<Dispute | null>(null)
+  const [showDisputeModal, setShowDisputeModal] = useState(false)
+  const [showOpenOnly, setShowOpenOnly] = useState(false)
+  const [disputes, setDisputes] = useState<Dispute[]>([])
+  const [performanceMetrics, setPerformanceMetrics] = useState<PerformanceMetric[]>([])
+  const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
 
   const stats = useMemo(() => {
-    const openDisputes = disputes.filter((d) => d.status === "Open").length;
-    const inProgress = disputes.filter(
-      (d) => d.status === "In Progress",
-    ).length;
-    const resolved = disputes.filter((d) => d.status === "Resolved").length;
+    const openDisputes = disputes.filter((d) => d.status === "Open").length
+    const inProgress = disputes.filter((d) => d.status === "In Progress").length
+    const resolved = disputes.filter((d) => d.status === "Resolved").length
 
     return [
       {
         icon: AlertTriangle,
         label: "Open Disputes",
         value: String(openDisputes),
-        color: "bg-red-100 dark:bg-red-900",
-        trend: "Live",
+        color: "bg-red-400/15",
+        trend: "Live queue",
       },
       {
         icon: Users,
         label: "Customers Helped",
         value: String(customerUsersCount),
-        color: "bg-blue-100 dark:bg-blue-900",
+        color: "bg-sky-400/15",
         trend: `${agentUsersCount} users in scope`,
       },
       {
         icon: MessageSquare,
         label: "Pending Queries",
         value: String(inProgress),
-        color: "bg-yellow-100 dark:bg-yellow-900",
-        trend: "Live",
+        color: "bg-amber-400/15",
+        trend: "Live inbox",
       },
       {
         icon: CheckCircle,
         label: "Resolved Today",
         value: String(resolved),
-        color: "bg-green-100 dark:bg-green-900",
+        color: "bg-emerald-400/15",
         trend: "Live",
       },
-    ];
-  }, [agentUsersCount, customerUsersCount, disputes]);
+    ]
+  }, [agentUsersCount, customerUsersCount, disputes])
 
   useEffect(() => {
     const fetchUsers = async () => {
       try {
         const response = await fetch("/api/agent/users", {
           cache: "no-store",
-          headers: {
-            "x-user-role": "agent",
-          },
-        });
-        const payload = await response.json();
+          headers: { "x-user-role": "agent" },
+        })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) return
 
-        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
-          return;
-        }
-
-        const users = payload.data as Array<{ role?: string }>;
-        setAgentUsersCount(users.length);
+        const users = payload.data as Array<{ role?: string }>
+        setAgentUsersCount(users.length)
         setCustomerUsersCount(
-          users.filter((u) => String(u.role || "").toLowerCase() === "customer")
-            .length,
-        );
+          users.filter((u) => String(u.role || "").toLowerCase() === "customer").length,
+        )
       } catch {
         // Keep dashboard usable even if users API is temporarily unavailable.
       }
-    };
+    }
 
-    fetchUsers();
-  }, []);
+    fetchUsers()
+  }, [])
 
   useEffect(() => {
     const loadDashboard = async () => {
       try {
         const response = await fetch("/api/agent/dashboard", {
           cache: "no-store",
-          headers: {
-            "x-user-role": "agent",
-          },
-        });
-        const payload = await response.json();
-        if (!response.ok || !payload?.ok) {
-          return;
-        }
+          headers: { "x-user-role": "agent" },
+        })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok) return
 
-        const incomingDisputes = Array.isArray(payload?.disputes)
-          ? payload.disputes
-          : [];
+        const incomingDisputes = Array.isArray(payload?.disputes) ? payload.disputes : []
         const incomingPerformance = Array.isArray(payload?.performanceMetrics)
           ? payload.performanceMetrics
-          : [];
-        const incomingActivity = Array.isArray(payload?.recentActivity)
-          ? payload.recentActivity
-          : [];
+          : []
+        const incomingActivity = Array.isArray(payload?.recentActivity) ? payload.recentActivity : []
 
         setDisputes(
-          incomingDisputes.map(
-            (row: {
-              id?: string;
-              provider?: string;
-              customer?: string;
-              status?: string;
-              severity?: string;
-              amount?: string;
-              date?: string;
-              description?: string;
-              resolution?: string;
-            }) => ({
-              id: String(row.id || ""),
-              provider: String(row.provider || "Unassigned"),
-              customer: String(row.customer || "Unknown"),
-              status: normalizeDisputeStatus(String(row.status || "Open")),
-              severity:
-                String(row.severity || "Low") === "High"
-                  ? "High"
-                  : String(row.severity || "Low") === "Medium"
-                    ? "Medium"
-                    : "Low",
-              amount: String(row.amount || `${currency} 0`),
-              date: String(row.date || ""),
-              description: String(row.description || "Dispute requires review"),
-              resolution: String(row.resolution || "Pending"),
-            }),
-          ),
-        );
+          incomingDisputes.map((row: any) => ({
+            id: String(row.id || ""),
+            provider: String(row.provider || "Unassigned"),
+            customer: String(row.customer || "Unknown"),
+            status: normalizeDisputeStatus(String(row.status || "Open")),
+            severity:
+              String(row.severity || "Low") === "High"
+                ? "High"
+                : String(row.severity || "Low") === "Medium"
+                  ? "Medium"
+                  : "Low",
+            amount: String(row.amount || `${currency} 0`),
+            date: String(row.date || ""),
+            description: String(row.description || "Dispute requires review"),
+            resolution: String(row.resolution || "Pending"),
+          })),
+        )
 
         setPerformanceMetrics(
-          incomingPerformance.map(
-            (row: { label?: string; value?: string; benchmark?: string }) => ({
-              label: String(row.label || "Metric"),
-              value: String(row.value || "0"),
-              benchmark: String(row.benchmark || "N/A"),
-            }),
-          ),
-        );
+          incomingPerformance.map((row: any) => ({
+            label: String(row.label || "Metric"),
+            value: String(row.value || "0"),
+            benchmark: String(row.benchmark || "N/A"),
+          })),
+        )
 
         setRecentActivity(
-          incomingActivity.map(
-            (row: { type?: string; description?: string; time?: string }) => ({
-              type: String(row.type || "update"),
-              description: String(row.description || "Activity recorded"),
-              time: String(row.time || "Now"),
-            }),
-          ),
-        );
+          incomingActivity.map((row: any) => ({
+            type: String(row.type || "update"),
+            description: String(row.description || "Activity recorded"),
+            time: String(row.time || "Now"),
+          })),
+        )
 
         if (payload?.stats?.customersHelped !== undefined) {
-          setCustomerUsersCount(Number(payload.stats.customersHelped || 0));
+          setCustomerUsersCount(Number(payload.stats.customersHelped || 0))
         }
       } catch {
         // Keep existing UI data if API is temporarily unavailable.
       }
-    };
+    }
 
-    loadDashboard();
-    const intervalId = window.setInterval(loadDashboard, 25000);
-    return () => window.clearInterval(intervalId);
-  }, [currency]);
+    loadDashboard()
+    const intervalId = window.setInterval(loadDashboard, 25000)
+    return () => window.clearInterval(intervalId)
+  }, [currency])
 
   const handleViewDispute = (dispute: Dispute) => {
-    setSelectedDispute(dispute);
-    setShowDisputeModal(true);
-  };
+    setSelectedDispute(dispute)
+    setShowDisputeModal(true)
+  }
 
   const handleExportReport = () => {
     const data = {
       exportDate: new Date().toISOString(),
-      agentId: "AGT-001",
+      agentId: user?.id || user?.email || "agent",
       period: selectedPeriod,
       stats: {
         openDisputes: Number(stats[0].value),
@@ -237,21 +203,20 @@ export default function AgentDashboard() {
         resolvedToday: Number(stats[3].value),
       },
       performance: performanceMetrics,
-      disputes: disputes,
-    };
-    const blob = new Blob([JSON.stringify(data, null, 2)], {
-      type: "application/json",
-    });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `agent-report-${new Date().toISOString().split("T")[0]}.json`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
+      disputes,
+    }
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" })
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `agent-report-${new Date().toISOString().split("T")[0]}.json`
+    a.click()
+    window.URL.revokeObjectURL(url)
+  }
 
   const handleUpdateDisputeStatus = () => {
-    if (!selectedDispute) return;
+    if (!selectedDispute) return
 
     setDisputes((prev) =>
       prev.map((item) =>
@@ -266,10 +231,10 @@ export default function AgentDashboard() {
             }
           : item,
       ),
-    );
+    )
 
-    setSelectedDispute((prev: Dispute | null) => {
-      if (!prev) return prev;
+    setSelectedDispute((prev) => {
+      if (!prev) return prev
       return {
         ...prev,
         status: prev.status === "Open" ? "In Progress" : "Resolved",
@@ -277,39 +242,33 @@ export default function AgentDashboard() {
           prev.status === "Open"
             ? "Escalated and under review"
             : "Resolved Successfully",
-      };
-    });
-  };
+      }
+    })
+  }
 
-  const visibleDisputes = showOpenOnly
-    ? disputes.filter((dispute) => dispute.status === "Open")
-    : disputes;
+  const visibleDisputes = showOpenOnly ? disputes.filter((d) => d.status === "Open") : disputes
 
   return (
     <div className="space-y-8 pb-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-        <div>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">
-            Agent Dashboard
-          </h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">
-            Track disputes, queries, and performance metrics
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={handleExportReport}
-            className="bg-blue-600 hover:bg-blue-700 gap-2"
-          >
+      <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950 via-slate-900 to-amber-950 p-6 text-white shadow-2xl shadow-black/20 lg:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-300">
+              Dispute Desk
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight lg:text-5xl">Agent Dashboard</h1>
+            <p className="max-w-xl text-sm text-slate-300 lg:text-base">
+              Resolve disputes, answer customer queries, and track live case performance from the database.
+            </p>
+          </div>
+          <Button onClick={handleExportReport} className="gap-2 bg-amber-400 text-slate-950 hover:bg-amber-300">
             <Download size={18} />
             Export Report
           </Button>
         </div>
-      </div>
+      </section>
 
-      {/* Period Selector */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {["day", "week", "month"].map((period) => (
           <Button
             key={period}
@@ -317,8 +276,8 @@ export default function AgentDashboard() {
             variant={selectedPeriod === period ? "default" : "outline"}
             className={
               selectedPeriod === period
-                ? "bg-blue-600 hover:bg-blue-700"
-                : "bg-transparent"
+                ? "bg-amber-400 text-slate-950 hover:bg-amber-300"
+                : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
             }
           >
             {period.charAt(0).toUpperCase() + period.slice(1)}
@@ -326,51 +285,40 @@ export default function AgentDashboard() {
         ))}
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat, idx) => {
-          const Icon = stat.icon;
+          const Icon = stat.icon
           return (
-            <Card key={idx} className="p-6 hover:shadow-lg transition-shadow">
+            <Card key={idx} className="border-white/10 bg-white/5 p-6 shadow-none backdrop-blur-sm transition-shadow hover:bg-white/10">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-2">
-                    {stat.label}
-                  </p>
-                  <p className="text-3xl font-bold text-gray-900 dark:text-white">
-                    {stat.value}
-                  </p>
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">
-                    {stat.trend} from last period
-                  </p>
+                  <p className="mb-2 text-sm text-slate-400">{stat.label}</p>
+                  <p className="text-3xl font-bold text-white">{stat.value}</p>
+                  <p className="mt-2 text-xs text-amber-300">{stat.trend} from last period</p>
                 </div>
-                <div className={`${stat.color} p-3 rounded-lg`}>
-                  <Icon className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+                <div className={`${stat.color} rounded-xl p-3`}>
+                  <Icon className="h-6 w-6 text-slate-800" />
                 </div>
               </div>
             </Card>
-          );
+          )
         })}
       </div>
 
-      {/* Main Content Tabs */}
       <Tabs defaultValue="disputes" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-3 border border-white/10 bg-white/5">
           <TabsTrigger value="disputes">Active Disputes</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="activity">Recent Activity</TabsTrigger>
         </TabsList>
 
-        {/* Disputes Tab */}
         <TabsContent value="disputes" className="space-y-4">
-          <Card className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                Active Disputes
-              </h2>
+          <Card className="border-white/10 bg-slate-950/60 p-6 shadow-none backdrop-blur-sm">
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-white">Active Disputes</h2>
               <Button
                 variant="outline"
-                className="bg-transparent gap-2"
+                className="gap-2 border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
                 onClick={() => setShowOpenOnly((prev) => !prev)}
               >
                 <Filter size={18} />
@@ -380,53 +328,30 @@ export default function AgentDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      ID
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Provider
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Customer
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Severity
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Amount
-                    </th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">
-                      Actions
-                    </th>
+                  <tr className="border-b border-white/10">
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">ID</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Provider</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Customer</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Severity</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Amount</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="divide-y divide-white/10">
                   {visibleDisputes.map((dispute) => (
-                    <tr
-                      key={dispute.id}
-                      className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
-                    >
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
-                        {dispute.id}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
-                        {dispute.provider}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
-                        {dispute.customer}
-                      </td>
+                    <tr key={dispute.id} className="transition-colors hover:bg-white/5">
+                      <td className="px-6 py-4 text-sm font-medium text-white">{dispute.id}</td>
+                      <td className="px-6 py-4 text-sm text-slate-300">{dispute.provider}</td>
+                      <td className="px-6 py-4 text-sm text-slate-300">{dispute.customer}</td>
                       <td className="px-6 py-4 text-sm">
                         <span
-                          className={`px-3 py-1 rounded-full text-xs font-medium ${
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${
                             dispute.status === "Open"
-                              ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                              ? "bg-red-400/15 text-red-300"
                               : dispute.status === "In Progress"
-                                ? "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
-                                : "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
+                                ? "bg-amber-400/15 text-amber-300"
+                                : "bg-emerald-400/15 text-emerald-300"
                           }`}
                         >
                           {dispute.status}
@@ -434,26 +359,20 @@ export default function AgentDashboard() {
                       </td>
                       <td className="px-6 py-4 text-sm">
                         <span
-                          className={`px-2 py-1 rounded text-xs font-medium ${
+                          className={`rounded px-2 py-1 text-xs font-medium ${
                             dispute.severity === "High"
-                              ? "text-red-600"
+                              ? "text-red-300"
                               : dispute.severity === "Medium"
-                                ? "text-yellow-600"
-                                : "text-blue-600"
+                                ? "text-amber-300"
+                                : "text-sky-300"
                           }`}
                         >
                           {dispute.severity}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">
-                        {dispute.amount}
-                      </td>
+                      <td className="px-6 py-4 text-sm font-medium text-white">{dispute.amount}</td>
                       <td className="px-6 py-4 text-sm">
-                        <Button
-                          size="sm"
-                          className="bg-blue-600 hover:bg-blue-700 gap-1"
-                          onClick={() => handleViewDispute(dispute)}
-                        >
+                        <Button size="sm" className="gap-1 bg-amber-400 text-slate-950 hover:bg-amber-300" onClick={() => handleViewDispute(dispute)}>
                           <Eye size={16} />
                           View
                         </Button>
@@ -462,10 +381,7 @@ export default function AgentDashboard() {
                   ))}
                   {visibleDisputes.length === 0 && (
                     <tr>
-                      <td
-                        colSpan={7}
-                        className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400"
-                      >
+                      <td colSpan={7} className="px-6 py-10 text-center text-sm text-slate-400">
                         No disputes available.
                       </td>
                     </tr>
@@ -476,170 +392,110 @@ export default function AgentDashboard() {
           </Card>
         </TabsContent>
 
-        {/* Performance Tab */}
         <TabsContent value="performance" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {performanceMetrics.map((metric, idx) => (
-              <Card key={idx} className="p-6">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                  {metric.label}
-                </h3>
+              <Card key={idx} className="border-white/10 bg-slate-950/60 p-6 shadow-none backdrop-blur-sm">
+                <h3 className="mb-4 text-lg font-semibold text-white">{metric.label}</h3>
                 <div className="flex items-end justify-between">
                   <div>
-                    <p className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-                      {metric.value}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-                      Benchmark: {metric.benchmark}
-                    </p>
+                    <p className="text-3xl font-bold text-amber-300">{metric.value}</p>
+                    <p className="mt-2 text-sm text-slate-400">Benchmark: {metric.benchmark}</p>
                   </div>
-                  <div className="h-16 w-16 bg-linear-to-br from-blue-100 to-blue-50 dark:from-blue-900/30 dark:to-blue-800/30 rounded-lg flex items-center justify-center">
-                    <TrendingUp className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                  <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-400/10">
+                    <TrendingUp className="h-8 w-8 text-amber-300" />
                   </div>
                 </div>
               </Card>
             ))}
             {performanceMetrics.length === 0 && (
-              <Card className="p-6 md:col-span-2">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  No performance metrics available.
-                </p>
+              <Card className="border-white/10 bg-slate-950/60 p-6 shadow-none backdrop-blur-sm md:col-span-2">
+                <p className="text-sm text-slate-400">No performance metrics available.</p>
               </Card>
             )}
           </div>
         </TabsContent>
 
-        {/* Activity Tab */}
         <TabsContent value="activity" className="space-y-4">
-          <Card className="p-6">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-              Recent Activity
-            </h2>
+          <Card className="border-white/10 bg-slate-950/60 p-6 shadow-none backdrop-blur-sm">
+            <h2 className="mb-6 text-2xl font-bold text-white">Recent Activity</h2>
             <div className="space-y-4">
               {recentActivity.map((activity, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-start gap-4 pb-4 border-b border-gray-200 dark:border-gray-700 last:border-0"
-                >
+                <div key={idx} className="flex items-start gap-4 border-b border-white/10 pb-4 last:border-0">
                   <div
-                    className={`w-3 h-3 rounded-full mt-2 ${
+                    className={`mt-2 h-3 w-3 rounded-full ${
                       activity.type === "dispute_resolved"
-                        ? "bg-green-600"
+                        ? "bg-emerald-400"
                         : activity.type === "query_answered"
-                          ? "bg-blue-600"
+                          ? "bg-sky-400"
                           : activity.type === "escalation"
-                            ? "bg-red-600"
-                            : "bg-yellow-600"
+                            ? "bg-red-400"
+                            : "bg-amber-400"
                     }`}
-                  ></div>
+                  />
                   <div className="flex-1">
-                    <p className="text-gray-900 dark:text-white font-medium">
-                      {activity.description}
-                    </p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      {activity.time}
-                    </p>
+                    <p className="font-medium text-white">{activity.description}</p>
+                    <p className="mt-1 text-sm text-slate-400">{activity.time}</p>
                   </div>
                 </div>
               ))}
-              {recentActivity.length === 0 && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  No recent activity available.
-                </p>
-              )}
+              {recentActivity.length === 0 && <p className="text-sm text-slate-400">No recent activity available.</p>}
             </div>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Dispute Details Modal */}
       {showDisputeModal && selectedDispute && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <Card className="w-full max-w-md">
-            <div className="p-6 space-y-4">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                  Dispute Details
-                </h2>
-                <button
-                  onClick={() => setShowDisputeModal(false)}
-                  className="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
-                >
-                  <X size={20} className="text-gray-600 dark:text-gray-400" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <Card className="w-full max-w-md border-white/10 bg-slate-950 text-white">
+            <div className="space-y-4 p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-2xl font-bold text-white">Dispute Details</h2>
+                <button onClick={() => setShowDisputeModal(false)} className="rounded p-1 hover:bg-white/5">
+                  <X size={20} className="text-slate-300" />
                 </button>
               </div>
 
               <div className="space-y-3">
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Dispute ID
-                  </p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {selectedDispute.id}
-                  </p>
+                  <p className="text-sm text-slate-400">Dispute ID</p>
+                  <p className="text-lg font-semibold text-white">{selectedDispute.id}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Provider
-                  </p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {selectedDispute.provider}
-                  </p>
+                  <p className="text-sm text-slate-400">Provider</p>
+                  <p className="text-lg font-semibold text-white">{selectedDispute.provider}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Customer
-                  </p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {selectedDispute.customer}
-                  </p>
+                  <p className="text-sm text-slate-400">Customer</p>
+                  <p className="text-lg font-semibold text-white">{selectedDispute.customer}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Description
-                  </p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {selectedDispute.description}
-                  </p>
+                  <p className="text-sm text-slate-400">Description</p>
+                  <p className="text-lg font-semibold text-white">{selectedDispute.description}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Amount
-                  </p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {selectedDispute.amount}
-                  </p>
+                  <p className="text-sm text-slate-400">Amount</p>
+                  <p className="text-lg font-semibold text-white">{selectedDispute.amount}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Status
-                  </p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {selectedDispute.status}
-                  </p>
+                  <p className="text-sm text-slate-400">Status</p>
+                  <p className="text-lg font-semibold text-white">{selectedDispute.status}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400">
-                    Resolution
-                  </p>
-                  <p className="text-lg font-semibold text-gray-900 dark:text-white">
-                    {selectedDispute.resolution}
-                  </p>
+                  <p className="text-sm text-slate-400">Resolution</p>
+                  <p className="text-lg font-semibold text-white">{selectedDispute.resolution}</p>
                 </div>
               </div>
 
               <div className="flex gap-3 pt-4">
                 <Button
                   variant="outline"
-                  className="flex-1 bg-transparent"
+                  className="flex-1 border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
                   onClick={() => setShowDisputeModal(false)}
                 >
                   Close
                 </Button>
-                <Button
-                  className="flex-1 bg-blue-600 hover:bg-blue-700"
-                  onClick={handleUpdateDisputeStatus}
-                >
+                <Button className="flex-1 bg-amber-400 text-slate-950 hover:bg-amber-300" onClick={handleUpdateDisputeStatus}>
                   Update Status
                 </Button>
               </div>
@@ -648,5 +504,5 @@ export default function AgentDashboard() {
         </div>
       )}
     </div>
-  );
+  )
 }

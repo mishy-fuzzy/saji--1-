@@ -49,61 +49,34 @@ export default function SubAdminDashboard() {
       setError(null)
 
       try {
-        const [growthResponse, usersResponse, reportsResponse] = await Promise.all([
-          fetch("/api/admin/analytics/platform-growth", {
-            cache: "no-store",
-            headers: {
-              "x-user-role": "sub-admin",
-            },
-            signal: controller.signal,
-          }),
-          fetch("/api/sub-admin/users", {
-            cache: "no-store",
-            headers: {
-              "x-user-role": "sub-admin",
-            },
-            signal: controller.signal,
-          }),
-          fetch("/api/reports?scope=subadmin", {
-            cache: "no-store",
-            headers: {
-              "x-user-role": "sub-admin",
-            },
-            signal: controller.signal,
-          }),
-        ])
+        const response = await fetch("/api/sub-admin/dashboard", {
+          cache: "no-store",
+          headers: {
+            "x-user-role": "sub-admin",
+          },
+          signal: controller.signal,
+        })
+        const payload = await response.json()
 
-        const [growthPayload, usersPayload, reportsPayload] = await Promise.all([
-          growthResponse.json(),
-          usersResponse.json(),
-          reportsResponse.json(),
-        ])
-
-        if (!growthResponse.ok || !growthPayload?.ok) {
-          throw new Error(growthPayload?.error || "Failed to load platform growth data")
+        if (!response.ok || !payload?.ok || !payload?.data) {
+          throw new Error(payload?.error || "Failed to load sub-admin dashboard data")
         }
 
-        if (!usersResponse.ok || !usersPayload?.ok || !Array.isArray(usersPayload?.data)) {
-          throw new Error(usersPayload?.error || "Failed to load users")
-        }
-
-        if (!reportsResponse.ok || !reportsPayload?.ok || !Array.isArray(reportsPayload?.data)) {
-          throw new Error(reportsPayload?.error || "Failed to load reports")
-        }
+        const growthData = payload.data
 
         setPlatformGrowth({
-          monthlyData: Array.isArray(growthPayload?.data?.monthlyData) ? growthPayload.data.monthlyData : [],
-          dailyActivity: Array.isArray(growthPayload?.data?.dailyActivity) ? growthPayload.data.dailyActivity : [],
+          monthlyData: Array.isArray(growthData?.monthlyData) ? growthData.monthlyData : [],
+          dailyActivity: Array.isArray(growthData?.dailyActivity) ? growthData.dailyActivity : [],
           stats: {
-            userGrowth: String(growthPayload?.data?.stats?.userGrowth || "0%"),
-            jobGrowth: String(growthPayload?.data?.stats?.jobGrowth || "0%"),
-            verificationRate: String(growthPayload?.data?.stats?.verificationRate || "0%"),
-            engagement: String(growthPayload?.data?.stats?.engagement || "0min"),
+            userGrowth: String(growthData?.stats?.userGrowth || "0%"),
+            jobGrowth: String(growthData?.stats?.jobGrowth || "0%"),
+            verificationRate: String(growthData?.stats?.verificationRate || "0%"),
+            engagement: String(growthData?.stats?.engagement || "0min"),
           },
         })
 
         setUsers(
-          usersPayload.data.map((row: Partial<SubAdminUser>) => ({
+          (Array.isArray(growthData?.users) ? growthData.users : []).map((row: Partial<SubAdminUser>) => ({
             id: String(row.id || ""),
             name: String(row.name || "Unnamed User"),
             role: String(row.role || "Unknown"),
@@ -113,7 +86,7 @@ export default function SubAdminDashboard() {
         )
 
         setReports(
-          reportsPayload.data.map((row: Partial<ReportItem>) => ({
+          (Array.isArray(growthData?.reports) ? growthData.reports : []).map((row: Partial<ReportItem>) => ({
             id: String(row.id || ""),
             name: String(row.name || "Generated Report"),
             type: String(row.type || "general"),

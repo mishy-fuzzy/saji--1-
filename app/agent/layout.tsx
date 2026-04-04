@@ -43,17 +43,22 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     const fetchNotifications = async () => {
       try {
-        const response = await fetch("/api/notifications", { cache: "no-store" })
+        const response = await fetch("/api/agent/notifications", {
+          cache: "no-store",
+          headers: {
+            "x-user-role": "agent",
+          },
+        })
         const payload = await response.json()
-        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.notifications)) {
           setNotifications([])
           return
         }
 
-        const items = payload.data.map((item: any) => ({
+        const items = payload.notifications.map((item: any) => ({
           id: String(item?.id || ""),
-          text: String(item?.title || "Notification"),
-          time: formatRelativeTime(String(item?.createdAt || "")),
+          text: String(item?.text || "Notification"),
+          time: formatRelativeTime(String(item?.time || "")),
         }))
 
         setNotifications(items)
@@ -87,66 +92,71 @@ export default function AgentLayout({ children }: { children: React.ReactNode })
   const moreItems = menuItems.slice(4)
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
-      <aside className={`fixed top-0 left-0 h-screen w-64 bg-gradient-to-b from-indigo-700 to-indigo-800 text-white transform transition-transform z-40 ${menuOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:relative flex flex-col`}>
-        <div className="p-5 border-b border-indigo-600 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-white/20 flex items-center justify-center"><Shield className="w-5 h-5" /></div>
-          <div><h1 className="text-lg font-bold leading-tight">Agent Portal</h1><p className="text-[10px] text-indigo-200">Dispute Resolution</p></div>
+    <div className="flex h-screen bg-slate-950 text-slate-100">
+      <aside className={`fixed top-0 left-0 h-screen w-68 border-r border-slate-800 bg-gradient-to-b from-slate-900 via-slate-900 to-amber-950 text-slate-100 transform transition-transform z-40 ${menuOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:relative flex flex-col`}>
+        <div className="flex items-center gap-3 border-b border-white/10 p-6">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-400/15">
+            <Shield className="w-5 h-5 text-amber-300" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold leading-tight text-white">Agent Console</h1>
+            <p className="text-[10px] text-amber-300/80">Disputes and Customer Queries</p>
+          </div>
         </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 space-y-1 overflow-y-auto p-4">
           {menuItems.map(item => (
-            <Link key={item.href} href={item.href} onClick={()=>setMenuOpen(false)} className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive(item.href)?"bg-white text-indigo-700 shadow-sm":"text-indigo-100 hover:bg-indigo-600/50"}`}>
+            <Link key={item.href} href={item.href} onClick={()=>setMenuOpen(false)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${isActive(item.href)?"bg-amber-400 text-slate-950 shadow-lg shadow-amber-400/20":"text-slate-300 hover:bg-white/5 hover:text-white"}`}>
               <item.icon size={18} />{item.label}
             </Link>
           ))}
         </nav>
-        <div className="p-3 border-t border-indigo-600">
-          <button onClick={()=>{logout();setMenuOpen(false)}} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-indigo-100 hover:bg-indigo-600/50"><LogOut size={18}/>Logout</button>
+        <div className="border-t border-white/10 p-4">
+          <button onClick={()=>{logout();setMenuOpen(false)}} className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-300 hover:bg-white/5"><LogOut size={18}/>Logout</button>
         </div>
       </aside>
 
       <div className="flex flex-col flex-1 overflow-hidden w-full">
-        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between gap-3 sticky top-0 z-30">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/85 px-4 py-3 backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <button onClick={()=>setMenuOpen(!menuOpen)} className="lg:hidden text-gray-600 dark:text-gray-300">{menuOpen?<X size={22}/>:<Menu size={22}/>}</button>
-            <div className="hidden sm:flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2 max-w-xs"><Search size={16} className="text-gray-400"/><input placeholder="Search..." className="bg-transparent text-sm outline-none w-full text-gray-700 dark:text-gray-200"/></div>
+            <button onClick={()=>setMenuOpen(!menuOpen)} className="lg:hidden text-slate-300">{menuOpen?<X size={22}/>:<Menu size={22}/>}</button>
+            <div className="hidden w-72 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 sm:flex"><Search size={16} className="text-slate-400"/><input placeholder="Search disputes, customers..." className="w-full bg-transparent text-sm outline-none text-slate-100 placeholder:text-slate-500"/></div>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative">
-              <button onClick={()=>setNotifOpen(!notifOpen)} className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700"><Bell size={20} className="text-gray-600 dark:text-gray-300"/><span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"/></button>
-              {notifOpen && <div className="absolute right-0 top-12 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50">
-                <div className="p-3 border-b border-gray-200 dark:border-gray-700"><h3 className="font-semibold text-sm text-gray-900 dark:text-white">Notifications</h3></div>
-                <div className="max-h-48 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+              <button onClick={()=>setNotifOpen(!notifOpen)} className="relative rounded-full p-2 text-slate-300 hover:bg-white/5"><Bell size={20}/><span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-amber-400"/></button>
+              {notifOpen && <div className="absolute right-0 top-12 z-50 w-72 overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl shadow-black/30">
+                <div className="border-b border-white/10 p-3"><h3 className="text-sm font-semibold text-white">Notifications</h3></div>
+                <div className="max-h-48 overflow-y-auto divide-y divide-white/10">
                   {notifications.length === 0 && (
-                    <div className="px-3 py-6 text-xs text-gray-500 text-center">No notifications.</div>
+                    <div className="px-3 py-6 text-center text-xs text-slate-400">No notifications.</div>
                   )}
                   {notifications.map((n, i) => (
-                    <div key={n.id || i} className="px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50"><p className="text-xs text-gray-900 dark:text-white">{n.text}</p><p className="text-[10px] text-gray-500 mt-0.5">{n.time}</p></div>
+                    <div key={n.id || i} className="px-3 py-2 hover:bg-white/5"><p className="text-xs text-white">{n.text}</p><p className="mt-0.5 text-[10px] text-slate-400">{n.time}</p></div>
                   ))}
                 </div>
               </div>}
             </div>
-            <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">AG</div>
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-amber-400 text-xs font-bold text-slate-950">AG</div>
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto pb-20 lg:pb-0"><div className="container mx-auto p-4 lg:p-6">{children}</div></main>
+        <main className="flex-1 overflow-auto pb-20 lg:pb-0"><div className="container mx-auto px-4 py-5 lg:px-8 lg:py-8">{children}</div></main>
 
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 flex items-center justify-around px-1 py-2 z-30">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-30 flex items-center justify-around border-t border-white/10 bg-slate-950/95 px-1 py-2 backdrop-blur-xl">
           {bottomNav.map(item => (
-            <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] font-medium ${isActive(item.href)?"text-indigo-600":"text-gray-500"}`}><item.icon size={20}/>{item.label}</Link>
+            <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] font-medium ${isActive(item.href)?"text-amber-300":"text-slate-500"}`}><item.icon size={20}/>{item.label}</Link>
           ))}
           <div className="relative">
-            <button onClick={()=>setShowMore(!showMore)} className={`flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] font-medium ${showMore?"text-indigo-600":"text-gray-500"}`}><ChevronDown size={20} className={`transition-transform ${showMore?"rotate-180":""}`}/>More</button>
-            {showMore && <div className="absolute bottom-14 right-0 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl py-1 z-50">
-              {moreItems.map(item => (<Link key={item.href} href={item.href} onClick={()=>setShowMore(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"><item.icon size={16}/>{item.label}</Link>))}
-              <button onClick={()=>{logout();setShowMore(false)}} className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 w-full hover:bg-gray-50 dark:hover:bg-gray-700"><LogOut size={16}/>Logout</button>
+            <button onClick={()=>setShowMore(!showMore)} className={`flex flex-col items-center gap-0.5 px-2 py-1 text-[10px] font-medium ${showMore?"text-amber-300":"text-slate-500"}`}><ChevronDown size={20} className={`transition-transform ${showMore?"rotate-180":""}`}/>More</button>
+            {showMore && <div className="absolute bottom-14 right-0 z-50 w-44 overflow-hidden rounded-2xl border border-white/10 bg-slate-900 py-1 shadow-2xl shadow-black/30">
+              {moreItems.map(item => (<Link key={item.href} href={item.href} onClick={()=>setShowMore(false)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-white/5"><item.icon size={16}/>{item.label}</Link>))}
+              <button onClick={()=>{logout();setShowMore(false)}} className="flex w-full items-center gap-2 px-3 py-2 text-sm text-rose-300 hover:bg-white/5"><LogOut size={16}/>Logout</button>
             </div>}
           </div>
         </nav>
       </div>
 
-      {menuOpen && <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={()=>setMenuOpen(false)} />}
+      {menuOpen && <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={()=>setMenuOpen(false)} />}
     </div>
   )
 }

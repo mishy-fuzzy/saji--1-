@@ -9,15 +9,17 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function SecretaryDashboard() {
   const { currency } = useLocalization()
-  const [totalUsers, setTotalUsers] = useState(0)
-  const [pendingUsers, setPendingUsers] = useState(0)
+  const [totalTransactions, setTotalTransactions] = useState(0)
+  const [processingTransactions, setProcessingTransactions] = useState(0)
   const [selectedPeriod, setSelectedPeriod] = useState("week")
   const [showProcessingOnly, setShowProcessingOnly] = useState(false)
+  const [recentTransactions, setRecentTransactions] = useState<Array<{ id: string; description: string; amount: string; status: string; date: string; method: string }>>([])
+  const [reconciliationStatus, setReconciliationStatus] = useState<Array<{ account: string; balance: string; lastReconciled: string; status: string }>>([])
 
   useEffect(() => {
-    const fetchUsers = async () => {
+    const fetchDashboard = async () => {
       try {
-        const response = await fetch("/api/secretary/users", {
+        const response = await fetch("/api/secretary/dashboard", {
           cache: "no-store",
           headers: {
             "x-user-role": "secretary",
@@ -25,24 +27,23 @@ export default function SecretaryDashboard() {
         })
         const payload = await response.json()
 
-        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+        if (!response.ok || !payload?.ok || !payload?.data) {
           return
         }
 
-        const users = payload.data as Array<{ status?: string }>
-        setTotalUsers(users.length)
-        setPendingUsers(
-          users.filter((u) => String(u.status || "").toLowerCase() === "pending").length,
-        )
+        setTotalTransactions(Number(payload?.data?.totals?.totalTransactions || 0))
+        setProcessingTransactions(Number(payload?.data?.totals?.processingTransactions || 0))
+        setRecentTransactions(Array.isArray(payload?.data?.recentTransactions) ? payload.data.recentTransactions : [])
+        setReconciliationStatus(Array.isArray(payload?.data?.reconciliationStatus) ? payload.data.reconciliationStatus : [])
       } catch {
-        // Keep dashboard usable even if users API is temporarily unavailable.
+        // Keep dashboard usable even if API is temporarily unavailable.
       }
     }
 
-    fetchUsers()
+    fetchDashboard()
+    const intervalId = window.setInterval(fetchDashboard, 25000)
+    return () => window.clearInterval(intervalId)
   }, [])
-
-  const recentTransactions: Array<{ id: string; description: string; amount: string; status: string; date: string; method: string }> = []
 
   const transactionTotals = useMemo(() => {
     const completed = recentTransactions.filter((t) => t.status === "Completed").length
@@ -66,14 +67,14 @@ export default function SecretaryDashboard() {
       label: "Total Processed",
       value: `${currency} ${transactionTotals.totalAmount.toLocaleString()}`,
       color: "bg-blue-100 dark:bg-blue-900",
-      trend: `${totalUsers} users in system`,
+      trend: `${totalTransactions} transactions logged`,
     },
     {
       icon: Clock,
       label: "Pending",
-      value: String(pendingUsers || transactionTotals.processing),
+      value: String(processingTransactions || transactionTotals.processing),
       color: "bg-yellow-100 dark:bg-yellow-900",
-      trend: "Live from users API",
+      trend: "Live from payments API",
     },
     {
       icon: CheckCircle,
@@ -90,8 +91,6 @@ export default function SecretaryDashboard() {
       trend: "Estimated",
     },
   ]
-
-  const reconciliationStatus: Array<{ account: string; balance: string; lastReconciled: string; status: string }> = []
 
   const visibleTransactions = showProcessingOnly
     ? recentTransactions.filter((txn) => txn.status === "Processing")
@@ -120,26 +119,34 @@ export default function SecretaryDashboard() {
 
   return (
     <div className="space-y-8 pb-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-        <div>
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-white">Secretary Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-400 mt-2">Financial transactions, reconciliation, and payment management</p>
-        </div>
-        <Button onClick={handleExportReport} className="bg-blue-600 hover:bg-blue-700 gap-2">
+      <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 p-6 text-white shadow-2xl shadow-black/20 lg:p-8">
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl space-y-3">
+            <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.22em] text-emerald-300">
+              Treasury Operations
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight lg:text-5xl">
+              Secretary Dashboard
+            </h1>
+            <p className="max-w-xl text-sm text-slate-300 lg:text-base">
+              Live transaction flow, reconciliation status, and settlement tracking from the database.
+            </p>
+          </div>
+          <Button onClick={handleExportReport} className="gap-2 bg-emerald-400 text-slate-950 hover:bg-emerald-300">
           <Download size={18} />
           Export Report
         </Button>
-      </div>
+        </div>
+      </section>
 
       {/* Period Selector */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         {['day', 'week', 'month'].map(period => (
           <Button
             key={period}
             onClick={() => setSelectedPeriod(period)}
             variant={selectedPeriod === period ? "default" : "outline"}
-            className={selectedPeriod === period ? "bg-blue-600 hover:bg-blue-700" : "bg-transparent"}
+            className={selectedPeriod === period ? "bg-emerald-400 text-slate-950 hover:bg-emerald-300" : "border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"}
           >
             {period.charAt(0).toUpperCase() + period.slice(1)}
           </Button>
@@ -151,15 +158,15 @@ export default function SecretaryDashboard() {
         {stats.map((stat, idx) => {
           const Icon = stat.icon
           return (
-            <Card key={idx} className="p-6 hover:shadow-lg transition-shadow">
+            <Card key={idx} className="border-white/10 bg-white/5 p-6 shadow-none backdrop-blur-sm transition-shadow hover:bg-white/10">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground mb-2">{stat.label}</p>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</p>
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2">{stat.trend}</p>
+                  <p className="mb-2 text-sm text-slate-400">{stat.label}</p>
+                  <p className="text-2xl font-bold text-white">{stat.value}</p>
+                  <p className="mt-2 text-xs text-emerald-300">{stat.trend}</p>
                 </div>
-                <div className={`${stat.color} p-3 rounded-lg`}>
-                  <Icon className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+                <div className={`${stat.color} rounded-xl p-3`}>
+                  <Icon className="w-6 h-6 text-slate-800 dark:text-slate-900" />
                 </div>
               </div>
             </Card>
@@ -169,19 +176,19 @@ export default function SecretaryDashboard() {
 
       {/* Main Content */}
       <Tabs defaultValue="transactions" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-2 border border-white/10 bg-white/5">
           <TabsTrigger value="transactions">Recent Transactions</TabsTrigger>
           <TabsTrigger value="reconciliation">Account Reconciliation</TabsTrigger>
         </TabsList>
 
         {/* Transactions Tab */}
         <TabsContent value="transactions" className="space-y-4">
-          <Card className="p-6">
+          <Card className="border-white/10 bg-slate-950/60 p-6 shadow-none backdrop-blur-sm">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Recent Transactions</h2>
+              <h2 className="text-2xl font-bold text-white">Recent Transactions</h2>
               <Button
                 variant="outline"
-                className="bg-transparent gap-2"
+                className="gap-2 border-white/10 bg-white/5 text-slate-200 hover:bg-white/10"
                 onClick={() => setShowProcessingOnly((prev) => !prev)}
               >
                 <Filter size={18} />
@@ -191,36 +198,36 @@ export default function SecretaryDashboard() {
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
-                  <tr className="border-b border-gray-200 dark:border-gray-700">
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">ID</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Description</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Amount</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Method</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Status</th>
-                    <th className="px-6 py-3 text-left text-sm font-semibold text-gray-700 dark:text-gray-300">Date</th>
+                  <tr className="border-b border-white/10">
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">ID</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Description</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Amount</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Method</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Status</th>
+                    <th className="px-6 py-3 text-left text-sm font-semibold text-slate-300">Date</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="divide-y divide-white/10">
                   {visibleTransactions.map(txn => (
-                    <tr key={txn.id} className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                      <td className="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{txn.id}</td>
-                      <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{txn.description}</td>
-                      <td className="px-6 py-4 text-sm font-semibold text-gray-900 dark:text-white">{txn.amount}</td>
-                      <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{txn.method}</td>
+                    <tr key={txn.id} className="transition-colors hover:bg-white/5">
+                      <td className="px-6 py-4 text-sm font-medium text-white">{txn.id}</td>
+                      <td className="px-6 py-4 text-sm text-slate-300">{txn.description}</td>
+                      <td className="px-6 py-4 text-sm font-semibold text-white">{txn.amount}</td>
+                      <td className="px-6 py-4 text-sm text-slate-300">{txn.method}</td>
                       <td className="px-6 py-4 text-sm">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                          txn.status === "Completed" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" :
-                          "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
+                          txn.status === "Completed" ? "bg-emerald-400/15 text-emerald-300" :
+                          "bg-amber-400/15 text-amber-300"
                         }`}>
                           {txn.status}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-sm text-gray-700 dark:text-gray-300">{txn.date}</td>
+                      <td className="px-6 py-4 text-sm text-slate-300">{txn.date}</td>
                     </tr>
                   ))}
                   {visibleTransactions.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="px-6 py-10 text-center text-sm text-gray-500 dark:text-gray-400">
+                      <td colSpan={6} className="px-6 py-10 text-center text-sm text-slate-400">
                         No transactions available.
                       </td>
                     </tr>
@@ -233,33 +240,33 @@ export default function SecretaryDashboard() {
 
         {/* Reconciliation Tab */}
         <TabsContent value="reconciliation" className="space-y-4">
-          <Card className="p-6">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center gap-2">
+          <Card className="border-white/10 bg-slate-950/60 p-6 shadow-none backdrop-blur-sm">
+            <h2 className="mb-6 flex items-center gap-2 text-2xl font-bold text-white">
               <BarChart3 className="w-6 h-6" />
               Account Reconciliation Status
             </h2>
             <div className="space-y-4">
               {reconciliationStatus.map((account, idx) => (
-                <div key={idx} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
+                <div key={idx} className="rounded-2xl border border-white/10 p-4 transition-colors hover:bg-white/5">
                   <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold text-gray-900 dark:text-white">{account.account}</h3>
+                    <h3 className="font-semibold text-white">{account.account}</h3>
                     <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      account.status === "Reconciled" ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" :
-                      "bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400"
+                      account.status === "Reconciled" ? "bg-emerald-400/15 text-emerald-300" :
+                      "bg-amber-400/15 text-amber-300"
                     }`}>
                       {account.status}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white">{account.balance}</p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">Last reconciled: {account.lastReconciled}</p>
+                      <p className="text-2xl font-bold text-white">{account.balance}</p>
+                      <p className="mt-1 text-sm text-slate-400">Last reconciled: {account.lastReconciled}</p>
                     </div>
                   </div>
                 </div>
               ))}
               {reconciliationStatus.length === 0 && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">No reconciliation records available.</p>
+                <p className="text-sm text-slate-400">No reconciliation records available.</p>
               )}
             </div>
           </Card>

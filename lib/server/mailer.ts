@@ -76,3 +76,24 @@ export async function sendEmail(params: {
     rejected: result.rejected,
   };
 }
+
+export async function sendVerificationEmail(
+  to: string,
+  code: string,
+  recipientName = "User",
+) {
+  const safeName = recipientName.trim() || "User";
+  const safeCode = String(code || "").trim();
+
+  return sendEmail({
+    to,
+    subject: "Your SAJI verification code",
+    text: `Hello ${safeName}, your verification code is ${safeCode}. It expires in 15 minutes.`,
+    html: `
+      <p>Hello ${safeName},</p>
+      <p>Your SAJI verification code is:</p>
+      <p style="font-size:24px;font-weight:700;letter-spacing:2px;">${safeCode}</p>
+      <p>This code expires in 15 minutes.</p>
+    `,
+  });
+}

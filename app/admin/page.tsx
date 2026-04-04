@@ -41,8 +41,24 @@ const chartData: any[] = [];
 const pieData: any[] = [];
 
 export default function AdminDashboard() {
-  const { currency, convertPrice, formatCurrency } = useLocalization();
+  const { formatCurrency } = useLocalization();
   const router = useRouter();
+  const safeFormatCurrency = (amount: number) => {
+    if (typeof formatCurrency === "function") {
+      return formatCurrency(amount);
+    }
+
+    try {
+      return new Intl.NumberFormat("en-KE", {
+        style: "currency",
+        currency: "KES",
+        maximumFractionDigits: 2,
+      }).format(Number.isFinite(amount) ? amount : 0);
+    } catch {
+      const normalized = Number.isFinite(amount) ? amount : 0;
+      return `KES ${normalized.toLocaleString()}`;
+    }
+  };
   const [selectedMetric, setSelectedMetric] = useState("revenue");
   const [data, setData] = useState({
     users: 0,
@@ -91,7 +107,7 @@ export default function AdminDashboard() {
     },
     {
       label: "Jobs Value",
-      value: formatCurrency(data.jobValue),
+      value: safeFormatCurrency(data.jobValue),
       change: "0%",
       positive: true,
       icon: DollarSign,
@@ -212,28 +228,28 @@ export default function AdminDashboard() {
             <div>
               <p className="text-sm text-muted-foreground">Total Revenue</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                {formatCurrency(data.revenue)}
+                {safeFormatCurrency(data.revenue)}
               </p>
               <p className="text-xs text-emerald-600 mt-1">0% from last week</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Jobs Value</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                {formatCurrency(data.jobValue)}
+                {safeFormatCurrency(data.jobValue)}
               </p>
               <p className="text-xs text-emerald-600 mt-1">0% from last week</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Commission</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                {formatCurrency(data.revenue * 0.1)}
+                {safeFormatCurrency(data.revenue * 0.1)}
               </p>
               <p className="text-xs text-emerald-600 mt-1">0% from last week</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Avg. Transaction</p>
               <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                {formatCurrency(data.jobs > 0 ? data.revenue / data.jobs : 0)}
+                {safeFormatCurrency(data.jobs > 0 ? data.revenue / data.jobs : 0)}
               </p>
               <p className="text-xs text-red-600 mt-1">0% from last week</p>
             </div>

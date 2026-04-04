@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 export default function TeamInvitePage() {
   const searchParams = useSearchParams();
   const token = searchParams?.get("token");
+  const processedTokenRef = useRef<string | null>(null);
   const [status, setStatus] = useState<"loading" | "success" | "error">(
     "loading"
   );
@@ -19,6 +20,12 @@ export default function TeamInvitePage() {
         return;
       }
 
+      if (processedTokenRef.current === token) {
+        return;
+      }
+
+      processedTokenRef.current = token;
+
       try {
         const response = await fetch(
           `/api/admin/team-promotions/accept?token=${encodeURIComponent(token)}`
@@ -31,6 +38,7 @@ export default function TeamInvitePage() {
             data.error ||
               `Failed to process invitation (${response.status})`
           );
+          processedTokenRef.current = null;
           return;
         }
 
@@ -49,6 +57,7 @@ export default function TeamInvitePage() {
         }, 2000);
       } catch (err) {
         setStatus("error");
+        processedTokenRef.current = null;
         setMessage(
           err instanceof Error ? err.message : "Failed to process invitation"
         );

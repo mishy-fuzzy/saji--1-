@@ -74,17 +74,22 @@ export default function SecretaryLayout({ children }: { children: React.ReactNod
   useEffect(() => {
     const loadNotifications = async () => {
       try {
-        const response = await fetch("/api/notifications", { cache: "no-store" })
+        const response = await fetch("/api/secretary/notifications", {
+          cache: "no-store",
+          headers: {
+            "x-user-role": "secretary",
+          },
+        })
         const payload = await response.json()
-        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.notifications)) {
           setNotifications([])
           return
         }
 
-        const items = payload.data.map((item: any) => ({
+        const items = payload.notifications.map((item: any) => ({
           id: String(item?.id || ""),
-          text: String(item?.title || "Notification"),
-          time: formatRelativeTime(String(item?.createdAt || "")),
+          text: String(item?.text || "Notification"),
+          time: formatRelativeTime(String(item?.time || "")),
         }))
 
         setNotifications(items)
@@ -99,28 +104,31 @@ export default function SecretaryLayout({ children }: { children: React.ReactNod
   }, [])
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex h-screen bg-slate-950 text-slate-100">
       {/* Desktop Sidebar */}
-      <aside className={`fixed top-0 left-0 h-screen w-64 bg-gradient-to-b from-blue-600 to-blue-700 text-white transform transition-transform z-40 ${menuOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:relative flex flex-col`}>
-        <div className="p-5 border-b border-blue-500/40">
-          <h1 className="text-lg font-bold tracking-tight">Secretary Portal</h1>
-          <p className="text-blue-200 text-xs mt-0.5">{user?.name || "Secretary"}</p>
+      <aside className={`fixed top-0 left-0 h-screen w-68 border-r border-slate-800 bg-gradient-to-b from-slate-900 via-slate-900 to-emerald-950 text-slate-100 transform transition-transform z-40 ${menuOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 lg:relative flex flex-col`}>
+        <div className="p-6 border-b border-white/10">
+          <div className="inline-flex items-center gap-2 rounded-full bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300">
+            Treasury
+          </div>
+          <h1 className="mt-4 text-lg font-bold tracking-tight text-white">Secretary Console</h1>
+          <p className="mt-1 text-xs text-slate-400">{user?.name || "Secretary"}</p>
         </div>
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 space-y-1 overflow-y-auto p-4">
           {menuItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               onClick={() => setMenuOpen(false)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${isActive(item.href) ? "bg-white text-blue-600 font-semibold shadow-sm" : "hover:bg-blue-500/50 text-blue-50"}`}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${isActive(item.href) ? "bg-emerald-400 text-slate-950 font-semibold shadow-lg shadow-emerald-400/20" : "text-slate-300 hover:bg-white/5 hover:text-white"}`}
             >
               <item.icon size={18} />
               {item.label}
             </Link>
           ))}
         </nav>
-        <div className="p-3 border-t border-blue-500/40">
-          <button onClick={() => { logout(); setMenuOpen(false) }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-blue-500/50 transition-colors text-blue-100 text-sm">
+        <div className="border-t border-white/10 p-4">
+          <button onClick={() => { logout(); setMenuOpen(false) }} className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-slate-300 transition-colors hover:bg-white/5">
             <LogOut size={18} />
             Logout
           </button>
@@ -130,52 +138,52 @@ export default function SecretaryLayout({ children }: { children: React.ReactNod
       {/* Main Content */}
       <div className="flex flex-col flex-1 overflow-hidden w-full">
         {/* Top Header Bar */}
-        <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between gap-3 sticky top-0 z-30">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-slate-950/85 px-4 py-3 backdrop-blur-xl">
           <div className="flex items-center gap-3">
-            <button onClick={() => setMenuOpen(!menuOpen)} className="lg:hidden text-gray-600 dark:text-gray-300">
+            <button onClick={() => setMenuOpen(!menuOpen)} className="lg:hidden text-slate-300">
               {menuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
-            <div className="hidden sm:flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded-lg px-3 py-2 w-64">
-              <Search size={16} className="text-gray-400" />
-              <input type="text" placeholder="Search transactions..." className="bg-transparent text-sm outline-none flex-1 text-gray-700 dark:text-gray-200 placeholder:text-gray-400" />
+            <div className="hidden w-72 items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-slate-200 sm:flex">
+              <Search size={16} className="text-slate-400" />
+              <input type="text" placeholder="Search payments, invoices..." className="flex-1 bg-transparent text-sm outline-none text-slate-100 placeholder:text-slate-500" />
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Notification Bell */}
             <div className="relative">
-              <button onClick={() => setShowNotifications(!showNotifications)} className="relative p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300">
+              <button onClick={() => setShowNotifications(!showNotifications)} className="relative rounded-full p-2 text-slate-300 hover:bg-white/5">
                 <Bell size={20} />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+                {notifications.length > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-emerald-400" />}
               </button>
               {showNotifications && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
-                  <div className="p-3 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Notifications</h3>
-                    <span className="text-xs bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full">{notifications.length} new</span>
+                <div className="absolute right-0 top-full z-50 mt-2 w-80 overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl shadow-black/30">
+                  <div className="flex items-center justify-between border-b border-white/10 p-3">
+                    <h3 className="text-sm font-semibold text-white">Notifications</h3>
+                    <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs text-emerald-300">{notifications.length} new</span>
                   </div>
-                  <div className="max-h-64 overflow-y-auto divide-y divide-gray-100 dark:divide-gray-700">
+                  <div className="max-h-64 overflow-y-auto divide-y divide-white/10">
                     {notifications.map(n => (
-                      <div
+                      <button
                         key={n.id}
                         onClick={() => {
                           setShowNotifications(false)
                           router.push("/secretary/messages")
                         }}
-                        className="px-3 py-2.5 hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer"
+                        className="block w-full px-3 py-2.5 text-left hover:bg-white/5"
                       >
-                        <p className="text-sm text-gray-800 dark:text-gray-200 leading-snug">{n.text}</p>
-                        <p className="text-xs text-gray-400 mt-1">{n.time}</p>
-                      </div>
+                        <p className="text-sm leading-snug text-white">{n.text}</p>
+                        <p className="mt-1 text-xs text-slate-400">{n.time}</p>
+                      </button>
                     ))}
                   </div>
-                  <div className="p-2 border-t border-gray-100 dark:border-gray-700">
+                  <div className="border-t border-white/10 p-2">
                     <button
                       onClick={() => {
                         setShowNotifications(false)
                         router.push("/secretary/messages")
                       }}
-                      className="w-full text-center text-xs text-blue-600 dark:text-blue-400 font-medium py-1.5 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
+                      className="w-full rounded-xl py-2 text-center text-xs font-medium text-emerald-300 hover:bg-white/5"
                     >
                       View all notifications
                     </button>
@@ -184,7 +192,7 @@ export default function SecretaryLayout({ children }: { children: React.ReactNod
               )}
             </div>
 
-            <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-bold">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-400 text-xs font-bold text-slate-950">
               {(user?.name || "S")[0]}
             </div>
           </div>
@@ -192,33 +200,33 @@ export default function SecretaryLayout({ children }: { children: React.ReactNod
 
         {/* Page Content */}
         <main className="flex-1 overflow-auto pb-20 lg:pb-0">
-          <div className="container mx-auto p-4 lg:p-6">{children}</div>
+          <div className="container mx-auto px-4 py-5 lg:px-8 lg:py-8">{children}</div>
         </main>
       </div>
 
       {/* Mobile Bottom Navigation */}
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 z-40 flex items-center justify-around px-1 py-1.5 safe-bottom">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around border-t border-white/10 bg-slate-950/95 px-1 py-1.5 backdrop-blur-xl safe-bottom">
         {bottomNavItems.map((item) => (
-          <Link key={item.href} href={item.href} className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg min-w-0 flex-1 ${isActive(item.href) ? "text-blue-600 dark:text-blue-400" : "text-gray-400"}`}>
+          <Link key={item.href} href={item.href} className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg px-2 py-1.5 ${isActive(item.href) ? "text-emerald-300" : "text-slate-500"}`}>
             <item.icon size={20} />
             <span className="text-[10px] font-medium truncate">{item.label}</span>
           </Link>
         ))}
         {/* More menu */}
         <div className="relative flex flex-col items-center gap-0.5 px-2 py-1.5 flex-1">
-          <button onClick={() => setShowMore(!showMore)} className={`flex flex-col items-center gap-0.5 ${moreItems.some(i => isActive(i.href)) ? "text-blue-600 dark:text-blue-400" : "text-gray-400"}`}>
+          <button onClick={() => setShowMore(!showMore)} className={`flex flex-col items-center gap-0.5 ${moreItems.some(i => isActive(i.href)) ? "text-emerald-300" : "text-slate-500"}`}>
             <MoreHorizontal size={20} />
             <span className="text-[10px] font-medium">More</span>
           </button>
           {showMore && (
-            <div className="absolute bottom-full mb-2 right-0 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 z-50 overflow-hidden">
+            <div className="absolute bottom-full right-0 mb-2 w-48 overflow-hidden rounded-2xl border border-white/10 bg-slate-900 shadow-2xl shadow-black/30 z-50">
               {moreItems.map((item) => (
-                <Link key={item.href} href={item.href} onClick={() => setShowMore(false)} className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors ${isActive(item.href) ? "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 font-medium" : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"}`}>
+                <Link key={item.href} href={item.href} onClick={() => setShowMore(false)} className={`flex items-center gap-3 px-4 py-3 text-sm transition-colors ${isActive(item.href) ? "bg-emerald-400/10 text-emerald-300 font-medium" : "text-slate-300 hover:bg-white/5"}`}>
                   <item.icon size={18} />
                   {item.label}
                 </Link>
               ))}
-              <button onClick={() => { logout(); setShowMore(false) }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 border-t border-gray-100 dark:border-gray-700">
+              <button onClick={() => { logout(); setShowMore(false) }} className="w-full flex items-center gap-3 border-t border-white/10 px-4 py-3 text-sm text-rose-300 hover:bg-white/5">
                 <LogOut size={18} />
                 Logout
               </button>
@@ -228,7 +236,7 @@ export default function SecretaryLayout({ children }: { children: React.ReactNod
       </nav>
 
       {/* Overlays */}
-      {menuOpen && <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={() => setMenuOpen(false)} />}
+      {menuOpen && <div className="fixed inset-0 z-30 bg-black/60 lg:hidden" onClick={() => setMenuOpen(false)} />}
       {(showNotifications || showMore) && <div className="fixed inset-0 z-40 lg:z-auto" onClick={() => { setShowNotifications(false); setShowMore(false) }} />}
     </div>
   )

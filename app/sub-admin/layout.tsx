@@ -75,17 +75,22 @@ export default function SubAdminLayout({ children }: { children: React.ReactNode
   useEffect(() => {
     const loadNotifications = async () => {
       try {
-        const response = await fetch("/api/notifications", { cache: "no-store" })
+        const response = await fetch("/api/sub-admin/notifications", {
+          cache: "no-store",
+          headers: {
+            "x-user-role": "sub-admin",
+          },
+        })
         const payload = await response.json()
-        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.notifications)) {
           setNotifications([])
           return
         }
 
-        const items = payload.data.map((item: any) => ({
+        const items = payload.notifications.map((item: any) => ({
           id: String(item?.id || ""),
-          text: String(item?.title || "Notification"),
-          time: formatRelativeTime(String(item?.createdAt || "")),
+          text: String(item?.text || "Notification"),
+          time: formatRelativeTime(String(item?.time || "")),
           type: String(item?.type || "system"),
         }))
         setNotifications(items)

@@ -55,6 +55,22 @@ function statusColorClass(status: string): string {
 
 export default function JobsPage() {
   const { formatCurrency } = useLocalization();
+  const safeFormatCurrency = (amount: number) => {
+    if (typeof formatCurrency === "function") {
+      return formatCurrency(amount);
+    }
+
+    try {
+      return new Intl.NumberFormat("en-KE", {
+        style: "currency",
+        currency: "KES",
+        maximumFractionDigits: 2,
+      }).format(Number.isFinite(amount) ? amount : 0);
+    } catch {
+      const normalized = Number.isFinite(amount) ? amount : 0;
+      return `KES ${normalized.toLocaleString()}`;
+    }
+  };
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -475,7 +491,7 @@ export default function JobsPage() {
     },
     {
       label: "Total Value",
-      value: formatCurrency(jobs.reduce((sum, j) => sum + j.budget, 0)),
+      value: safeFormatCurrency(jobs.reduce((sum, j) => sum + j.budget, 0)),
       icon: DollarSign,
       color: "from-purple-50 to-purple-100",
     },
