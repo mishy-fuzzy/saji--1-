@@ -28,6 +28,11 @@ function resolveLoginPath(role: string): string {
   return "/team-login";
 }
 
+function resolveTeamLoginUrl(role: string): string {
+  const destination = resolveLoginPath(role);
+  return `/team-login?next=${encodeURIComponent(destination)}`;
+}
+
 async function ensureRoleProfile(
   tx: Prisma.TransactionClient,
   role: string,
@@ -149,7 +154,7 @@ export async function GET(request: Request) {
       type: "success",
       title: "Invitation accepted",
       message: `Your ${targetRole.replace("-", " ")} role is now active.`,
-      actionHref: resolveLoginPath(targetRole),
+      actionHref: resolveTeamLoginUrl(targetRole),
       metadata: {
         invitedBy: invite.invitedBy,
         previousRole: invite.previousRole,
@@ -180,7 +185,7 @@ export async function GET(request: Request) {
         id: updatedUser.id,
         email: updatedUser.email,
         role: targetRole,
-        loginUrl: resolveLoginPath(targetRole),
+        loginUrl: resolveTeamLoginUrl(targetRole),
       },
     });
   } catch (error) {

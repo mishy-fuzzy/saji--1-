@@ -36,6 +36,7 @@ function SignupContent() {
   const { login } = useAuthContext();
   const referralCode = searchParams.get("ref");
   const referrerId = searchParams.get("rid");
+  const roleFromQuery = searchParams.get("role");
   const [step, setStep] = useState(1);
   const [formData, setFormData] = useState({
     name: "",
@@ -149,6 +150,14 @@ function SignupContent() {
     setError(
       "Apple sign-up is not configured yet. Please use email/password signup.",
     );
+
+  const loginParams = new URLSearchParams();
+  if (referralCode) loginParams.set("ref", referralCode);
+  if (referrerId) loginParams.set("rid", referrerId);
+  if (roleFromQuery) loginParams.set("role", roleFromQuery);
+  const loginHref = loginParams.toString()
+    ? `/auth/login?${loginParams.toString()}`
+    : "/auth/login";
 
   // Password strength
   const getPasswordStrength = () => {
@@ -558,7 +567,7 @@ function SignupContent() {
           <p className="text-center text-sm text-muted-foreground mt-6">
             Already have an account?{" "}
             <Link
-              href="/auth/login"
+              href={loginHref}
               className="font-semibold text-primary hover:underline"
             >
               Sign in

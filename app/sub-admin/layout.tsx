@@ -54,25 +54,12 @@ export default function SubAdminLayout({ children }: { children: React.ReactNode
     }
   }, [isAuthenticated, isLoading, hasSubAdminAccess, router, mounted])
 
-  if (isLoading || !mounted) return <LoadingScreen />
-  if (!isAuthenticated || !hasSubAdminAccess) return null
-
-  const menuItems = [
-    { icon: LayoutDashboard, label: "Dashboard", href: "/sub-admin" },
-    { icon: Users, label: "Users", href: "/sub-admin/users" },
-    { icon: CheckCircle, label: "Verifications", href: "/sub-admin/verifications" },
-    { icon: MessageCircle, label: "Messages", href: "/sub-admin/messages" },
-    { icon: Bell, label: "SMS Notifications", href: "/sub-admin/notifications" },
-    { icon: FileText, label: "Reports", href: "/sub-admin/reports" },
-    { icon: BarChart3, label: "Analytics", href: "/sub-admin/analytics" },
-    { icon: User, label: "Profile", href: "/sub-admin/profile" },
-    { icon: Settings, label: "Settings", href: "/sub-admin/settings" },
-  ]
-
-  const isActive = (href: string) =>
-    href === "/sub-admin" ? pathname === "/sub-admin" : pathname.startsWith(href)
-
   useEffect(() => {
+    if (!mounted || isLoading || !isAuthenticated || !hasSubAdminAccess) {
+      setNotifications([])
+      return
+    }
+
     const loadNotifications = async () => {
       try {
         const response = await fetch("/api/sub-admin/notifications", {
@@ -102,7 +89,25 @@ export default function SubAdminLayout({ children }: { children: React.ReactNode
     loadNotifications()
     const intervalId = window.setInterval(loadNotifications, 3000)
     return () => window.clearInterval(intervalId)
-  }, [])
+  }, [mounted, isLoading, isAuthenticated, hasSubAdminAccess])
+
+  if (isLoading || !mounted) return <LoadingScreen />
+  if (!isAuthenticated || !hasSubAdminAccess) return null
+
+  const menuItems = [
+    { icon: LayoutDashboard, label: "Dashboard", href: "/sub-admin" },
+    { icon: Users, label: "Users", href: "/sub-admin/users" },
+    { icon: CheckCircle, label: "Verifications", href: "/sub-admin/verifications" },
+    { icon: MessageCircle, label: "Messages", href: "/sub-admin/messages" },
+    { icon: Bell, label: "SMS Notifications", href: "/sub-admin/notifications" },
+    { icon: FileText, label: "Reports", href: "/sub-admin/reports" },
+    { icon: BarChart3, label: "Analytics", href: "/sub-admin/analytics" },
+    { icon: User, label: "Profile", href: "/sub-admin/profile" },
+    { icon: Settings, label: "Settings", href: "/sub-admin/settings" },
+  ]
+
+  const isActive = (href: string) =>
+    href === "/sub-admin" ? pathname === "/sub-admin" : pathname.startsWith(href)
 
   const bottomNavItems = menuItems.slice(0, 4)
   const moreItems = menuItems.slice(4)

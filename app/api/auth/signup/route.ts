@@ -4,6 +4,7 @@ import { hashPassword } from "@/lib/server/password";
 import { createSessionCookie } from "@/lib/server/session";
 
 const prismaDb: any = db;
+const REFERRAL_REWARD_KES = 500;
 
 async function logSignupEvent(data: {
   email?: string;
@@ -98,6 +99,76 @@ async function attachReferralIfProvided(tx: any, data: {
       referrerId: referrer.id,
       referredId: data.referredId,
       status: "pending",
+    },
+  });
+}
+
+async function finalizeReferralForUser(tx: any, data: {
+  referredId: string;
+  referredEmail: string;
+}) {
+  const referral = await tx.referral.findUnique({
+    where: { referredId: data.referredId },
+    select: {
+      referrerId: true,
+      status: true,
+      reward: true,
+    },
+  });
+
+  if (!referral) {
+    return;
+  }
+
+  if (String(referral.status || "").toLowerCase() === "completed") {
+    return;
+  }
+
+  const rewardAmount = Number(referral.reward || REFERRAL_REWARD_KES);
+
+  const updated = await tx.referral.updateMany({
+    where: {
+      referredId: data.referredId,
+      status: {
+        not: "completed",
+      },
+    },
+    data: {
+      status: "completed",
+      reward: rewardAmount,
+    },
+  });
+
+  if (!updated?.count) {
+    return;
+  }
+
+  await tx.wallet.upsert({
+    where: { userId: referral.referrerId },
+    update: {
+      balance: {
+        increment: rewardAmount,
+      },
+    },
+    create: {
+      userId: referral.referrerId,
+      balance: rewardAmount,
+      currency: "KES",
+    },
+  });
+
+  await tx.authLog.create({
+    data: {
+      provider: "local",
+      mode: "referral-completed",
+      email: data.referredEmail,
+      status: "SUCCESS",
+      response: JSON.stringify({
+        referredId: data.referredId,
+        referrerId: referral.referrerId,
+        reward: rewardAmount,
+        source: "signup",
+      }),
     },
   });
 }
@@ -215,6 +286,10 @@ export async function POST(request: Request) {
       await attachReferralIfProvided(tx, {
         referredId: user.id,
         referrerIdRaw,
+      });
+      await finalizeReferralForUser(tx, {
+        referredId: user.id,
+        referredEmail: user.email,
       });
       return user;
     });

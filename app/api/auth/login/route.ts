@@ -4,6 +4,105 @@ import { verifyPassword } from "@/lib/server/password";
 import { createSessionCookie } from "@/lib/server/session";
 
 const prismaDb: any = db;
+const REFERRAL_REWARD_KES = 500;
+
+async function attachReferralIfMissingOnLogin(data: {
+  referredId: string;
+  referrerIdRaw?: string;
+}) {
+  const referrerId = String(data.referrerIdRaw || "").trim();
+  if (!referrerId || referrerId === data.referredId) {
+    return;
+  }
+
+  const referrer = await prismaDb.user.findUnique({
+    where: { id: referrerId },
+    select: { id: true },
+  });
+
+  if (!referrer) {
+    return;
+  }
+
+  await prismaDb.referral.upsert({
+    where: { referredId: data.referredId },
+    update: {},
+    create: {
+      referrerId: referrer.id,
+      referredId: data.referredId,
+      status: "pending",
+    },
+  });
+}
+
+async function finalizeReferralOnLogin(userId: string, userEmail: string) {
+  const referral = await prismaDb.referral.findUnique({
+    where: { referredId: userId },
+    select: {
+      id: true,
+      referrerId: true,
+      status: true,
+      reward: true,
+    },
+  });
+
+  if (!referral) {
+    return;
+  }
+
+  if (String(referral.status || "").toLowerCase() === "completed") {
+    return;
+  }
+
+  const rewardAmount = Number(referral.reward || REFERRAL_REWARD_KES);
+
+  await prismaDb.$transaction(async (tx: any) => {
+    const updated = await tx.referral.updateMany({
+      where: {
+        referredId: userId,
+        status: {
+          not: "completed",
+        },
+      },
+      data: {
+        status: "completed",
+        reward: rewardAmount,
+      },
+    });
+
+    if (!updated?.count) {
+      return;
+    }
+
+    await tx.wallet.upsert({
+      where: { userId: referral.referrerId },
+      update: {
+        balance: {
+          increment: rewardAmount,
+        },
+      },
+      create: {
+        userId: referral.referrerId,
+        balance: rewardAmount,
+        currency: "KES",
+      },
+    });
+
+    await tx.authLog.create({
+      data: {
+        provider: "local",
+        mode: "referral-completed",
+        email: userEmail,
+        status: "SUCCESS",
+        response: JSON.stringify({
+          referredId: userId,
+          referrerId: referral.referrerId,
+          reward: rewardAmount,
+        }),
+      },
+    });
+  });
+}
 
 export async function POST(request: Request) {
   try {
@@ -15,6 +114,7 @@ export async function POST(request: Request) {
     const phone = String(body?.phone || "").trim();
     const name = String(body?.name || "").trim();
     const password = String(body?.password || "");
+    const referrerIdRaw = String(body?.referrerId || "");
 
     if ((!email && !phone && !identifier && !name) || !password) {
       return NextResponse.json(
@@ -121,6 +221,16 @@ export async function POST(request: Request) {
         response: JSON.stringify({ role: user.role }),
       },
     });
+
+    try {
+      await attachReferralIfMissingOnLogin({
+        referredId: user.id,
+        referrerIdRaw,
+      });
+      await finalizeReferralOnLogin(user.id, String(user.email || ""));
+    } catch {
+      // Keep login successful even if referral completion fails.
+    }
 
     const response = NextResponse.json({
       ok: true,

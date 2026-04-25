@@ -3,14 +3,30 @@
 import { useEffect } from "react"
 import type React from "react"
 import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useAuthContext } from "@/lib/auth-context"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { User, Lock, AlertCircle, Eye, EyeOff, Shield, Users, KeyRound } from "lucide-react"
 
+function resolveRolePath(role: string): string {
+  if (role === "sub-admin" || role === "subadmin") return "/sub-admin"
+  if (role === "secretary") return "/secretary"
+  if (role === "agent") return "/agent"
+  return "/team-login"
+}
+
+function resolveSafeNextPath(nextParam: string | null): string | null {
+  if (!nextParam) return null
+  if (!nextParam.startsWith("/")) return null
+  if (nextParam.startsWith("//")) return null
+  if (nextParam.startsWith("/api")) return null
+  return nextParam
+}
+
 export default function TeamLoginPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { login } = useAuthContext()
   const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
@@ -60,9 +76,9 @@ export default function TeamLoginPage() {
 
       login(user)
 
-      if (role === "sub-admin" || role === "subadmin") router.push("/sub-admin")
-      else if (role === "secretary") router.push("/secretary")
-      else if (role === "agent") router.push("/agent")
+      const requestedNext = resolveSafeNextPath(searchParams.get("next"))
+      const fallbackPath = resolveRolePath(role)
+      router.push(requestedNext || fallbackPath)
     } catch (err) {
       const message = err instanceof Error ? err.message : "An error occurred during login. Please try again."
       setError(message)

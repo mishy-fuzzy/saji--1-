@@ -33,6 +33,9 @@ import {
 function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const referralCode = searchParams.get("ref");
+  const referrerId = searchParams.get("rid");
+  const roleFromQuery = searchParams.get("role");
   const { login } = useAuthContext();
   const [loginMethod, setLoginMethod] = useState<"email" | "phone">("email");
   const [email, setEmail] = useState("");
@@ -120,6 +123,7 @@ function LoginContent() {
         body: JSON.stringify({
           email: loginMethod === "email" ? email : undefined,
           phone: loginMethod === "phone" ? phone : undefined,
+          referrerId: referrerId || undefined,
           password,
         }),
       });
@@ -148,6 +152,14 @@ function LoginContent() {
       "Apple sign-in is not configured yet. Please use email/password login.",
     );
   };
+
+  const signupParams = new URLSearchParams();
+  if (referralCode) signupParams.set("ref", referralCode);
+  if (referrerId) signupParams.set("rid", referrerId);
+  if (roleFromQuery) signupParams.set("role", roleFromQuery);
+  const signupHref = signupParams.toString()
+    ? `/auth/signup?${signupParams.toString()}`
+    : "/auth/signup";
 
   const handleOpenReactivateModal = () => {
     if (loginMethod !== "email") {
@@ -456,7 +468,7 @@ function LoginContent() {
               <label className="flex items-center gap-2 cursor-pointer">
                 <Checkbox
                   checked={rememberMe}
-                  onCheckedChange={setRememberMe}
+                  onCheckedChange={(checked) => setRememberMe(checked === true)}
                   disabled={isLoading}
                 />
                 <span className="text-sm text-muted-foreground">
@@ -535,7 +547,7 @@ function LoginContent() {
           <p className="text-center text-sm text-muted-foreground mt-6">
             {"Don't have an account? "}
             <Link
-              href="/auth/signup"
+              href={signupHref}
               className="font-semibold text-primary hover:underline"
             >
               Sign up
