@@ -1,7 +1,91 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/server/db";
+import { parseCoordinateLabel, resolveLocationName } from "@/lib/location";
 
 const prismaDb: any = db;
+
+type AuthLogRow = {
+  email: string | null;
+  response: string | null;
+  createdAt: Date;
+};
+
+type LocationSnapshot = {
+  location: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
+function safeText(value: unknown): string {
+  return String(value || "").trim();
+}
+
+function normalizeEmail(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function parseLocationResponse(raw: string | null): LocationSnapshot | null {
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as {
+      location?: string;
+      latitude?: number;
+      longitude?: number;
+    };
+
+    return {
+      location: safeText(parsed?.location),
+      latitude:
+        typeof parsed?.latitude === "number" ? parsed.latitude : null,
+      longitude:
+        typeof parsed?.longitude === "number" ? parsed.longitude : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function mapLatestByEmail(rows: AuthLogRow[]) {
+  const map = new Map<string, AuthLogRow>();
+  for (const row of rows) {
+    const email = normalizeEmail(String(row.email || ""));
+    if (!email || map.has(email)) continue;
+    map.set(email, row);
+  }
+  return map;
+}
+
+async function getProviderLocationsByEmail(emails: string[]) {
+  if (emails.length === 0) return new Map<string, LocationSnapshot>();
+
+  const locationLogs = await prismaDb.authLog.findMany({
+    where: {
+      provider: "local",
+      mode: "user-location",
+      email: { in: emails },
+      status: "SUCCESS",
+    },
+    orderBy: { createdAt: "desc" },
+    select: { email: true, response: true, createdAt: true },
+  });
+
+  const locationByEmail = mapLatestByEmail(locationLogs);
+  const resolved = new Map<string, LocationSnapshot>();
+
+  for (const email of emails) {
+    const key = normalizeEmail(email);
+    const parsed = parseLocationResponse(
+      locationByEmail.get(key)?.response || null,
+    );
+
+    if (parsed) {
+      resolved.set(key, parsed);
+    }
+  }
+
+  return resolved;
+}
 
 export async function GET(request: Request) {
   try {
@@ -20,7 +104,8 @@ export async function GET(request: Request) {
       where: {
         provider: {
           role: "provider",
-          status: "active",
+          deletedAt: null,
+          isSuspended: false,
         },
       },
       include: {
@@ -40,6 +125,16 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
       take: 200,
     });
+
+    const providerEmails = Array.from(
+      new Set(
+        services
+          .map((service: any) => String(service?.provider?.email || "").trim())
+          .filter(Boolean),
+      ),
+    );
+
+    const locationsByEmail = await getProviderLocationsByEmail(providerEmails);
 
     // Also fetch verification status for each provider
     const grouped = new Map<string, any[]>();
@@ -71,6 +166,43 @@ export async function GET(request: Request) {
             ),
           );
 
+          const providerEmail = safeText(provider.email);
+          const locationSnapshot = providerEmail
+            ? locationsByEmail.get(normalizeEmail(providerEmail))
+            : null;
+          const locationLabel = safeText(locationSnapshot?.location);
+          const coordsFromLabel = parseCoordinateLabel(locationLabel);
+          const latitude =
+            typeof locationSnapshot?.latitude === "number" &&
+            Number.isFinite(locationSnapshot.latitude)
+              ? locationSnapshot.latitude
+              : coordsFromLabel?.latitude;
+          const longitude =
+            typeof locationSnapshot?.longitude === "number" &&
+            Number.isFinite(locationSnapshot.longitude)
+              ? locationSnapshot.longitude
+              : coordsFromLabel?.longitude;
+          let resolvedLocation = locationLabel;
+
+          if (
+            (!resolvedLocation || coordsFromLabel) &&
+            Number.isFinite(latitude) &&
+            Number.isFinite(longitude)
+          ) {
+            const name = await resolveLocationName(latitude, longitude);
+            if (name) {
+              resolvedLocation = name;
+            }
+          }
+
+          const safeLatitude = Number.isFinite(latitude)
+            ? (latitude as number)
+            : -1.286389;
+          const safeLongitude = Number.isFinite(longitude)
+            ? (longitude as number)
+            : 36.817223;
+          const locationName = resolvedLocation || "Kenya";
+
           return {
             id: index + 1,
             providerId,
@@ -82,7 +214,11 @@ export async function GET(request: Request) {
             reviews: 0,
             skills,
             avatar: String(provider.image || "/placeholder.svg"),
-            location: { lat: -1.286389, lng: 36.817223, name: "Kenya" },
+            location: {
+              lat: safeLatitude,
+              lng: safeLongitude,
+              name: locationName,
+            },
             distance: "-",
             bio: String(first?.description || "Professional specialist"),
             phone: String(provider.phone || "Not provided"),

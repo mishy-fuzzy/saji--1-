@@ -56,21 +56,22 @@ function formatMoney(value: number) {
   return `KES ${value.toLocaleString()}`
 }
 
-const DEFAULT_PRODUCT_CATEGORIES = [
-  "Fresh Produce",
-  "Groceries",
-  "Hardware",
-  "Electronics",
-  "Plumbing Supplies",
-  "Electrical Supplies",
-  "Building Materials",
-  "Tools",
-  "Household",
-  "Fashion",
-  "Beauty & Cosmetics",
-  "Health & Wellness",
-  "Other",
-]
+function getRangeDays(range: string) {
+  if (range === "30d") return 30
+  if (range === "90d") return 90
+  return 7
+}
+
+function calcPercentChange(current: number, previous: number) {
+  if (previous <= 0) return current > 0 ? 100 : 0
+  return Number((((current - previous) / previous) * 100).toFixed(1))
+}
+
+function parseTimestamp(value?: string) {
+  if (!value) return 0
+  const ts = new Date(value).getTime()
+  return Number.isNaN(ts) ? 0 : ts
+}
 
 export default function ShopkeeperDashboard() {
   const { user, isLoading } = useAuthContext()
@@ -81,7 +82,14 @@ export default function ShopkeeperDashboard() {
   const [thisMonthRevenue, setThisMonthRevenue] = useState(0)
   const [todayRevenue, setTodayRevenue] = useState(0)
   const [ordersTodayCount, setOrdersTodayCount] = useState(0)
+  const [rangeOrdersCount, setRangeOrdersCount] = useState(0)
   const [activeProductsCount, setActiveProductsCount] = useState(0)
+  const [kpiChanges, setKpiChanges] = useState({
+    revenue: 0,
+    orders: 0,
+    products: 0,
+    customers: 0,
+  })
   const [recentOrders, setRecentOrders] = useState<ShopkeeperOrder[]>([])
   const [topProducts, setTopProducts] = useState<ShopkeeperProduct[]>([])
   const [recentCustomers, setRecentCustomers] = useState<ShopkeeperCustomer[]>([])
@@ -90,7 +98,6 @@ export default function ShopkeeperDashboard() {
     name: "",
     price: "",
     category: "",
-    stock: "",
     description: "",
   })
 
@@ -101,7 +108,7 @@ export default function ShopkeeperDashboard() {
 
     const loadDashboard = async () => {
       try {
-        const [usersResponse, earningsResponse, ordersResponse, productsResponse] = await Promise.all([
+        const [usersResponse, earningsResponse, ordersResponse, productsResponse, registerOptionsResponse] = await Promise.all([
           fetch("/api/shopkeeper/users", {
             cache: "no-store",
             headers: { "x-user-role": "shopkeeper" },
@@ -109,13 +116,15 @@ export default function ShopkeeperDashboard() {
           fetch("/api/shopkeeper/earnings", { cache: "no-store" }),
           fetch(`/api/shopkeeper/orders?providerId=${encodeURIComponent(user.id)}`, { cache: "no-store" }),
           fetch(`/api/shopkeeper/products?providerId=${encodeURIComponent(user.id)}`, { cache: "no-store" }),
+          fetch("/api/shopkeeper/register-options", { cache: "no-store" }),
         ])
 
-        const [usersPayload, earningsPayload, ordersPayload, productsPayload] = await Promise.all([
+        const [usersPayload, earningsPayload, ordersPayload, productsPayload, registerOptionsPayload] = await Promise.all([
           usersResponse.json(),
           earningsResponse.json(),
           ordersResponse.json(),
           productsResponse.json(),
+          registerOptionsResponse.json(),
         ])
 
         if (cancelled) return
@@ -131,11 +140,9 @@ export default function ShopkeeperDashboard() {
             orders?: number
             status?: string
           }>
-          setShopkeeperCustomersCount(
-            users.filter((item) => String(item.role || "").toLowerCase() === "customer").length,
-          )
-          const mappedCustomers = users
-            .filter((item) => String(item.role || "").toLowerCase() === "customer")
+          const customerUsers = users.filter((item) => String(item.role || "").toLowerCase() === "customer")
+          setShopkeeperCustomersCount(customerUsers.length)
+          const mappedCustomers = customerUsers
             .map((item) => ({
               id: String(item.id || ""),
               name: String(item.name || "Customer"),
@@ -146,6 +153,27 @@ export default function ShopkeeperDashboard() {
               status: String(item.status || "Active"),
             }))
           setRecentCustomers(mappedCustomers.slice(0, 6))
+
+          const now = Date.now()
+          const dayMs = 24 * 60 * 60 * 1000
+          const rangeDays = getRangeDays(timeRange)
+          const currentStart = now - (rangeDays - 1) * dayMs
+          const previousStart = now - (rangeDays * 2 - 1) * dayMs
+
+          const currentCustomerCount = customerUsers.filter((item) => {
+            const joinedTs = parseTimestamp(String(item.joined || ""))
+            return joinedTs >= currentStart
+          }).length
+
+          const previousCustomerCount = customerUsers.filter((item) => {
+            const joinedTs = parseTimestamp(String(item.joined || ""))
+            return joinedTs >= previousStart && joinedTs < currentStart
+          }).length
+
+          setKpiChanges((current) => ({
+            ...current,
+            customers: calcPercentChange(currentCustomerCount, previousCustomerCount),
+          }))
         }
 
         if (earningsResponse.ok && earningsPayload?.ok) {
@@ -172,6 +200,7 @@ export default function ShopkeeperDashboard() {
               price: number
               status: string
               category: string
+              createdAt?: string
             }>)
           : []
 
@@ -186,6 +215,52 @@ export default function ShopkeeperDashboard() {
         const todayStart = new Date()
         todayStart.setHours(0, 0, 0, 0)
 
+        const now = Date.now()
+        const dayMs = 24 * 60 * 60 * 1000
+        const rangeDays = getRangeDays(timeRange)
+        const currentStart = now - (rangeDays - 1) * dayMs
+        const previousStart = now - (rangeDays * 2 - 1) * dayMs
+
+        const currentRangeOrders = sortedOrders.filter((order) => {
+          const createdAtTs = parseTimestamp(String(order.createdAt || order.date))
+          return createdAtTs >= currentStart
+        })
+
+        const previousRangeOrders = sortedOrders.filter((order) => {
+          const createdAtTs = parseTimestamp(String(order.createdAt || order.date))
+          return createdAtTs >= previousStart && createdAtTs < currentStart
+        })
+
+        const currentRevenueInRange = currentRangeOrders.reduce(
+          (sum, order) => sum + Number(order.amount || 0),
+          0,
+        )
+        const previousRevenueInRange = previousRangeOrders.reduce(
+          (sum, order) => sum + Number(order.amount || 0),
+          0,
+        )
+
+        const currentOrderCountInRange = currentRangeOrders.length
+        const previousOrderCountInRange = previousRangeOrders.length
+        setRangeOrdersCount(currentOrderCountInRange)
+
+        const currentProductsCreated = products.filter((product) => {
+          const createdAtTs = parseTimestamp(String(product.createdAt || ""))
+          return createdAtTs >= currentStart
+        }).length
+
+        const previousProductsCreated = products.filter((product) => {
+          const createdAtTs = parseTimestamp(String(product.createdAt || ""))
+          return createdAtTs >= previousStart && createdAtTs < currentStart
+        }).length
+
+        setKpiChanges((current) => ({
+          ...current,
+          revenue: calcPercentChange(currentRevenueInRange, previousRevenueInRange),
+          orders: calcPercentChange(currentOrderCountInRange, previousOrderCountInRange),
+          products: calcPercentChange(currentProductsCreated, previousProductsCreated),
+        }))
+
         const todayOrders = sortedOrders.filter((order) => {
           const createdAt = order.createdAt ? new Date(order.createdAt) : null
           return Boolean(createdAt && createdAt >= todayStart)
@@ -194,7 +269,7 @@ export default function ShopkeeperDashboard() {
         setOrdersTodayCount(todayOrders.length)
         setTodayRevenue(todayOrders.reduce((sum, order) => sum + Number(order.amount || 0), 0))
         setRecentOrders(
-          sortedOrders.slice(0, 5).map((order) => ({
+          currentRangeOrders.slice(0, 5).map((order) => ({
             id: order.id,
             customer: order.customer,
             items: 1,
@@ -207,7 +282,7 @@ export default function ShopkeeperDashboard() {
         )
 
         const productPerformance = new Map<string, { sales: number; revenue: number }>()
-        orders.forEach((order) => {
+        currentRangeOrders.forEach((order) => {
           const current = productPerformance.get(order.product) || { sales: 0, revenue: 0 }
           current.sales += 1
           current.revenue += Number(order.amount || 0)
@@ -226,11 +301,15 @@ export default function ShopkeeperDashboard() {
             .slice(0, 5),
         )
         setActiveProductsCount(products.length)
+        const registerCategories = registerOptionsResponse.ok && registerOptionsPayload?.ok && Array.isArray(registerOptionsPayload?.data?.categories)
+          ? registerOptionsPayload.data.categories.map((item: unknown) => String(item).trim()).filter(Boolean)
+          : []
+
         setCategoryOptions(
           Array.from(
             new Set(
               [
-                ...DEFAULT_PRODUCT_CATEGORIES,
+                ...registerCategories,
                 ...products
                   .map((product) => String(product?.category || "").trim())
                   .filter(Boolean),
@@ -252,44 +331,44 @@ export default function ShopkeeperDashboard() {
     return () => {
       cancelled = true
     }
-  }, [user?.id])
+  }, [user?.id, timeRange])
 
   const kpis = useMemo(
     () => [
       {
         label: "Total Revenue",
         value: formatMoney(totalRevenue),
-        change: 0,
-        trend: totalRevenue > 0 ? "up" : "down",
+        change: kpiChanges.revenue,
+        trend: kpiChanges.revenue >= 0 ? "up" : "down",
         icon: DollarSign,
         color: "from-emerald-600 to-emerald-700",
       },
       {
-        label: "Orders Today",
-        value: String(ordersTodayCount),
-        change: 0,
-        trend: ordersTodayCount > 0 ? "up" : "down",
+        label: "Orders (Range)",
+        value: String(rangeOrdersCount),
+        change: kpiChanges.orders,
+        trend: kpiChanges.orders >= 0 ? "up" : "down",
         icon: ShoppingCart,
         color: "from-blue-600 to-blue-700",
       },
       {
         label: "Active Products",
         value: String(activeProductsCount),
-        change: 0,
-        trend: activeProductsCount > 0 ? "up" : "down",
+        change: kpiChanges.products,
+        trend: kpiChanges.products >= 0 ? "up" : "down",
         icon: Package,
         color: "from-purple-600 to-purple-700",
       },
       {
         label: "Total Customers",
         value: String(shopkeeperCustomersCount),
-        change: 0,
-        trend: shopkeeperCustomersCount > 0 ? "up" : "down",
+        change: kpiChanges.customers,
+        trend: kpiChanges.customers >= 0 ? "up" : "down",
         icon: Users,
         color: "from-orange-600 to-orange-700",
       },
     ],
-    [activeProductsCount, ordersTodayCount, shopkeeperCustomersCount, totalRevenue],
+    [activeProductsCount, kpiChanges, rangeOrdersCount, shopkeeperCustomersCount, totalRevenue],
   )
 
   const getStatusColor = (status: string) => {
@@ -308,6 +387,38 @@ export default function ShopkeeperDashboard() {
       pending: <AlertCircle className="w-4 h-4" />,
     }
     return icons[status as keyof typeof icons]
+  }
+
+  const handleAddProduct = async () => {
+    if (!user?.id) return
+
+    if (!newProduct.name || !newProduct.price) {
+      alert("Please provide at least product name and price")
+      return
+    }
+
+    try {
+      const response = await fetch("/api/shopkeeper/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          providerId: user.id,
+          name: newProduct.name,
+          price: Number(newProduct.price),
+          category: newProduct.category,
+          description: newProduct.description,
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to add product")
+      }
+
+      setShowAddProductModal(false)
+      setNewProduct({ name: "", price: "", category: "", description: "" })
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to add product")
+    }
   }
 
   if (isLoading) {
@@ -512,14 +623,14 @@ export default function ShopkeeperDashboard() {
           <Card className="p-6 border-0 shadow-lg bg-gradient-to-br from-amber-500 to-orange-600 text-white">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <p className="text-amber-100 text-sm font-medium mb-1">Low Stock Items</p>
-                <p className="text-4xl font-bold">0</p>
+                <p className="text-amber-100 text-sm font-medium mb-1">This Month Revenue</p>
+                <p className="text-4xl font-bold">{formatMoney(thisMonthRevenue)}</p>
               </div>
               <AlertCircle className="w-8 h-8 text-amber-200" />
             </div>
-            <Link href="/shopkeeper/products?filter=low-stock">
+            <Link href="/shopkeeper/earnings">
               <Button className="w-full bg-white hover:bg-amber-50 text-amber-600 font-semibold mt-4">
-                Restock Now
+                View Earnings
               </Button>
             </Link>
           </Card>
@@ -557,25 +668,14 @@ export default function ShopkeeperDashboard() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Price</label>
-                <Input
-                  type="number"
-                  value={newProduct.price}
-                  onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
-                  placeholder="KES"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Stock</label>
-                <Input
-                  type="number"
-                  value={newProduct.stock}
-                  onChange={(e) => setNewProduct({ ...newProduct, stock: e.target.value })}
-                  placeholder="Quantity"
-                />
-              </div>
+            <div>
+              <label className="block text-sm font-medium mb-2">Price</label>
+              <Input
+                type="number"
+                value={newProduct.price}
+                onChange={(e) => setNewProduct({ ...newProduct, price: e.target.value })}
+                placeholder="KES"
+              />
             </div>
 
             <div>
@@ -586,7 +686,7 @@ export default function ShopkeeperDashboard() {
                 className="w-full px-3 py-2 border border-input rounded-md"
               >
                 <option value="">Select category</option>
-                {(categoryOptions.length > 0 ? categoryOptions : DEFAULT_PRODUCT_CATEGORIES).map((option: string) => (
+                {categoryOptions.map((option: string) => (
                   <option key={option} value={option}>
                     {option}
                   </option>
@@ -613,10 +713,7 @@ export default function ShopkeeperDashboard() {
                 Cancel
               </Button>
               <Button
-                onClick={() => {
-                  setShowAddProductModal(false)
-                  setNewProduct({ name: "", price: "", category: "", stock: "", description: "" })
-                }}
+                onClick={handleAddProduct}
                 className="flex-1 bg-amber-600 hover:bg-amber-700"
               >
                 Add Product

@@ -21,25 +21,46 @@ export default function ShopkeeperEndorsementsPage() {
   const [pendingRequests, setPendingRequests] = useState<any[]>([])
   const [myEndorsements, setMyEndorsements] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isEditingEndorsement, setIsEditingEndorsement] = useState(false)
+
+  const resetModalState = () => {
+    setShowEndorseModal(false)
+    setEndorsementText("")
+    setSelectedSpecialist(null)
+    setIsEditingEndorsement(false)
+  }
+
+  const loadEndorsementData = async () => {
+    try {
+      const response = await fetch("/api/shopkeeper/endorsements", {
+        cache: "no-store",
+      })
+      const payload = await response.json()
+      if (payload?.ok && payload?.data) {
+        setPendingRequests(
+          Array.isArray(payload.data.pendingRequests)
+            ? payload.data.pendingRequests
+            : Array.isArray(payload.data.pending)
+              ? payload.data.pending
+              : [],
+        )
+        setMyEndorsements(
+          Array.isArray(payload.data.myEndorsements)
+            ? payload.data.myEndorsements
+            : Array.isArray(payload.data.endorsements)
+              ? payload.data.endorsements
+              : [],
+        )
+      }
+    } catch (err) {
+      console.error("Failed to load endorsements:", err)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const loadEndorsementData = async () => {
-      try {
-        const response = await fetch("/api/shopkeeper/endorsements", {
-          cache: "no-store",
-        })
-        const payload = await response.json()
-        if (payload?.ok && payload?.data) {
-          setPendingRequests(payload.data.pendingRequests || [])
-          setMyEndorsements(payload.data.myEndorsements || [])
-        }
-      } catch (err) {
-        console.error("Failed to load endorsements:", err)
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
     loadEndorsementData()
   }, [])
 
@@ -50,12 +71,85 @@ export default function ShopkeeperEndorsementsPage() {
     thisMonth: myEndorsements.length
   }
 
-  const handleEndorse = () => {
-    // Would submit endorsement here
-    setShowEndorseModal(false)
-    setEndorsementText("")
-    setSelectedSpecialist(null)
-    alert("Endorsement submitted successfully!")
+  const handleDecline = async (requestId: string) => {
+    try {
+      const response = await fetch("/api/shopkeeper/endorsements", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "decline", id: requestId }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to decline request")
+      }
+
+      setPendingRequests((current) => current.filter((item) => String(item.id) !== String(requestId)))
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to decline request")
+    }
+  }
+
+  const handleEdit = (endorsement: any) => {
+    setSelectedSpecialist(endorsement)
+    setEndorsementText(String(endorsement?.endorsement || ""))
+    setIsEditingEndorsement(true)
+    setShowEndorseModal(true)
+  }
+
+  const handleEndorse = async () => {
+    if (!selectedSpecialist?.id || endorsementText.trim().length < 20 || isSubmitting) return
+
+    setIsSubmitting(true)
+    try {
+      if (isEditingEndorsement) {
+        const response = await fetch("/api/shopkeeper/endorsements", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "edit",
+            id: selectedSpecialist.id,
+            endorsementText: endorsementText.trim(),
+          }),
+        })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || "Failed to update endorsement")
+        }
+
+        setMyEndorsements((current) =>
+          current.map((item) =>
+            String(item.id) === String(selectedSpecialist.id)
+              ? { ...item, endorsement: endorsementText.trim() }
+              : item,
+          ),
+        )
+      } else {
+        const response = await fetch("/api/shopkeeper/endorsements", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            requestId: selectedSpecialist.id,
+            endorsementText: endorsementText.trim(),
+          }),
+        })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !payload?.data) {
+          throw new Error(payload?.error || "Failed to submit endorsement")
+        }
+
+        setPendingRequests((current) =>
+          current.filter((item) => String(item.id) !== String(selectedSpecialist.id)),
+        )
+        setMyEndorsements((current) => [payload.data, ...current])
+      }
+
+      resetModalState()
+      alert(isEditingEndorsement ? "Endorsement updated successfully!" : "Endorsement submitted successfully!")
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to submit endorsement")
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -210,13 +304,19 @@ export default function ShopkeeperEndorsementsPage() {
                       className="flex-1 bg-amber-600 hover:bg-amber-700"
                       onClick={() => {
                         setSelectedSpecialist(request)
+                        setIsEditingEndorsement(false)
+                        setEndorsementText("")
                         setShowEndorseModal(true)
                       }}
                     >
                       <Check className="w-4 h-4 mr-2" />
                       Write Endorsement
                     </Button>
-                    <Button variant="outline" className="flex-1 text-red-600 border-red-200 hover:bg-red-50 bg-transparent">
+                    <Button
+                      variant="outline"
+                      className="flex-1 text-red-600 border-red-200 hover:bg-red-50 bg-transparent"
+                      onClick={() => handleDecline(String(request.id || ""))}
+                    >
                       <X className="w-4 h-4 mr-2" />
                       Decline
                     </Button>
@@ -270,7 +370,7 @@ export default function ShopkeeperEndorsementsPage() {
                   </div>
 
                   <div className="flex gap-2 mt-3">
-                    <Button size="sm" variant="outline" className="bg-transparent">
+                    <Button size="sm" variant="outline" className="bg-transparent" onClick={() => handleEdit(endorsement)}>
                       <MessageSquare className="w-4 h-4 mr-1" />
                       Edit
                     </Button>
@@ -286,7 +386,7 @@ export default function ShopkeeperEndorsementsPage() {
       <Dialog open={showEndorseModal} onOpenChange={setShowEndorseModal}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Write Endorsement</DialogTitle>
+            <DialogTitle>{isEditingEndorsement ? "Edit Endorsement" : "Write Endorsement"}</DialogTitle>
           </DialogHeader>
           {selectedSpecialist && (
             <div className="space-y-4 py-2">
@@ -327,16 +427,16 @@ export default function ShopkeeperEndorsementsPage() {
                 <Button 
                   variant="outline" 
                   className="flex-1 bg-transparent"
-                  onClick={() => setShowEndorseModal(false)}
+                  onClick={resetModalState}
                 >
                   Cancel
                 </Button>
                 <Button 
                   className="flex-1 bg-amber-600 hover:bg-amber-700"
                   onClick={handleEndorse}
-                  disabled={endorsementText.length < 50}
+                  disabled={endorsementText.length < 50 || isSubmitting}
                 >
-                  Submit Endorsement
+                  {isSubmitting ? "Saving..." : isEditingEndorsement ? "Save Changes" : "Submit Endorsement"}
                 </Button>
               </div>
             </div>

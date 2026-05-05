@@ -388,16 +388,25 @@ export default function ShopkeeperRegistrationPage() {
 
               <div>
                 <Label>Shop Category *</Label>
-                <select 
-                  value={formData.shopCategory}
-                  onChange={(e) => setFormData(prev => ({ ...prev, shopCategory: e.target.value }))}
-                  className="w-full mt-1.5 px-3 py-2 bg-background border border-input rounded-md text-sm"
-                >
-                  <option value="">Select a category</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+                {categories.length > 0 ? (
+                  <select 
+                    value={formData.shopCategory}
+                    onChange={(e) => setFormData(prev => ({ ...prev, shopCategory: e.target.value }))}
+                    className="w-full mt-1.5 px-3 py-2 bg-background border border-input rounded-md text-sm"
+                  >
+                    <option value="">Select a category</option>
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input
+                    value={formData.shopCategory}
+                    onChange={(e) => setFormData(prev => ({ ...prev, shopCategory: e.target.value }))}
+                    placeholder="Enter your shop category"
+                    className="mt-1.5"
+                  />
+                )}
               </div>
 
               <div>

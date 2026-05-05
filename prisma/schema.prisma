@@ -119,6 +119,57 @@ model Service {
   updatedAt   DateTime  @updatedAt
   bookings    Booking[]
   jobs        Job[]
+
+model ServiceCategoryMeta {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  type       String?
+  iconName   String?
+  colorClass String?
+  sortOrder  Int      @default(0)
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  deletedAt  DateTime?
+
+  @@index([isActive, deletedAt])
+}
+
+model LiveSession {
+  id          String   @id @default(cuid())
+  hostUserId  String
+  kind        String
+  title       String?
+  category    String?
+  description String?
+  thumbnail   String?
+  joinFee     Int?
+  viewers     Int      @default(0)
+  status      String   @default("live")
+  startsAt    DateTime?
+  endsAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+  host        User     @relation(fields: [hostUserId], references: [id])
+
+  @@index([hostUserId])
+  @@index([kind, status])
+  @@index([status, updatedAt])
+}
+
+model ShopOperationalStatus {
+  id               String   @id @default(cuid())
+  shopkeeperUserId String   @unique
+  isOpen           Boolean  @default(false)
+  deliveryPercent  Int?
+  matchedByAI      Boolean  @default(false)
+  statusMessage    String?
+  updatedAt        DateTime @updatedAt
+  shopkeeper       User     @relation(fields: [shopkeeperUserId], references: [id])
+
+  @@index([isOpen])
+}
   provider    User      @relation("ProviderServices", fields: [providerId], references: [id])
 
   @@index([category])
@@ -284,6 +335,54 @@ model AuthLog {
   @@index([provider, mode])
   @@index([status])
   @@index([createdAt])
+}
+
+model ShopkeeperPromotion {
+  id          String   @id @default(cuid())
+  ownerUserId String
+  ownerEmail  String?
+  name        String
+  code        String
+  type        String
+  value       Float
+  minOrder    Float    @default(0)
+  maxUses     Int      @default(0)
+  usedCount   Int      @default(0)
+  startDate   DateTime
+  endDate     DateTime
+  status      String
+  products    String   @default("")
+  description String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  deletedAt   DateTime?
+
+  @@index([ownerUserId, deletedAt])
+  @@index([ownerEmail, deletedAt])
+  @@index([status])
+}
+
+model ShopkeeperReview {
+  id              String   @id @default(cuid())
+  shopkeeperUserId String
+  customerUserId  String?
+  customerName    String
+  customerAvatar  String   @default("/placeholder.svg")
+  productName     String   @default("Service")
+  rating          Int      @default(0)
+  text            String   @default("")
+  helpful         Int      @default(0)
+  replied         Boolean  @default(false)
+  reply           String   @default("")
+  replyDate       DateTime?
+  reported        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  deletedAt       DateTime?
+
+  @@index([shopkeeperUserId, deletedAt])
+  @@index([customerUserId])
+  @@index([rating])
 }
 
 model VirtualGift {

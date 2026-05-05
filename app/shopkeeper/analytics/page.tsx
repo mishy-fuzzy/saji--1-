@@ -66,6 +66,25 @@ const emptyData: AnalyticsPayload = {
   topProducts: [],
 };
 
+function downloadTextFile(content: string, fileName: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  window.URL.revokeObjectURL(url);
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export default function ShopkeeperAnalyticsPage() {
   const [dateRange, setDateRange] = useState("7d");
   const [showExportModal, setShowExportModal] = useState(false);
@@ -104,7 +123,110 @@ export default function ShopkeeperAnalyticsPage() {
     };
   }, [dateRange]);
 
-  const handleExportReport = (_format: string) => {
+  const handleExportReport = (format: string) => {
+    const normalized = String(format || "csv").toLowerCase();
+    const dateTag = new Date().toISOString().slice(0, 10);
+
+    if (normalized === "pdf") {
+      const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Analytics Report</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+      h1 { margin: 0 0 8px; }
+      .meta { color: #6b7280; margin-bottom: 16px; }
+      .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+      .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
+      .label { font-size: 12px; color: #6b7280; }
+      .value { font-size: 20px; font-weight: 700; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      th, td { border: 1px solid #e5e7eb; padding: 8px; text-align: left; font-size: 12px; }
+      th { background: #f3f4f6; }
+    </style>
+  </head>
+  <body>
+    <h1>Shopkeeper Analytics Report</h1>
+    <div class="meta">Range: ${escapeHtml(dateRange)} | Generated: ${escapeHtml(new Date().toLocaleString())}</div>
+    <div class="grid">
+      <div class="card"><div class="label">Total Revenue</div><div class="value">KES ${analytics.kpis.totalRevenue.toLocaleString()}</div></div>
+      <div class="card"><div class="label">Total Orders</div><div class="value">${analytics.kpis.totalOrders.toLocaleString()}</div></div>
+      <div class="card"><div class="label">Average Order Value</div><div class="value">KES ${Math.round(analytics.kpis.averageOrderValue).toLocaleString()}</div></div>
+      <div class="card"><div class="label">Customers</div><div class="value">${analytics.kpis.customers.toLocaleString()}</div></div>
+    </div>
+
+    <h2>Top Products</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Units Sold</th>
+          <th>Revenue (KES)</th>
+          <th>Growth %</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${analytics.topProducts
+          .map(
+            (product) => `<tr>
+              <td>${escapeHtml(String(product.name || ""))}</td>
+              <td>${Number(product.sales || 0)}</td>
+              <td>${Number(product.revenue || 0).toLocaleString()}</td>
+              <td>${Number(product.growth || 0).toFixed(1)}</td>
+            </tr>`,
+          )
+          .join("")}
+      </tbody>
+    </table>
+  </body>
+</html>`;
+
+      const printWindow = window.open("", "_blank", "noopener,noreferrer,width=1000,height=720");
+      if (printWindow) {
+        printWindow.document.open();
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.focus();
+        printWindow.print();
+      }
+      setShowExportModal(false);
+      return;
+    }
+
+    const headers = ["section", "metric", "value"];
+    const rows: string[][] = [
+      ["kpi", "totalRevenue", String(analytics.kpis.totalRevenue)],
+      ["kpi", "totalOrders", String(analytics.kpis.totalOrders)],
+      ["kpi", "averageOrderValue", String(analytics.kpis.averageOrderValue)],
+      ["kpi", "customers", String(analytics.kpis.customers)],
+      ["kpi", "revenueChangePercent", String(analytics.kpis.revenueChange)],
+      ["kpi", "orderChangePercent", String(analytics.kpis.orderChange)],
+      ["kpi", "averageOrderValueChangePercent", String(analytics.kpis.averageOrderValueChange)],
+      ["kpi", "customerChangePercent", String(analytics.kpis.customerChange)],
+      ...analytics.topProducts.map((item) => [
+        "topProduct",
+        String(item.name || ""),
+        `sales=${Number(item.sales || 0)};revenue=${Number(item.revenue || 0)};growth=${Number(item.growth || 0)}`,
+      ]),
+      ...analytics.categoryData.map((item) => [
+        "categoryShare",
+        String(item.name || ""),
+        String(Number(item.value || 0)),
+      ]),
+      ...analytics.salesData.map((item) => [
+        "salesByDay",
+        String(item.name || ""),
+        `revenue=${Number(item.revenue || 0)};orders=${Number(item.orders || 0)}`,
+      ]),
+    ];
+
+    const csv = [headers.join(","), ...rows.map((row) => row.map((cell) => `"${String(cell).replace(/\"/g, '""')}"`).join(","))].join("\n");
+    if (normalized === "excel") {
+      downloadTextFile(csv, `analytics-${dateTag}.xls`, "application/vnd.ms-excel;charset=utf-8");
+    } else {
+      downloadTextFile(csv, `analytics-${dateTag}.csv`, "text/csv;charset=utf-8");
+    }
     setShowExportModal(false);
   };
 

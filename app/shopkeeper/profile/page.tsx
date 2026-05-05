@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useAuthContext } from "@/lib/auth-context"
+import { parseCoordinateLabel, resolveLocationName } from "@/lib/location"
 
 type ShopkeeperProfile = {
   name: string
@@ -29,8 +30,9 @@ function formatMoney(value: number) {
 }
 
 export default function ShopkeeperProfilePage() {
-  const { user, isLoading } = useAuthContext()
+  const { user, isLoading, login } = useAuthContext()
   const [isEditing, setIsEditing] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
   const [isDetectingLocation, setIsDetectingLocation] = useState(false)
   const [locationMessage, setLocationMessage] = useState("")
   const [profile, setProfile] = useState<ShopkeeperProfile>({
@@ -141,22 +143,86 @@ export default function ShopkeeperProfilePage() {
 
     let cancelled = false
 
+    const loadSavedProfileSettings = async () => {
+      try {
+        const response = await fetch("/api/shopkeeper/settings", { cache: "no-store" })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !payload?.data || cancelled) return
+
+        const savedShopLocation = String(payload.data.shopLocation || "")
+        const savedWebsite = String(payload.data.website || "")
+        const savedBio = String(payload.data.businessDescription || "")
+
+        setProfile((current) => ({
+          ...current,
+          location: savedShopLocation || current.location,
+          website: savedWebsite,
+          bio: savedBio,
+        }))
+        setEditForm((current) => ({
+          ...current,
+          location: savedShopLocation || current.location,
+          website: savedWebsite,
+          bio: savedBio,
+        }))
+      } catch {
+        // Keep page usable when saved profile settings are unavailable.
+      }
+    }
+
     const loadSavedLocation = async () => {
       try {
         const response = await fetch("/api/auth/location", { cache: "no-store" })
         const payload = await response.json()
         if (!response.ok || !payload?.ok || cancelled) return
 
-        const location = String(payload?.data?.location || "")
-        if (!location) return
+        const rawLocation = String(payload?.data?.location || "")
+        const payloadLatitude = Number(payload?.data?.latitude)
+        const payloadLongitude = Number(payload?.data?.longitude)
+        const payloadAccuracy =
+          typeof payload?.data?.accuracy === "number"
+            ? payload.data.accuracy
+            : null
+        const parsedCoords = parseCoordinateLabel(rawLocation)
+        const latitude = Number.isFinite(payloadLatitude)
+          ? payloadLatitude
+          : parsedCoords?.latitude
+        const longitude = Number.isFinite(payloadLongitude)
+          ? payloadLongitude
+          : parsedCoords?.longitude
 
-        setProfile((current) => ({ ...current, location }))
-        setEditForm((current) => ({ ...current, location }))
+        let resolvedLocation = rawLocation
+        if (
+          (!resolvedLocation || parsedCoords) &&
+          Number.isFinite(latitude) &&
+          Number.isFinite(longitude)
+        ) {
+          const name = await resolveLocationName(latitude, longitude)
+          if (name) {
+            resolvedLocation = name
+            void fetch("/api/auth/location", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                location: name,
+                latitude,
+                longitude,
+                accuracy: payloadAccuracy,
+              }),
+            })
+          }
+        }
+
+        if (!resolvedLocation) return
+
+        setProfile((current) => ({ ...current, location: resolvedLocation }))
+        setEditForm((current) => ({ ...current, location: resolvedLocation }))
       } catch {
         // Keep page usable when location history is unavailable.
       }
     }
 
+    loadSavedProfileSettings()
     loadSavedLocation()
 
     return () => {
@@ -172,22 +238,61 @@ export default function ShopkeeperProfilePage() {
   ]
 
   const handleSave = async () => {
-    setProfile(editForm)
-    if (editForm.location.trim()) {
-      await fetch("/api/auth/location", {
-        method: "POST",
+    setIsSaving(true)
+    try {
+      const response = await fetch("/api/shopkeeper/settings", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          location: editForm.location.trim(),
-          latitude: 0,
-          longitude: 0,
-          accuracy: null,
+          settings: {
+            shopName: editForm.name,
+            contactEmail: editForm.email,
+            contactPhone: editForm.phone,
+            shopLocation: editForm.location,
+            website: editForm.website,
+            businessDescription: editForm.bio,
+          },
         }),
-      }).catch(() => {
-        // Manual save should not block profile edits if location API fails.
       })
+
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to save profile")
+      }
+
+      if (editForm.location.trim()) {
+        await fetch("/api/auth/location", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            location: editForm.location.trim(),
+            latitude: 0,
+            longitude: 0,
+            accuracy: null,
+          }),
+        }).catch(() => {
+          // Location persistence should not block account updates.
+        })
+      }
+
+      try {
+        const meResponse = await fetch("/api/auth/me", { cache: "no-store" })
+        const mePayload = await meResponse.json()
+        if (meResponse.ok && mePayload?.ok && mePayload?.data) {
+          login(mePayload.data)
+        }
+      } catch {
+        // Keep profile save success path resilient if auth refresh fails.
+      }
+
+      setProfile(editForm)
+      setLocationMessage("Profile updated successfully.")
+      setIsEditing(false)
+    } catch (error) {
+      setLocationMessage(error instanceof Error ? error.message : "Failed to save profile")
+    } finally {
+      setIsSaving(false)
     }
-    setIsEditing(false)
   }
 
   const detectAndSaveLocation = () => {
@@ -204,7 +309,8 @@ export default function ShopkeeperProfilePage() {
         const latitude = Number(position.coords.latitude.toFixed(6))
         const longitude = Number(position.coords.longitude.toFixed(6))
         const accuracy = Number(position.coords.accuracy.toFixed(0))
-        const location = `${latitude}, ${longitude}`
+        const resolvedName = await resolveLocationName(latitude, longitude)
+        const location = resolvedName || `${latitude}, ${longitude}`
 
         setEditForm((current) => ({ ...current, location }))
         setProfile((current) => ({ ...current, location }))
@@ -392,8 +498,8 @@ export default function ShopkeeperProfilePage() {
                 <Button variant="outline" onClick={() => setIsEditing(false)} className="flex-1 bg-transparent">
                   Cancel
                 </Button>
-                <Button onClick={handleSave} className="flex-1 bg-amber-600 hover:bg-amber-700">
-                  Save Changes
+                <Button onClick={handleSave} disabled={isSaving} className="flex-1 bg-amber-600 hover:bg-amber-700">
+                  {isSaving ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             </div>

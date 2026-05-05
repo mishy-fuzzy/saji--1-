@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
@@ -24,6 +24,16 @@ interface Service {
   basePrice: number
   description: string
   image?: string
+  location?: string
+  rating?: number
+  reviews?: number
+  verified?: boolean
+}
+
+const categoryColors: Record<string, string> = {
+  skilled: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100",
+  "semi-skilled": "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-100",
+  "non-skilled": "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-100",
 }
 
 export function ServiceBrowser() {
@@ -96,6 +106,140 @@ export function ServiceBrowser() {
     }
 
     setFilteredServices(filtered)
+  }
+
+  const groupedServices = useMemo(() => {
+    const categoryMap = new Map<
+      string,
+      Map<
+        string,
+        { provider: Service["provider"]; location?: string; services: Service[] }
+      >
+    >()
+
+    for (const service of filteredServices) {
+      const categoryKey = (service.category || "general").toLowerCase()
+      if (!categoryMap.has(categoryKey)) {
+        categoryMap.set(categoryKey, new Map())
+      }
+
+      const providerName = service.provider?.name || "Unknown Provider"
+      const providerId = service.provider?.id || providerName
+      const providerEntry = categoryMap.get(categoryKey) || new Map()
+
+      if (!providerEntry.has(providerId)) {
+        providerEntry.set(providerId, {
+          provider: {
+            id: providerId,
+            name: providerName,
+            image: service.provider?.image,
+          },
+          location: service.location,
+          services: [],
+        })
+      }
+
+      const bucket = providerEntry.get(providerId)
+      if (bucket) {
+        if (!bucket.location && service.location) {
+          bucket.location = service.location
+        }
+        bucket.services.push(service)
+      }
+
+      categoryMap.set(categoryKey, providerEntry)
+    }
+
+    const categories = Array.from(categoryMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([category, providers]) => {
+        const providerGroups = Array.from(providers.values()).sort((a, b) =>
+          (a.provider?.name || "").localeCompare(b.provider?.name || ""),
+        )
+
+        return {
+          category,
+          providers: providerGroups,
+        }
+      })
+
+    return categories
+  }, [filteredServices])
+
+  const formatCategoryLabel = (value: string) => {
+    return value
+      .split(/[-_\s]+/)
+      .map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+      .join(" ")
+  }
+
+  const renderServiceCard = (service: Service) => {
+    const providerName = service.provider?.name || "Unknown Provider"
+    const providerId = service.provider?.id
+    return (
+      <Card
+        key={service.id}
+        className="overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col group cursor-pointer"
+      >
+        <div className="relative overflow-hidden h-48 bg-muted">
+          <img
+            src={service.image || "/placeholder.svg"}
+            alt={service.name}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+          <div className="absolute top-4 right-4 flex gap-2">
+            <Badge className={categoryColors[service.category] || "bg-muted text-muted-foreground"}>
+              {service.category}
+            </Badge>
+            {service.verified && (
+              <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
+                Verified
+              </Badge>
+            )}
+          </div>
+        </div>
+
+        <div className="p-6 flex-1 flex flex-col">
+          <h3 className="text-lg font-semibold text-foreground mb-1 line-clamp-2">{service.name}</h3>
+
+          <p className="text-sm text-muted-foreground mb-3">{providerName}</p>
+
+          <div className="flex items-center gap-1 mb-4 text-sm text-muted-foreground">
+            <MapPin className="w-4 h-4" />
+            {service.location || "Location not set"}
+          </div>
+
+          <div className="flex items-center gap-1 mb-4">
+            <Star className="w-4 h-4 fill-secondary text-secondary" />
+            <span className="font-semibold text-foreground text-sm">
+              {typeof service.rating === "number" ? service.rating.toFixed(1) : "N/A"}
+            </span>
+            <span className="text-xs text-muted-foreground">({service.reviews ?? 0})</span>
+          </div>
+
+          <div className="flex items-baseline gap-2 mt-auto mb-4">
+            <span className="text-2xl font-bold text-primary">KES {service.basePrice.toLocaleString()}</span>
+            <span className="text-xs text-muted-foreground">base price</span>
+          </div>
+
+          <Button
+            disabled={!providerId}
+            onClick={() => {
+              if (!providerId) return
+              const params = new URLSearchParams({
+                serviceId: service.id,
+                providerId,
+                price: service.basePrice.toString(),
+              })
+              router.push(`/payment?${params.toString()}`)
+            }}
+            className="w-full rounded-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary text-primary-foreground font-semibold"
+          >
+            View & Book
+          </Button>
+        </div>
+      </Card>
+    )
   }
 
   if (isLoading) {
@@ -267,73 +411,53 @@ export function ServiceBrowser() {
           </div>
 
           {/* Service Grid */}
-          {filteredServices.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {filteredServices.map((service) => (
-                <Card
-                  key={service.id}
-                  className="overflow-hidden hover:shadow-xl transition-all duration-300 flex flex-col group cursor-pointer"
-                >
-                  {/* Image Container */}
-                  <div className="relative overflow-hidden h-48 bg-muted">
-                    <img
-                      src={service.image || "/placeholder.svg"}
-                      alt={service.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute top-4 right-4 flex gap-2">
-                      <Badge className={categoryColors[service.category]}>{service.category}</Badge>
-                      {service.verified && (
-                        <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100">
-                          Verified
-                        </Badge>
-                      )}
+          {groupedServices.length > 0 ? (
+            <div className="space-y-10">
+              {groupedServices.map((group) => {
+                const label = formatCategoryLabel(group.category)
+                return (
+                  <div key={group.category} className="space-y-6">
+                    <div className="flex items-center gap-3">
+                      <Badge className={categoryColors[group.category] || "bg-muted text-muted-foreground"}>
+                        {label}
+                      </Badge>
+                      <h2 className="text-xl font-semibold text-foreground">{label}</h2>
+                    </div>
+
+                    <div className="space-y-8">
+                      {group.providers.map((providerGroup) => (
+                        <div key={providerGroup.provider.id} className="space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-11 h-11 rounded-full overflow-hidden bg-muted">
+                                <img
+                                  src={providerGroup.provider.image || "/placeholder.svg"}
+                                  alt={providerGroup.provider.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                              <div>
+                                <p className="font-semibold text-foreground">{providerGroup.provider.name}</p>
+                                <p className="text-sm text-muted-foreground flex items-center gap-1">
+                                  <MapPin className="w-4 h-4" />
+                                  {providerGroup.location || "Location not set"}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {providerGroup.services.length} products
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {providerGroup.services.map((service) => renderServiceCard(service))}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-
-                  {/* Content */}
-                  <div className="p-6 flex-1 flex flex-col">
-                    <h3 className="text-lg font-semibold text-foreground mb-1 line-clamp-2">{service.name}</h3>
-
-                    {/* Provider Info */}
-                    <p className="text-sm text-muted-foreground mb-3">{service.provider.name}</p>
-
-                    {/* Location */}
-                    <div className="flex items-center gap-1 mb-4 text-sm text-muted-foreground">
-                      <MapPin className="w-4 h-4" />
-                      {service.location}
-                    </div>
-
-                    {/* Rating */}
-                    <div className="flex items-center gap-1 mb-4">
-                      <Star className="w-4 h-4 fill-secondary text-secondary" />
-                      <span className="font-semibold text-foreground text-sm">{service.rating}</span>
-                      <span className="text-xs text-muted-foreground">({service.reviews})</span>
-                    </div>
-
-                    {/* Price */}
-                    <div className="flex items-baseline gap-2 mt-auto mb-4">
-                      <span className="text-2xl font-bold text-primary">KES {service.basePrice.toLocaleString()}</span>
-                      <span className="text-xs text-muted-foreground">base price</span>
-                    </div>
-
-                    {/* CTA Button */}
-                    <Button 
-                      onClick={() => {
-                        const params = new URLSearchParams({
-                          serviceId: service.id,
-                          providerId: service.provider.id,
-                          price: service.basePrice.toString()
-                        })
-                        router.push(`/payment?${params.toString()}`)
-                      }}
-                      className="w-full rounded-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary text-primary-foreground font-semibold"
-                    >
-                      View & Book
-                    </Button>
-                  </div>
-                </Card>
-              ))}
+                )
+              })}
             </div>
           ) : (
             <Card className="p-12 text-center">

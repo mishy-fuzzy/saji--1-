@@ -2,7 +2,7 @@
 
 import React from "react";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Search,
   Plus,
@@ -15,8 +15,6 @@ import {
   AlertTriangle,
   TrendingUp,
   ChevronDown,
-  Grid,
-  List,
   X,
   Upload,
 } from "lucide-react";
@@ -39,25 +37,48 @@ import { useAuthContext } from "@/lib/auth-context";
 import Link from "next/link";
 import Image from "next/image";
 
-const DEFAULT_PRODUCT_CATEGORIES = [
-  "Fresh Produce",
-  "Groceries",
-  "Hardware",
-  "Electronics",
-  "Plumbing Supplies",
-  "Electrical Supplies",
-  "Building Materials",
-  "Tools",
-  "Household",
-  "Fashion",
-  "Beauty & Cosmetics",
-  "Health & Wellness",
-  "Other",
-];
+type ShopkeeperProduct = {
+  id: string;
+  name: string;
+  image: string;
+  price: number;
+  stock: number;
+  sold: number;
+  views: number;
+  category: string;
+  status: "active" | "low_stock" | "out_of_stock";
+  description: string;
+};
+
+function normalizeProduct(row: any): ShopkeeperProduct {
+  const stock = Math.max(0, Number(row?.stock || 0));
+  const sold = Math.max(0, Number(row?.sold || 0));
+  const views = Math.max(0, Number(row?.views || 0));
+  const rawStatus = String(row?.status || "").toLowerCase();
+  const status: ShopkeeperProduct["status"] =
+    rawStatus === "out_of_stock"
+      ? "out_of_stock"
+      : rawStatus === "low_stock"
+        ? "low_stock"
+        : "active";
+
+  return {
+    id: String(row?.id || ""),
+    name: String(row?.name || "Product"),
+    image: String(row?.image || "/placeholder.svg"),
+    price: Math.max(0, Number(row?.price || 0)),
+    stock,
+    sold,
+    views,
+    category: String(row?.category || "General"),
+    status,
+    description: String(row?.description || ""),
+  };
+}
 
 export default function ShopkeeperProductsPage() {
   const { user } = useAuthContext();
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const viewMode: "grid" | "list" = "list";
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   const [showEditModal, setShowEditModal] = useState(false);
@@ -68,24 +89,25 @@ export default function ShopkeeperProductsPage() {
     name: "",
     price: "",
     stock: "",
-    category: "",
+    category: "General",
     description: "",
     image: "",
   });
+  const [registerCategories, setRegisterCategories] = useState<string[]>([]);
   const [editForm, setEditForm] = useState({
     name: "",
     price: "",
     stock: "",
-    category: "",
+    category: "General",
     description: "",
     image: "",
   });
-  const [productsList, setProductsList] = useState<any[]>([]);
+  const [productsList, setProductsList] = useState<ShopkeeperProduct[]>([]);
   const categories = [
     "all",
     ...Array.from(
       new Set([
-        ...DEFAULT_PRODUCT_CATEGORIES,
+        ...registerCategories,
         ...productsList
           .map((product) => String(product?.category || "").trim())
           .filter(Boolean),
@@ -93,28 +115,50 @@ export default function ShopkeeperProductsPage() {
     ),
   ];
 
+  const loadProducts = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const response = await fetch("/api/shopkeeper/products", {
+        cache: "no-store",
+      });
+      const payload = await response.json();
+      const rows = Array.isArray(payload?.data) ? payload.data : [];
+      setProductsList(rows.map((row: unknown) => normalizeProduct(row)));
+    } catch {
+      setProductsList([]);
+    }
+  }, [user?.id]);
+
+  const loadRegisterOptions = useCallback(async () => {
+    if (!user?.id) return;
+
+    try {
+      const response = await fetch("/api/shopkeeper/register-options", {
+        cache: "no-store",
+      });
+      const payload = await response.json();
+      setRegisterCategories(
+        response.ok && payload?.ok && Array.isArray(payload?.data?.categories)
+          ? payload.data.categories
+              .map((item: unknown) => String(item).trim())
+              .filter(Boolean)
+          : [],
+      );
+    } catch {
+      setRegisterCategories([]);
+    }
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user?.id) return;
 
-    const loadProducts = async () => {
-      try {
-        const response = await fetch(
-          `/api/shopkeeper/products?providerId=${encodeURIComponent(user.id)}`,
-          {
-            cache: "no-store",
-          },
-        );
-        const payload = await response.json();
-        setProductsList(Array.isArray(payload?.data) ? payload.data : []);
-      } catch {
-        setProductsList([]);
-      }
-    };
-
     loadProducts();
+    loadRegisterOptions();
+
     const intervalId = window.setInterval(loadProducts, 20000);
     return () => window.clearInterval(intervalId);
-  }, [user?.id]);
+  }, [user?.id, loadProducts, loadRegisterOptions]);
 
   const filteredProducts = productsList.filter((product) => {
     const matchesSearch = product.name
@@ -126,6 +170,11 @@ export default function ShopkeeperProductsPage() {
   });
 
   const formatCurrency = (amount: number) => `KES ${amount.toLocaleString()}`;
+  const getStatusFromStock = (stock: number): ShopkeeperProduct["status"] => {
+    if (stock <= 0) return "out_of_stock";
+    if (stock <= 5) return "low_stock";
+    return "active";
+  };
 
   const handleImageUpload = (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -147,13 +196,13 @@ export default function ShopkeeperProductsPage() {
     }
   };
 
-  const handleEditProduct = (product: any) => {
+  const handleEditProduct = (product: ShopkeeperProduct) => {
     setEditingProduct(product);
     setEditForm({
       name: product.name,
       price: product.price.toString(),
       stock: product.stock.toString(),
-      category: product.category,
+      category: product.category || "General",
       description: product.description || "",
       image: product.image,
     });
@@ -168,19 +217,47 @@ export default function ShopkeeperProductsPage() {
     }
 
     (async () => {
+      const previousProducts = productsList;
+      const nextCategory = editForm.category.trim() || "General";
+      const nextStock = Number.parseInt(editForm.stock, 10);
+      const nextPrice = Number.parseInt(editForm.price, 10);
+      const optimisticProduct: ShopkeeperProduct = {
+        id: String(editingProduct.id),
+        name: editForm.name.trim(),
+        image: editForm.image || editingProduct.image || "/placeholder.svg",
+        price: Number.isFinite(nextPrice) ? nextPrice : 0,
+        stock: Number.isFinite(nextStock) ? nextStock : 0,
+        sold: Number(editingProduct.sold || 0),
+        views: Number(editingProduct.views || 0),
+        category: nextCategory,
+        status: getStatusFromStock(Number.isFinite(nextStock) ? nextStock : 0),
+        description: editForm.description || "",
+      };
+
+      setProductsList((prev) =>
+        prev.map((item) =>
+          item.id === optimisticProduct.id ? optimisticProduct : item,
+        ),
+      );
+      setShowEditModal(false);
+      setImagePreview("");
+      setEditingProduct(null);
+
       try {
+        if (!editingProduct?.id) throw new Error("Select a product first");
+
         const response = await fetch(
           `/api/shopkeeper/products/${editingProduct.id}`,
           {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              name: editForm.name,
-              price: parseInt(editForm.price),
-              stock: parseInt(editForm.stock),
-              category: editForm.category,
-              description: editForm.description,
-              image: editForm.image,
+              name: optimisticProduct.name,
+              price: optimisticProduct.price,
+              stock: optimisticProduct.stock,
+              category: optimisticProduct.category,
+              description: optimisticProduct.description,
+              image: optimisticProduct.image,
             }),
           },
         );
@@ -188,26 +265,20 @@ export default function ShopkeeperProductsPage() {
         if (!response.ok || !payload?.ok)
           throw new Error(payload?.error || "Failed to update product");
 
-        setProductsList(
-          productsList.map((p) =>
-            String(p.id) === String(editingProduct.id)
-              ? {
-                  ...p,
-                  name: editForm.name,
-                  price: parseInt(editForm.price),
-                  stock: parseInt(editForm.stock),
-                  category: editForm.category,
-                  description: editForm.description,
-                  image: editForm.image,
-                }
-              : p,
+        if (!payload?.data?.id) {
+          throw new Error("Missing updated product data");
+        }
+
+        const updatedProduct = normalizeProduct(payload.data);
+        setProductsList((prev) =>
+          prev.map((item) =>
+            item.id === updatedProduct.id ? updatedProduct : item,
           ),
         );
-
-        setShowEditModal(false);
-        setImagePreview("");
         alert("Product updated successfully!");
+        void loadProducts();
       } catch (error) {
+        setProductsList(previousProducts);
         alert(
           error instanceof Error ? error.message : "Failed to update product",
         );
@@ -219,68 +290,78 @@ export default function ShopkeeperProductsPage() {
     if (
       !newProductForm.name ||
       !newProductForm.price ||
-      !newProductForm.stock ||
-      !newProductForm.image
+      !newProductForm.stock
     ) {
-      alert("Please fill in all required fields including product image");
+      alert("Please fill in all required fields");
       return;
     }
 
     (async () => {
+      const tempId = `temp-${Date.now()}`;
+      const nextCategory = newProductForm.category.trim() || "General";
+      const nextStock = Number.parseInt(newProductForm.stock, 10);
+      const nextPrice = Number.parseInt(newProductForm.price, 10);
+      const optimisticProduct: ShopkeeperProduct = {
+        id: tempId,
+        name: newProductForm.name.trim(),
+        image: newProductForm.image || "/placeholder.svg",
+        price: Number.isFinite(nextPrice) ? nextPrice : 0,
+        stock: Number.isFinite(nextStock) ? nextStock : 0,
+        sold: 0,
+        views: 0,
+        category: nextCategory,
+        status: getStatusFromStock(Number.isFinite(nextStock) ? nextStock : 0),
+        description: newProductForm.description || "",
+      };
+
+      setProductsList((prev) => [optimisticProduct, ...prev]);
+      setShowAddModal(false);
+      setImagePreview("");
+      setNewProductForm({
+        name: "",
+        price: "",
+        stock: "",
+        category: "General",
+        description: "",
+        image: "",
+      });
+
       try {
-        if (!user?.id) throw new Error("Please login as shopkeeper");
         const response = await fetch("/api/shopkeeper/products", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            providerId: user.id,
-            name: newProductForm.name,
-            price: parseInt(newProductForm.price),
-            stock: parseInt(newProductForm.stock),
-            category: newProductForm.category,
-            description: newProductForm.description,
-            image: newProductForm.image,
+            name: optimisticProduct.name,
+            price: optimisticProduct.price,
+            stock: optimisticProduct.stock,
+            category: optimisticProduct.category,
+            description: optimisticProduct.description,
+            image: optimisticProduct.image,
           }),
         });
         const payload = await response.json();
-        if (!response.ok || !payload?.ok || !payload?.data)
+        if (!response.ok || !payload?.ok)
           throw new Error(payload?.error || "Failed to add product");
 
-        const row = payload.data;
-        setProductsList([
-          {
-            id: row.id,
-            name: row.name,
-            price: Number(row.basePrice || 0),
-            stock: parseInt(newProductForm.stock),
-            category: row.category,
-            description: row.description || "",
-            image: row.image || "/placeholder.svg",
-            sold: 0,
-            views: 0,
-            status: "active",
-          },
-          ...productsList,
-        ]);
+        if (!payload?.data?.id) {
+          throw new Error("Missing new product data");
+        }
 
-        setShowAddModal(false);
-        setImagePreview("");
-        setNewProductForm({
-          name: "",
-          price: "",
-          stock: "",
-          category: "",
-          description: "",
-          image: "",
-        });
+        const createdProduct = normalizeProduct(payload.data);
+        setProductsList((prev) => [
+          createdProduct,
+          ...prev.filter((item) => item.id !== tempId),
+        ]);
         alert("Product added successfully!");
+        void loadProducts();
       } catch (error) {
+        setProductsList((prev) => prev.filter((item) => item.id !== tempId));
         alert(error instanceof Error ? error.message : "Failed to add product");
       }
     })();
   };
 
-  const handleDeleteProduct = (productId: number) => {
+  const handleDeleteProduct = (productId: string) => {
     if (confirm("Are you sure you want to delete this product?")) {
       (async () => {
         try {
@@ -291,9 +372,7 @@ export default function ShopkeeperProductsPage() {
           const payload = await response.json();
           if (!response.ok || !payload?.ok)
             throw new Error(payload?.error || "Failed to delete product");
-          setProductsList(
-            productsList.filter((p) => String(p.id) !== String(productId)),
-          );
+          await loadProducts();
           alert("Product deleted successfully!");
         } catch (error) {
           alert(
@@ -365,7 +444,7 @@ export default function ShopkeeperProductsPage() {
             </div>
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4">
               <p className="text-3xl font-bold">
-                {productsList.filter((p) => p.stock < 5).length}
+                {productsList.filter((p) => p.stock <= 5).length}
               </p>
               <p className="text-xs text-amber-100">Low Stock</p>
             </div>
@@ -398,26 +477,12 @@ export default function ShopkeeperProductsPage() {
                 onChange={(e) => setCategoryFilter(e.target.value)}
                 className="px-3 py-2 bg-background border border-input rounded-md text-sm"
               >
-                {(categories.length > 1 ? categories : DEFAULT_PRODUCT_CATEGORIES).map((cat) => (
+                {categories.map((cat) => (
                   <option key={cat} value={cat}>
                     {cat === "all" ? "All Categories" : cat}
                   </option>
                 ))}
               </select>
-              <div className="flex border border-input rounded-md overflow-hidden">
-                <button
-                  onClick={() => setViewMode("grid")}
-                  className={`p-2 transition-colors ${viewMode === "grid" ? "bg-amber-600 text-white" : "bg-background hover:bg-gray-100 dark:hover:bg-gray-800"}`}
-                >
-                  <Grid className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode("list")}
-                  className={`p-2 transition-colors ${viewMode === "list" ? "bg-amber-600 text-white" : "bg-background hover:bg-gray-100 dark:hover:bg-gray-800"}`}
-                >
-                  <List className="w-4 h-4" />
-                </button>
-              </div>
             </div>
           </div>
         </Card>
@@ -499,77 +564,101 @@ export default function ShopkeeperProductsPage() {
             ))}
           </div>
         ) : (
-          <div className="space-y-3">
-            {filteredProducts.map((product) => (
-              <Card
-                key={product.id}
-                className="p-4 hover:shadow-lg transition-all border-0"
-              >
-                <div className="flex gap-4">
-                  <div className="relative w-24 h-24 flex-shrink-0 overflow-hidden rounded-lg bg-gray-200">
-                    <Image
-                      src={product.image || "/placeholder.svg"}
-                      alt={product.name}
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between mb-2">
-                      <div>
-                        <h3 className="font-semibold text-gray-900 dark:text-white">
-                          {product.name}
-                        </h3>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">
-                          {product.description}
-                        </p>
+          <div className="overflow-hidden rounded-xl border border-input bg-card">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium" scope="col">
+                    Product
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium" scope="col">
+                    Price
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium" scope="col">
+                    Stock
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium" scope="col">
+                    Sold
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium" scope="col">
+                    Views
+                  </th>
+                  <th className="px-4 py-3 text-left font-medium" scope="col">
+                    Status
+                  </th>
+                  <th className="px-4 py-3 text-right font-medium" scope="col">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredProducts.map((product) => (
+                  <tr key={product.id} className="hover:bg-muted/40">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-12 h-12 flex-shrink-0 overflow-hidden rounded-lg bg-gray-200">
+                          <Image
+                            src={product.image || "/placeholder.svg"}
+                            alt={product.name}
+                            fill
+                            className="object-cover"
+                          />
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-900 dark:text-white">
+                            {product.name}
+                          </p>
+                          <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-1">
+                            {product.description}
+                          </p>
+                        </div>
                       </div>
-                      <div
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-amber-600">
+                      {formatCurrency(product.price)}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                      {product.stock}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                      {product.sold}
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 dark:text-gray-300">
+                      {product.views}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
                         className={`px-3 py-1 rounded-full text-xs font-semibold ${getStatusBadge(product.status)}`}
                       >
                         {getStatusText(product.status)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleEditProduct(product)}
+                          className="bg-transparent"
+                        >
+                          <Edit className="w-3 h-3 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDeleteProduct(product.id)}
+                          className="bg-transparent text-red-600"
+                        >
+                          <Trash2 className="w-3 h-3 mr-1" />
+                          Delete
+                        </Button>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-4 text-sm mb-3">
-                      <span className="font-bold text-amber-600">
-                        {formatCurrency(product.price)}
-                      </span>
-                      <span className="text-gray-600 dark:text-gray-400">
-                        Stock: {product.stock}
-                      </span>
-                      <span className="text-gray-600 dark:text-gray-400">
-                        Sold: {product.sold}
-                      </span>
-                      <span className="text-gray-600 dark:text-gray-400">
-                        Views: {product.views}
-                      </span>
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleEditProduct(product)}
-                        className="bg-transparent"
-                      >
-                        <Edit className="w-3 h-3 mr-1" />
-                        Edit
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => handleDeleteProduct(product.id)}
-                        className="bg-transparent text-red-600"
-                      >
-                        <Trash2 className="w-3 h-3 mr-1" />
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </Card>
-            ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
 
@@ -676,25 +765,7 @@ export default function ShopkeeperProductsPage() {
 
             <div>
               <label className="block text-sm font-medium mb-2">Category</label>
-              <select
-                value={newProductForm.category}
-                onChange={(e) =>
-                  setNewProductForm({
-                    ...newProductForm,
-                    category: e.target.value,
-                  })
-                }
-                className="w-full px-3 py-2 border border-input rounded-md bg-background"
-              >
-                <option value="">Select category</option>
-                {(categories.length > 1 ? categories : DEFAULT_PRODUCT_CATEGORIES)
-                  .filter((category) => category !== "all")
-                  .map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-              </select>
+              <Input value="General" readOnly />
             </div>
 
             <div>
@@ -724,7 +795,7 @@ export default function ShopkeeperProductsPage() {
                     name: "",
                     price: "",
                     stock: "",
-                    category: "",
+                    category: "General",
                     description: "",
                     image: "",
                   });
@@ -830,22 +901,7 @@ export default function ShopkeeperProductsPage() {
 
             <div>
               <label className="block text-sm font-medium mb-2">Category</label>
-              <select
-                value={editForm.category}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, category: e.target.value })
-                }
-                className="w-full px-3 py-2 border border-input rounded-md bg-background"
-              >
-                <option value="">Select category</option>
-                {(categories.length > 1 ? categories : DEFAULT_PRODUCT_CATEGORIES)
-                  .filter((category) => category !== "all")
-                  .map((category) => (
-                    <option key={category} value={category}>
-                      {category}
-                    </option>
-                  ))}
-              </select>
+              <Input value="General" readOnly />
             </div>
 
             <div>

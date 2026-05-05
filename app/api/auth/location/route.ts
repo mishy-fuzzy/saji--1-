@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/server/db";
 import { getSessionFromRequest } from "@/lib/server/session";
+import { parseCoordinateLabel, resolveLocationName } from "@/lib/location";
 
 type LocationPayload = {
   location?: string;
@@ -81,12 +82,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Invalid payload" }, { status: 400 });
   }
 
-  const location = String(body.location || "").trim();
-  const latitude = Number(body.latitude);
-  const longitude = Number(body.longitude);
+  const rawLocation = String(body.location || "").trim();
+  const rawLatitude = Number(body.latitude);
+  const rawLongitude = Number(body.longitude);
   const accuracy = body.accuracy === undefined ? null : Number(body.accuracy);
+  const parsedCoords = parseCoordinateLabel(rawLocation);
+  const latitude = Number.isFinite(rawLatitude)
+    ? rawLatitude
+    : parsedCoords?.latitude ?? NaN;
+  const longitude = Number.isFinite(rawLongitude)
+    ? rawLongitude
+    : parsedCoords?.longitude ?? NaN;
+  let location = rawLocation;
 
-  if (!location) {
+  if (!location && (!Number.isFinite(latitude) || !Number.isFinite(longitude))) {
     return NextResponse.json(
       { ok: false, error: "Location is required" },
       { status: 400 },
@@ -112,6 +121,15 @@ export async function POST(request: Request) {
       { ok: false, error: "Accuracy must be a positive number" },
       { status: 400 },
     );
+  }
+
+  if ((!location || parsedCoords) && Number.isFinite(latitude) && Number.isFinite(longitude)) {
+    const resolvedName = await resolveLocationName(latitude, longitude);
+    if (resolvedName) {
+      location = resolvedName;
+    } else if (!location) {
+      location = `${latitude}, ${longitude}`;
+    }
   }
 
   const responsePayload = {

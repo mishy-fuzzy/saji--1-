@@ -3,6 +3,7 @@
 import type React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuthContext } from "@/lib/auth-context";
+import { parseCoordinateLabel, resolveLocationName } from "@/lib/location";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -103,11 +104,47 @@ export function CustomerProfilePage() {
         const payload = await response.json();
         if (!response.ok || !payload?.ok || cancelled) return;
 
-        const location = String(payload?.data?.location || "");
-        if (!location) return;
+        const rawLocation = String(payload?.data?.location || "");
+        const payloadLatitude = Number(payload?.data?.latitude);
+        const payloadLongitude = Number(payload?.data?.longitude);
+        const payloadAccuracy =
+          typeof payload?.data?.accuracy === "number"
+            ? payload.data.accuracy
+            : null;
+        const parsedCoords = parseCoordinateLabel(rawLocation);
+        const latitude = Number.isFinite(payloadLatitude)
+          ? payloadLatitude
+          : parsedCoords?.latitude;
+        const longitude = Number.isFinite(payloadLongitude)
+          ? payloadLongitude
+          : parsedCoords?.longitude;
 
-        setSavedData((current) => ({ ...current, location }));
-        setFormData((current) => ({ ...current, location }));
+        let resolvedLocation = rawLocation;
+        if (
+          (!resolvedLocation || parsedCoords) &&
+          Number.isFinite(latitude) &&
+          Number.isFinite(longitude)
+        ) {
+          const name = await resolveLocationName(latitude, longitude);
+          if (name) {
+            resolvedLocation = name;
+            void fetch("/api/auth/location", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                location: name,
+                latitude,
+                longitude,
+                accuracy: payloadAccuracy,
+              }),
+            });
+          }
+        }
+
+        if (!resolvedLocation) return;
+
+        setSavedData((current) => ({ ...current, location: resolvedLocation }));
+        setFormData((current) => ({ ...current, location: resolvedLocation }));
       } catch {
         // Keep profile usable when location fetch fails.
       }
@@ -230,7 +267,8 @@ export function CustomerProfilePage() {
         const latitude = Number(position.coords.latitude.toFixed(6));
         const longitude = Number(position.coords.longitude.toFixed(6));
         const accuracy = Number(position.coords.accuracy.toFixed(0));
-        const location = `${latitude}, ${longitude}`;
+        const resolvedName = await resolveLocationName(latitude, longitude);
+        const location = resolvedName || `${latitude}, ${longitude}`;
 
         setFormData((current) => ({ ...current, location }));
         setSavedData((current) => ({ ...current, location }));

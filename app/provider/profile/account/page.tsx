@@ -2,15 +2,16 @@
 
 import type React from "react"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { ArrowLeft, LocateFixed, Save, User, Mail, MapPin } from "lucide-react"
 import Link from "next/link"
 import { useLocalization } from "@/lib/hooks/useLocalization"
 import { useAuthContext } from "@/lib/auth-context"
+import { parseCoordinateLabel, resolveLocationName } from "@/lib/location"
 
 export default function MyAccountPage() {
   const { currency } = useLocalization()
-  const { user } = useAuthContext()
+  const { user, login } = useAuthContext()
   const defaultNames = useMemo(() => {
     const fullName = user?.name?.trim() || ""
     const parts = fullName.split(" ").filter(Boolean)
@@ -32,6 +33,41 @@ export default function MyAccountPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [isDetectingLocation, setIsDetectingLocation] = useState(false)
   const [locationMessage, setLocationMessage] = useState("")
+  const [hasSavedLocation, setHasSavedLocation] = useState<boolean | null>(null)
+  const [autoLocationAttempted, setAutoLocationAttempted] = useState(false)
+  const [locationUpdatedAt, setLocationUpdatedAt] = useState<string | null>(null)
+  const [showEmailVerificationPrompt, setShowEmailVerificationPrompt] = useState(false)
+  const [emailVerified, setEmailVerified] = useState<boolean | null>(null)
+  const [verificationMessage, setVerificationMessage] = useState("")
+  const [verificationBusy, setVerificationBusy] = useState<"request" | "confirm" | null>(null)
+  const [verificationRequested, setVerificationRequested] = useState(false)
+  const [emailCode, setEmailCode] = useState("")
+
+  useEffect(() => {
+    setFormData((prev) => ({
+      ...prev,
+      firstName: defaultNames.firstName,
+      lastName: defaultNames.lastName,
+      email: user?.email || "",
+      phone: user?.phone || "",
+    }))
+  }, [defaultNames.firstName, defaultNames.lastName, user?.email, user?.phone])
+
+  useEffect(() => {
+    setEmailVerified(
+      typeof user?.emailVerified === "boolean" ? user.emailVerified : null,
+    )
+  }, [user?.emailVerified])
+
+  useEffect(() => {
+    if (!user?.email) {
+      setShowEmailVerificationPrompt(false)
+      return
+    }
+
+    if (emailVerified === null) return
+    setShowEmailVerificationPrompt(!emailVerified)
+  }, [emailVerified, user?.email])
 
   useEffect(() => {
     if (!user?.id) return
@@ -44,12 +80,58 @@ export default function MyAccountPage() {
         const payload = await response.json()
         if (!response.ok || !payload?.ok || cancelled) return
 
-        const savedLocation = String(payload?.data?.location || "")
-        if (!savedLocation) return
+        const rawLocation = String(payload?.data?.location || "")
+        const updatedAt = payload?.data?.updatedAt
+        const payloadLatitude = Number(payload?.data?.latitude)
+        const payloadLongitude = Number(payload?.data?.longitude)
+        const payloadAccuracy =
+          typeof payload?.data?.accuracy === "number"
+            ? payload.data.accuracy
+            : null
+        const parsedCoords = parseCoordinateLabel(rawLocation)
+        const latitude = Number.isFinite(payloadLatitude)
+          ? payloadLatitude
+          : parsedCoords?.latitude
+        const longitude = Number.isFinite(payloadLongitude)
+          ? payloadLongitude
+          : parsedCoords?.longitude
 
-        setFormData((prev) => ({ ...prev, city: savedLocation }))
+        let resolvedLocation = rawLocation
+        if (
+          (!resolvedLocation || parsedCoords) &&
+          Number.isFinite(latitude) &&
+          Number.isFinite(longitude)
+        ) {
+          const name = await resolveLocationName(latitude, longitude)
+          if (name) {
+            resolvedLocation = name
+            void fetch("/api/auth/location", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                location: name,
+                latitude,
+                longitude,
+                accuracy: payloadAccuracy,
+              }),
+            })
+          }
+        }
+
+        if (!resolvedLocation) {
+          if (!cancelled) {
+            setHasSavedLocation(false)
+            setLocationUpdatedAt(updatedAt ? new Date(updatedAt).toISOString() : null)
+          }
+          return
+        }
+
+        setFormData((prev) => ({ ...prev, city: resolvedLocation }))
+        setHasSavedLocation(true)
+        setLocationUpdatedAt(updatedAt ? new Date(updatedAt).toISOString() : null)
       } catch {
         // Keep account page usable when location history is unavailable.
+        if (!cancelled) setHasSavedLocation(false)
       }
     }
 
@@ -67,26 +149,77 @@ export default function MyAccountPage() {
 
   const handleSave = async () => {
     setIsSaving(true)
-    if (formData.city.trim()) {
-      await fetch("/api/auth/location", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          location: formData.city.trim(),
-          latitude: 0,
-          longitude: 0,
-          accuracy: null,
-        }),
-      }).catch(() => {
-        // Keep manual profile save non-blocking.
-      })
+
+    const fullName = [formData.firstName, formData.lastName]
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .join(" ")
+
+    const updates: { name?: string; phone?: string; email?: string } = {}
+    if (fullName && fullName !== (user?.name || "")) {
+      updates.name = fullName
     }
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setIsSaving(false)
-    alert("Profile updated successfully!")
+
+    if (formData.phone.trim() !== (user?.phone || "")) {
+      updates.phone = formData.phone.trim()
+    }
+
+    if (formData.email.trim() && formData.email.trim() !== (user?.email || "")) {
+      updates.email = formData.email.trim()
+    }
+
+    const emailChanged = Boolean(updates.email)
+
+    try {
+      if (Object.keys(updates).length > 0) {
+        const response = await fetch("/api/auth/me", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updates),
+        })
+        const payload = await response.json().catch(() => ({}))
+
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || "Failed to update profile")
+        }
+
+        if (user && payload?.data) {
+          login({ ...user, ...payload.data })
+        }
+
+        if (emailChanged) {
+          setEmailVerified(false)
+          setVerificationRequested(false)
+          setVerificationMessage("Email updated. Please verify to keep your account trusted.")
+          setEmailCode("")
+          setShowEmailVerificationPrompt(true)
+        }
+      }
+
+      if (formData.city.trim()) {
+        await fetch("/api/auth/location", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            location: formData.city.trim(),
+            latitude: 0,
+            longitude: 0,
+            accuracy: null,
+          }),
+        }).catch(() => {
+          // Keep manual profile save non-blocking.
+        })
+      }
+
+      alert("Profile updated successfully!")
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to update profile")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const detectAndSaveLocation = () => {
+  const detectAndSaveLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setLocationMessage("Geolocation is not supported in this browser.")
       return
@@ -100,7 +233,8 @@ export default function MyAccountPage() {
         const latitude = Number(position.coords.latitude.toFixed(6))
         const longitude = Number(position.coords.longitude.toFixed(6))
         const accuracy = Number(position.coords.accuracy.toFixed(0))
-        const location = `${latitude}, ${longitude}`
+        const resolvedName = await resolveLocationName(latitude, longitude)
+        const location = resolvedName || `${latitude}, ${longitude}`
 
         setFormData((prev) => ({ ...prev, city: location }))
 
@@ -115,6 +249,11 @@ export default function MyAccountPage() {
             throw new Error(payload?.error || "Failed to save location")
           }
           setLocationMessage("Location captured and saved.")
+          if (payload?.data?.updatedAt) {
+            setLocationUpdatedAt(new Date(payload.data.updatedAt).toISOString())
+          } else {
+            setLocationUpdatedAt(new Date().toISOString())
+          }
         } catch (error) {
           setLocationMessage(error instanceof Error ? error.message : "Failed to save location.")
         } finally {
@@ -127,7 +266,143 @@ export default function MyAccountPage() {
       },
       { enableHighAccuracy: true, timeout: 15000 },
     )
+  }, [])
+
+  const requestEmailVerification = async () => {
+    if (!formData.email.trim()) return
+
+    setVerificationBusy("request")
+    setVerificationMessage("")
+    try {
+      const response = await fetch("/api/users/verify/request", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "email" }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to request verification code")
+      }
+
+      setVerificationRequested(true)
+      const devCode = String(payload?.data?.devCode || "").trim()
+      setVerificationMessage(
+        devCode
+          ? `Code sent. Dev OTP: ${devCode}`
+          : "Verification code sent to your email.",
+      )
+    } catch (error) {
+      setVerificationMessage(
+        error instanceof Error ? error.message : "Failed to request verification code",
+      )
+    } finally {
+      setVerificationBusy(null)
+    }
   }
+
+  const confirmEmailVerification = async () => {
+    const code = emailCode.trim()
+    if (!/^\d{6}$/.test(code)) {
+      setVerificationMessage("Enter a valid 6-digit code.")
+      return
+    }
+
+    setVerificationBusy("confirm")
+    setVerificationMessage("")
+    try {
+      const response = await fetch("/api/users/verify/confirm", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "email", code }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to verify code")
+      }
+
+      const refresh = await fetch("/api/auth/me", { cache: "no-store" })
+      const refreshed = await refresh.json().catch(() => ({}))
+      if (refresh.ok && refreshed?.ok && refreshed?.data && user) {
+        login({ ...user, ...refreshed.data })
+        if (typeof refreshed.data.emailVerified === "boolean") {
+          setEmailVerified(refreshed.data.emailVerified)
+        }
+      }
+
+      setEmailCode("")
+      setVerificationRequested(false)
+      setVerificationMessage("Email verified successfully.")
+      setEmailVerified(true)
+      setShowEmailVerificationPrompt(false)
+    } catch (error) {
+      setVerificationMessage(
+        error instanceof Error ? error.message : "Failed to verify code",
+      )
+    } finally {
+      setVerificationBusy(null)
+    }
+  }
+
+  const refreshAuth = useCallback(async () => {
+    try {
+      const response = await fetch("/api/auth/me", { cache: "no-store" })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.ok || !payload?.data || !user) return
+
+      const next = payload.data as typeof user
+      const nextEmailVerified =
+        typeof (next as { emailVerified?: boolean }).emailVerified === "boolean"
+          ? (next as { emailVerified: boolean }).emailVerified
+          : null
+
+      setEmailVerified(nextEmailVerified)
+
+      const shouldUpdate =
+        next.name !== user.name ||
+        next.email !== user.email ||
+        next.phone !== user.phone ||
+        next.role !== user.role ||
+        next.avatar !== user.avatar ||
+        (next as { emailVerified?: boolean }).emailVerified !== user.emailVerified
+
+      if (shouldUpdate) {
+        login({ ...user, ...next })
+      }
+    } catch {
+      // Keep UI responsive if auth refresh fails.
+    }
+  }, [login, user])
+
+  useEffect(() => {
+    if (!user?.id) return
+    refreshAuth()
+  }, [refreshAuth, user?.id])
+
+  useEffect(() => {
+    if (!user?.id) return
+    if (autoLocationAttempted || isDetectingLocation) return
+    if (hasSavedLocation === null) return
+
+    const cityValue = formData.city.trim()
+    const shouldAutoDetect =
+      !cityValue ||
+      cityValue.toLowerCase() === "nairobi" ||
+      hasSavedLocation === false
+
+    if (!shouldAutoDetect) return
+
+    setAutoLocationAttempted(true)
+    detectAndSaveLocation()
+  }, [
+    autoLocationAttempted,
+    detectAndSaveLocation,
+    formData.city,
+    hasSavedLocation,
+    isDetectingLocation,
+    user?.id,
+  ])
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20 lg:pb-0">
@@ -190,6 +465,63 @@ export default function MyAccountPage() {
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
+                {emailVerified === true && (
+                  <p className="mt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    Verified
+                  </p>
+                )}
+                {emailVerified === false && !showEmailVerificationPrompt && (
+                  <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-300">
+                    Not verified
+                  </p>
+                )}
+                {showEmailVerificationPrompt && (
+                  <div className="mt-3 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm text-amber-900 dark:text-amber-200">
+                    <p className="font-semibold">Verify your email</p>
+                    <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                      Keep your account trusted by confirming the new email address.
+                    </p>
+                    {verificationMessage && (
+                      <p className="text-xs text-amber-700 dark:text-amber-300 mt-2">
+                        {verificationMessage}
+                      </p>
+                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        onClick={requestEmailVerification}
+                        disabled={verificationBusy !== null}
+                        className="px-3 py-2 rounded-lg text-xs font-semibold bg-amber-600 text-white hover:bg-amber-700 disabled:opacity-70"
+                      >
+                        {verificationBusy === "request" ? "Sending..." : verificationRequested ? "Resend Code" : "Send Code"}
+                      </button>
+                      <input
+                        value={emailCode}
+                        onChange={(event) =>
+                          setEmailCode(
+                            event.target.value.replace(/\D/g, "").slice(0, 6),
+                          )
+                        }
+                        placeholder="6-digit code"
+                        className="h-9 w-32 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-white dark:bg-gray-800 px-2 text-xs text-gray-900 dark:text-white"
+                      />
+                      <button
+                        type="button"
+                        onClick={confirmEmailVerification}
+                        disabled={verificationBusy !== null}
+                        className="px-3 py-2 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-70"
+                      >
+                        {verificationBusy === "confirm" ? "Verifying..." : "Verify"}
+                      </button>
+                      <Link
+                        href="/provider/profile/verification"
+                        className="px-3 py-2 rounded-lg text-xs font-semibold border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
+                      >
+                        Open Verification Page
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone</label>
@@ -232,6 +564,11 @@ export default function MyAccountPage() {
                   </button>
                   {locationMessage && (
                     <p className="text-xs text-gray-600 dark:text-gray-400">{locationMessage}</p>
+                  )}
+                  {locationUpdatedAt && !locationMessage && (
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Last updated {new Date(locationUpdatedAt).toLocaleString()}
+                    </p>
                   )}
                 </div>
               </div>

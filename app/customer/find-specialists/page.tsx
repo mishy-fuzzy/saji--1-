@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/lib/auth-context";
+import { parseCoordinateLabel, resolveLocationName } from "@/lib/location";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -151,7 +152,8 @@ export default function FindSpecialistsPage() {
         const latitude = Number(position.coords.latitude.toFixed(6));
         const longitude = Number(position.coords.longitude.toFixed(6));
         const accuracy = Number(position.coords.accuracy.toFixed(0));
-        const locationLabel = `${latitude}, ${longitude}`;
+        const resolvedName = await resolveLocationName(latitude, longitude);
+        const locationLabel = resolvedName || `${latitude}, ${longitude}`;
 
         setSelectedLocation(locationLabel);
 
@@ -194,9 +196,45 @@ export default function FindSpecialistsPage() {
       }
 
       const payload = await response.json();
-      const location = String(payload?.data?.location || "").trim();
-      if (location) {
-        setSelectedLocation(location);
+      const rawLocation = String(payload?.data?.location || "").trim();
+      const payloadLatitude = Number(payload?.data?.latitude);
+      const payloadLongitude = Number(payload?.data?.longitude);
+      const payloadAccuracy =
+        typeof payload?.data?.accuracy === "number"
+          ? payload.data.accuracy
+          : null;
+      const parsedCoords = parseCoordinateLabel(rawLocation);
+      const latitude = Number.isFinite(payloadLatitude)
+        ? payloadLatitude
+        : parsedCoords?.latitude;
+      const longitude = Number.isFinite(payloadLongitude)
+        ? payloadLongitude
+        : parsedCoords?.longitude;
+
+      let resolvedLocation = rawLocation;
+      if (
+        (!resolvedLocation || parsedCoords) &&
+        Number.isFinite(latitude) &&
+        Number.isFinite(longitude)
+      ) {
+        const name = await resolveLocationName(latitude, longitude);
+        if (name) {
+          resolvedLocation = name;
+          void fetch("/api/auth/location", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              location: name,
+              latitude,
+              longitude,
+              accuracy: payloadAccuracy,
+            }),
+          });
+        }
+      }
+
+      if (resolvedLocation) {
+        setSelectedLocation(resolvedLocation);
       }
     } catch {
       // Keep current UI state if saved location lookup fails.

@@ -4,6 +4,7 @@ export function normalizeRole(role: string | null | undefined): string {
     .toLowerCase()
     .replace(/_/g, "-")
 
+  if (normalized === "shop-keeper") return "shopkeeper"
   if (normalized === "subadmin") return "sub-admin"
   return normalized
 }

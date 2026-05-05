@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import Image from "next/image"
 
 type Review = {
-  id: number
+  id: string
   customer: string
   avatar: string
   product: string
@@ -42,7 +42,7 @@ export default function ShopkeeperReviewsPage() {
         const rows = Array.isArray(payload?.data?.reviews) ? payload.data.reviews : []
         setReviews(
           rows.map((row: any) => ({
-            id: Number(row?.id || 0),
+            id: String(row?.id || ""),
             customer: String(row?.customer || "Customer"),
             avatar: String(row?.avatar || "/placeholder.svg"),
             product: String(row?.product || "Service"),
@@ -92,16 +92,78 @@ export default function ShopkeeperReviewsPage() {
   }))
   const unrepliedCount = reviews.filter(r => !r.replied).length
 
-  const handleReply = () => {
+  const handleReply = async () => {
     if (!replyText.trim() || !selectedReview) return
-    setReviews(reviews.map(r =>
-      r.id === selectedReview.id
-        ? { ...r, replied: true, reply: replyText, replyDate: "Just now" }
-        : r
-    ))
-    setShowReplyModal(false)
-    setReplyText("")
-    setSelectedReview(null)
+
+    try {
+      const response = await fetch("/api/shopkeeper/reviews", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "reply",
+          id: selectedReview.id,
+          replyText: replyText.trim(),
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to post reply")
+      }
+
+      setReviews((current) =>
+        current.map((r) =>
+          r.id === selectedReview.id
+            ? { ...r, replied: true, reply: replyText.trim(), replyDate: "Just now" }
+            : r,
+        ),
+      )
+      setShowReplyModal(false)
+      setReplyText("")
+      setSelectedReview(null)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to post reply")
+    }
+  }
+
+  const handleHelpful = async (reviewId: string) => {
+    try {
+      const response = await fetch("/api/shopkeeper/reviews", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "helpful", id: reviewId }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to update review")
+      }
+
+      setReviews((current) =>
+        current.map((review) =>
+          review.id === reviewId
+            ? { ...review, helpful: Number(review.helpful || 0) + 1 }
+            : review,
+        ),
+      )
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to update review")
+    }
+  }
+
+  const handleReport = async (reviewId: string) => {
+    try {
+      const response = await fetch("/api/shopkeeper/reviews", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "report", id: reviewId }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to report review")
+      }
+      alert("Review reported.")
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to report review")
+    }
   }
 
   const renderStars = (rating: number, size: string = "w-4 h-4") => {
@@ -273,11 +335,17 @@ export default function ShopkeeperReviewsPage() {
                 {/* Review Footer */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <button className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors">
+                    <button
+                      className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+                      onClick={() => handleHelpful(review.id)}
+                    >
                       <ThumbsUp className="w-3.5 h-3.5" />
                       Helpful ({review.helpful})
                     </button>
-                    <button className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors">
+                    <button
+                      className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors"
+                      onClick={() => handleReport(review.id)}
+                    >
                       <Flag className="w-3.5 h-3.5" />
                       Report
                     </button>

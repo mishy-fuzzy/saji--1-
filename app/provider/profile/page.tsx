@@ -185,7 +185,7 @@ export default function ProviderProfilePage() {
           </p>
           {/* Edit Profile Button */}
           <Link
-            href="/provider/profile/edit"
+            href="/provider/profile/account"
             className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-2 font-medium flex items-center justify-center gap-2 transition-colors"
           >
             <Edit className="w-4 h-4" />

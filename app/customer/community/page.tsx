@@ -43,11 +43,15 @@ export default function CommunityPage() {
   const [showComments, setShowComments] = useState(false);
   const [showCreatePost, setShowCreatePost] = useState(false);
   const [commentText, setCommentText] = useState("");
+  const [comments, setComments] = useState<any[]>([]);
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
+  const [isSendingComment, setIsSendingComment] = useState(false);
+  const [commentsError, setCommentsError] = useState("");
   const [newPostText, setNewPostText] = useState("");
-  const [likedPosts, setLikedPosts] = useState<number[]>([]);
-  const [savedPosts, setSavedPosts] = useState<number[]>([]);
-  const [followingUsers, setFollowingUsers] = useState<number[]>([1, 4]);
-  const [joinedGroups, setJoinedGroups] = useState<number[]>([]);
+  const [likedPosts, setLikedPosts] = useState<string[]>([]);
+  const [savedPosts, setSavedPosts] = useState<string[]>([]);
+  const [followingUsers, setFollowingUsers] = useState<string[]>([]);
+  const [joinedGroups, setJoinedGroups] = useState<string[]>([]);
   const [posts, setPosts] = useState<any[]>([]);
   const [trendingTopics, setTrendingTopics] = useState<any[]>([]);
   const [suggestedGroups, setSuggestedGroups] = useState<any[]>([]);
@@ -105,10 +109,10 @@ export default function CommunityPage() {
   const trendingPosts = posts.filter((p) => p.likes > 200);
 
   const followingPosts = posts.filter((p) =>
-    followingUsers.includes(p.author.id),
+    followingUsers.includes(String(p.author.id || "")),
   );
 
-  const toggleLike = (postId: number) => {
+  const toggleLike = (postId: string) => {
     setLikedPosts((prev) =>
       prev.includes(postId)
         ? prev.filter((id) => id !== postId)
@@ -116,7 +120,7 @@ export default function CommunityPage() {
     );
   };
 
-  const toggleSave = (postId: number) => {
+  const toggleSave = (postId: string) => {
     setSavedPosts((prev) =>
       prev.includes(postId)
         ? prev.filter((id) => id !== postId)
@@ -124,7 +128,8 @@ export default function CommunityPage() {
     );
   };
 
-  const toggleFollow = (userId: number) => {
+  const toggleFollow = (userId: string) => {
+    if (!userId) return;
     setFollowingUsers((prev) =>
       prev.includes(userId)
         ? prev.filter((id) => id !== userId)
@@ -132,7 +137,8 @@ export default function CommunityPage() {
     );
   };
 
-  const toggleJoinGroup = (groupId: number) => {
+  const toggleJoinGroup = (groupId: string) => {
+    if (!groupId) return;
     setJoinedGroups((prev) =>
       prev.includes(groupId)
         ? prev.filter((id) => id !== groupId)
@@ -145,6 +151,105 @@ export default function CommunityPage() {
       post.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
       post.author.name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+
+  const openComments = (post: any) => {
+    setSelectedPost(post);
+    setShowComments(true);
+  };
+
+  useEffect(() => {
+    if (!showComments || !selectedPost?.id) return;
+
+    let active = true;
+    setIsLoadingComments(true);
+    setCommentsError("");
+
+    const loadComments = async () => {
+      try {
+        const response = await fetch(
+          `/api/community/posts/${selectedPost.id}/comments`,
+          { cache: "no-store" },
+        );
+
+        if (response.status === 401) {
+          await handleUnauthorized();
+          return;
+        }
+
+        const payload = await response.json();
+        if (!active) return;
+
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          setCommentsError(payload?.error || "Failed to load comments");
+          setComments([]);
+          return;
+        }
+
+        setComments(payload.data);
+      } catch {
+        if (!active) return;
+        setCommentsError("Failed to load comments");
+        setComments([]);
+      } finally {
+        if (active) setIsLoadingComments(false);
+      }
+    };
+
+    loadComments();
+
+    return () => {
+      active = false;
+    };
+  }, [handleUnauthorized, selectedPost?.id, showComments]);
+
+  const handleSendComment = async () => {
+    if (!commentText.trim() || !selectedPost?.id || isSendingComment) return;
+
+    setIsSendingComment(true);
+    try {
+      const response = await fetch(
+        `/api/community/posts/${selectedPost.id}/comments`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ body: commentText.trim() }),
+        },
+      );
+
+      if (response.status === 401) {
+        await handleUnauthorized();
+        return;
+      }
+
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        setCommentsError(payload?.error || "Failed to add comment");
+        return;
+      }
+
+      const nextComment = payload.data;
+      setComments((prev) => [nextComment, ...prev]);
+      setCommentText("");
+
+      setPosts((prev) =>
+        prev.map((post) =>
+          post.id === selectedPost.id
+            ? { ...post, comments: Number(post.comments || 0) + 1 }
+            : post,
+        ),
+      );
+
+      setSelectedPost((prev: any) =>
+        prev
+          ? { ...prev, comments: Number(prev.comments || 0) + 1 }
+          : prev,
+      );
+    } catch {
+      setCommentsError("Failed to add comment");
+    } finally {
+      setIsSendingComment(false);
+    }
+  };
 
   const getDisplayPosts = () => {
     switch (activeTab) {
@@ -188,11 +293,11 @@ export default function CommunityPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {!followingUsers.includes(post.author.id) && (
+          {!followingUsers.includes(String(post.author.id || "")) && (
             <Button
               size="sm"
               variant="outline"
-              onClick={() => toggleFollow(post.author.id)}
+              onClick={() => toggleFollow(String(post.author.id || ""))}
               className="text-xs bg-transparent"
             >
               Follow
@@ -267,20 +372,21 @@ export default function CommunityPage() {
       <div className="p-4 flex items-center justify-between border-t border-border">
         <div className="flex items-center gap-6">
           <button
-            onClick={() => toggleLike(post.id)}
+            onClick={() => toggleLike(String(post.id))}
             className="flex items-center gap-2 text-muted-foreground hover:text-red-500 transition-colors"
           >
             <Heart
-              className={`w-5 h-5 ${likedPosts.includes(post.id) ? "fill-red-500 text-red-500" : ""}`}
+              className={`w-5 h-5 ${likedPosts.includes(String(post.id)) ? "fill-red-500 text-red-500" : ""}`}
             />
             <span className="text-sm">
-              {likedPosts.includes(post.id) ? post.likes + 1 : post.likes}
+              {likedPosts.includes(String(post.id))
+                ? post.likes + 1
+                : post.likes}
             </span>
           </button>
           <button
             onClick={() => {
-              setSelectedPost(post);
-              setShowComments(true);
+              openComments(post);
             }}
             className="flex items-center gap-2 text-muted-foreground hover:text-primary transition-colors"
           >
@@ -293,11 +399,11 @@ export default function CommunityPage() {
           </button>
         </div>
         <button
-          onClick={() => toggleSave(post.id)}
+          onClick={() => toggleSave(String(post.id))}
           className="text-muted-foreground hover:text-primary transition-colors"
         >
           <Bookmark
-            className={`w-5 h-5 ${savedPosts.includes(post.id) ? "fill-primary text-primary" : ""}`}
+            className={`w-5 h-5 ${savedPosts.includes(String(post.id)) ? "fill-primary text-primary" : ""}`}
           />
         </button>
       </div>
@@ -429,8 +535,10 @@ export default function CommunityPage() {
                           {group.description}
                         </p>
                       </div>
-                      <Button onClick={() => toggleJoinGroup(group.id)}>
-                        {joinedGroups.includes(group.id) ? "Joined" : "Join"}
+                      <Button onClick={() => toggleJoinGroup(String(group.id))}>
+                        {joinedGroups.includes(String(group.id))
+                          ? "Joined"
+                          : "Join"}
                       </Button>
                     </div>
                   </Card>
@@ -484,9 +592,11 @@ export default function CommunityPage() {
                         {topic.posts} posts
                       </p>
                     </div>
-                    <span className="text-xs text-green-500 font-medium">
-                      {topic.growth}
-                    </span>
+                    {topic.growth ? (
+                      <span className="text-xs text-green-500 font-medium">
+                        {topic.growth}
+                      </span>
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -522,9 +632,9 @@ export default function CommunityPage() {
                       size="sm"
                       variant="outline"
                       className="text-xs bg-transparent"
-                      onClick={() => toggleFollow(user.id)}
+                      onClick={() => toggleFollow(String(user.id))}
                     >
-                      {followingUsers.includes(user.id)
+                      {followingUsers.includes(String(user.id))
                         ? "Following"
                         : "Follow"}
                     </Button>
@@ -563,9 +673,11 @@ export default function CommunityPage() {
                       size="sm"
                       variant="outline"
                       className="text-xs bg-transparent"
-                      onClick={() => toggleJoinGroup(group.id)}
+                      onClick={() => toggleJoinGroup(String(group.id))}
                     >
-                      {joinedGroups.includes(group.id) ? "Joined" : "Join"}
+                      {joinedGroups.includes(String(group.id))
+                        ? "Joined"
+                        : "Join"}
                     </Button>
                   </div>
                 ))}
@@ -665,11 +777,25 @@ export default function CommunityPage() {
       </Dialog>
 
       {/* Comments Modal */}
-      <Dialog open={showComments} onOpenChange={setShowComments}>
-        <DialogContent className="max-w-lg p-0 overflow-hidden max-h-[80vh]">
+      <Dialog
+        open={showComments}
+        onOpenChange={(open) => {
+          setShowComments(open);
+          if (!open) {
+            setSelectedPost(null);
+            setComments([]);
+            setCommentText("");
+            setCommentsError("");
+          }
+        }}
+      >
+        <DialogContent
+          className="max-w-lg p-0 overflow-hidden max-h-[80vh]"
+          showCloseButton={false}
+        >
           <div className="p-4 border-b border-border flex items-center justify-between">
             <h3 className="font-semibold text-foreground">
-              Comments ({selectedPost?.comments})
+              Comments ({Number(selectedPost?.comments || comments.length || 0)})
             </h3>
             <button onClick={() => setShowComments(false)}>
               <X className="w-5 h-5 text-muted-foreground" />
@@ -677,40 +803,44 @@ export default function CommunityPage() {
           </div>
 
           <div className="p-4 space-y-4 max-h-96 overflow-y-auto">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="flex gap-3">
-                <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0 overflow-hidden">
-                  <Image
-                    src={`https://images.unsplash.com/photo-150${i}003211169-0a1dd7228f2d?w=40&h=40&fit=crop`}
-                    alt=""
-                    width={40}
-                    height={40}
-                    className="object-cover"
-                  />
-                </div>
-                <div className="flex-1">
-                  <div className="bg-muted rounded-xl p-3">
-                    <p className="font-medium text-sm text-foreground">
-                      User {i}
-                    </p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Great work! Love the attention to detail.
-                    </p>
+            {isLoadingComments ? (
+              <p className="text-sm text-muted-foreground">Loading comments...</p>
+            ) : commentsError ? (
+              <p className="text-sm text-destructive">{commentsError}</p>
+            ) : comments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No comments yet. Be the first to comment.
+              </p>
+            ) : (
+              comments.map((comment) => (
+                <div key={comment.id} className="flex gap-3">
+                  <div className="w-10 h-10 rounded-full bg-muted flex-shrink-0 overflow-hidden">
+                    <Image
+                      src={comment.author?.avatar || "/placeholder.svg"}
+                      alt={comment.author?.name || ""}
+                      width={40}
+                      height={40}
+                      className="object-cover"
+                    />
                   </div>
-                  <div className="flex items-center gap-4 mt-2 px-2">
-                    <button className="text-xs text-muted-foreground hover:text-foreground">
-                      Like
-                    </button>
-                    <button className="text-xs text-muted-foreground hover:text-foreground">
-                      Reply
-                    </button>
-                    <span className="text-xs text-muted-foreground">
-                      2h ago
-                    </span>
+                  <div className="flex-1">
+                    <div className="bg-muted rounded-xl p-3">
+                      <p className="font-medium text-sm text-foreground">
+                        {comment.author?.name || "User"}
+                      </p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {comment.body}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 px-2">
+                      <span className="text-xs text-muted-foreground">
+                        {new Date(comment.createdAt).toLocaleString()}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           <div className="p-4 border-t border-border">
@@ -725,7 +855,11 @@ export default function CommunityPage() {
                   onChange={(e) => setCommentText(e.target.value)}
                   className="flex-1"
                 />
-                <Button size="icon" disabled={!commentText.trim()}>
+                <Button
+                  size="icon"
+                  disabled={!commentText.trim() || isSendingComment}
+                  onClick={handleSendComment}
+                >
                   <Send className="w-4 h-4" />
                 </Button>
               </div>

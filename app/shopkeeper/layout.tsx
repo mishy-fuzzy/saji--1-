@@ -69,6 +69,14 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
   const isRegisterRoute = pathname === "/shopkeeper/register"
   const registrationComplete = Boolean(user?.shopkeeperRegistrationComplete)
   const isNavLocked = !registrationComplete
+  const displayShopName = String(user?.shopName || "").trim() || "My Shop"
+  const shopInitial = displayShopName.charAt(0).toUpperCase() || "S"
+  const membershipLabel =
+    user?.shopkeeperRegistrationStatus === "approved"
+      ? "Approved account"
+      : user?.shopkeeperRegistrationStatus === "pending"
+        ? "Pending review"
+        : "Registered account"
 
   useEffect(() => {
     if (isLoading) return
@@ -228,7 +236,7 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
               <Store className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold leading-tight">SAJI Shop</h2>
+              <h2 className="text-lg font-bold leading-tight">{displayShopName}</h2>
               <p className="text-xs text-amber-200">Shopkeeper Portal</p>
             </div>
           </div>
@@ -398,11 +406,11 @@ export default function ShopkeeperLayout({ children }: { children: React.ReactNo
                 className={`flex items-center gap-2 p-1.5 rounded-lg transition-colors ${isNavLocked ? "opacity-60 cursor-not-allowed" : "hover:bg-gray-100 dark:hover:bg-gray-700"}`}
               >
                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white text-sm font-bold">
-                  S
+                  {shopInitial}
                 </div>
                 <div className="hidden md:block">
-                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight">SAJI Shop</p>
-                  <p className="text-[10px] text-gray-500 dark:text-gray-400">Premium Plan</p>
+                  <p className="text-sm font-medium text-gray-800 dark:text-gray-200 leading-tight">{displayShopName}</p>
+                  <p className="text-[10px] text-gray-500 dark:text-gray-400">{membershipLabel}</p>
                 </div>
                 <ChevronDown className="w-3.5 h-3.5 text-gray-400 hidden md:block" />
               </Link>

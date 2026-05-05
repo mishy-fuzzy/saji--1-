@@ -21,6 +21,7 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:status": "prisma migrate status",
+    "shopkeeper:backfill": "npx ts-node --compiler-options \"{\\\"module\\\":\\\"CommonJS\\\"}\" scripts/backfill-shopkeeper-data.ts",
     "prisma:generate:safe": "npm run prisma:recover-lock && prisma generate",
     "prisma:recover-lock": "powershell -ExecutionPolicy Bypass -File scripts/prisma-recover.ps1",
     "prisma:seed": "npx ts-node --compiler-options \"{\\\"module\\\":\\\"CommonJS\\\"}\" prisma/seed.ts",

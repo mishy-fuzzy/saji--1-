@@ -41,6 +41,25 @@ import { useAuthContext } from "@/lib/auth-context";
 import Image from "next/image";
 import Link from "next/link";
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function downloadTextFile(content: string, fileName: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = fileName;
+  link.click();
+  window.URL.revokeObjectURL(url);
+}
+
 export default function ShopkeeperOrdersPage() {
   const { user } = useAuthContext();
   const [activeTab, setActiveTab] = useState("all");
@@ -151,11 +170,165 @@ export default function ShopkeeperOrdersPage() {
   };
 
   const handlePrint = (order: any) => {
-    alert(`Printing invoice for ${order.id}`);
+    const invoiceNumber = String(order?.id || "");
+    const customer = String(order?.customer || "Customer");
+    const product = String(order?.product || "Product");
+    const phone = String(order?.phone || "-");
+    const location = String(order?.location || "Not specified");
+    const date = String(order?.date || new Date().toLocaleString());
+    const status = String(order?.status || "pending");
+    const quantity = Number(order?.quantity || 0);
+    const amount = Number(order?.amount || 0);
+    const quantityLabel = quantity > 0 ? String(quantity) : "N/A";
+    const unitPrice = quantity > 0 ? Math.round(amount / quantity) : amount;
+
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Invoice ${escapeHtml(invoiceNumber)}</title>
+    <style>
+      body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+      .header { display: flex; justify-content: space-between; margin-bottom: 20px; }
+      .title { font-size: 24px; font-weight: 700; }
+      .meta { color: #4b5563; font-size: 13px; }
+      .section { margin-top: 16px; }
+      table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { border: 1px solid #e5e7eb; padding: 10px; text-align: left; font-size: 13px; }
+      th { background: #f3f4f6; }
+      .total { margin-top: 12px; text-align: right; font-weight: 700; font-size: 16px; }
+    </style>
+  </head>
+  <body>
+    <div class="header">
+      <div>
+        <div class="title">SAJI Invoice</div>
+        <div class="meta">Order ${escapeHtml(invoiceNumber)}</div>
+      </div>
+      <div class="meta">Generated ${escapeHtml(new Date().toLocaleString())}</div>
+    </div>
+
+    <div class="section meta">
+      <div><strong>Customer:</strong> ${escapeHtml(customer)}</div>
+      <div><strong>Phone:</strong> ${escapeHtml(phone)}</div>
+      <div><strong>Location:</strong> ${escapeHtml(location)}</div>
+      <div><strong>Order Date:</strong> ${escapeHtml(date)}</div>
+      <div><strong>Status:</strong> ${escapeHtml(status)}</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Quantity</th>
+          <th>Unit Price</th>
+          <th>Subtotal</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>${escapeHtml(product)}</td>
+          <td>${escapeHtml(quantityLabel)}</td>
+          <td>KES ${unitPrice.toLocaleString()}</td>
+          <td>KES ${amount.toLocaleString()}</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="total">Total: KES ${amount.toLocaleString()}</div>
+  </body>
+</html>`;
+
+    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+    if (!printWindow) {
+      alert("Unable to open print window. Please allow pop-ups.");
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
   };
 
   const handleDownload = (order: any) => {
-    alert(`Downloading invoice for ${order.id}`);
+    const row = {
+      orderId: String(order?.id || ""),
+      customer: String(order?.customer || ""),
+      phone: String(order?.phone || ""),
+      product: String(order?.product || ""),
+      quantity: String(order?.quantity || ""),
+      status: String(order?.status || "pending"),
+      location: String(order?.location || ""),
+      date: String(order?.date || ""),
+      amountKES: Number(order?.amount || 0),
+      paymentMethod: String(order?.paymentMethod || ""),
+    };
+
+    const csv = [
+      "orderId,customer,phone,product,quantity,status,location,date,amountKES,paymentMethod",
+      [
+        row.orderId,
+        row.customer,
+        row.phone,
+        row.product,
+        row.quantity,
+        row.status,
+        row.location,
+        row.date,
+        String(row.amountKES),
+        row.paymentMethod,
+      ]
+        .map((item) => `"${String(item).replace(/\"/g, '""')}"`)
+        .join(","),
+    ].join("\n");
+
+    downloadTextFile(csv, `invoice-${row.orderId || "order"}.csv`, "text/csv;charset=utf-8");
+  };
+
+  const handleExportOrders = () => {
+    if (filteredOrders.length === 0) {
+      alert("No orders available to export.");
+      return;
+    }
+
+    const headers = [
+      "orderId",
+      "customer",
+      "phone",
+      "product",
+      "quantity",
+      "status",
+      "location",
+      "date",
+      "amountKES",
+      "paymentMethod",
+    ];
+
+    const lines = filteredOrders.map((order) =>
+      [
+        order.id,
+        order.customer,
+        order.phone,
+        order.product,
+        order.quantity ?? "",
+        order.status,
+        order.location ?? "",
+        order.date,
+        order.amount,
+        order.paymentMethod ?? "",
+      ]
+        .map((item) => `"${String(item ?? "").replace(/\"/g, '""')}"`)
+        .join(","),
+    );
+
+    const csv = [headers.join(","), ...lines].join("\n");
+    downloadTextFile(
+      csv,
+      `shopkeeper-orders-${new Date().toISOString().slice(0, 10)}.csv`,
+      "text/csv;charset=utf-8",
+    );
   };
 
   const orderStats = [
@@ -228,7 +401,7 @@ export default function ShopkeeperOrdersPage() {
                 className="pl-10"
               />
             </div>
-            <Button className="bg-amber-600 hover:bg-amber-700 gap-2">
+            <Button className="bg-amber-600 hover:bg-amber-700 gap-2" onClick={handleExportOrders}>
               <Download className="w-4 h-4" />
               Export
             </Button>
@@ -498,7 +671,7 @@ export default function ShopkeeperOrdersPage() {
                     Payment Method
                   </p>
                   <p className="font-semibold text-gray-900 dark:text-white">
-                    {selectedOrder.paymentMethod}
+                    {selectedOrder.paymentMethod || "Not specified"}
                   </p>
                 </div>
               </div>
@@ -510,7 +683,7 @@ export default function ShopkeeperOrdersPage() {
                 </h3>
                 <div className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg">
                   <p className="text-gray-900 dark:text-white">
-                    {selectedOrder.location}
+                    {selectedOrder.location || "Not specified"}
                   </p>
                 </div>
               </div>
@@ -533,7 +706,7 @@ export default function ShopkeeperOrdersPage() {
                       {selectedOrder.product}
                     </p>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      Quantity: {selectedOrder.quantity}
+                      Quantity: {selectedOrder.quantity || "Not specified"}
                     </p>
                     <p className="text-lg font-bold text-amber-600 mt-2">
                       KES {selectedOrder.amount.toLocaleString()}

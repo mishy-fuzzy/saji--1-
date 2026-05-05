@@ -73,6 +73,8 @@ export default function ProviderHomePage() {
   const [beforeImage, setBeforeImage] = useState<string | null>(null);
   const [afterImage, setAfterImage] = useState<string | null>(null);
   const [storyTitle, setStoryTitle] = useState("");
+  const [storyError, setStoryError] = useState("");
+  const [isStorySubmitting, setIsStorySubmitting] = useState(false);
   const [endorsementShop, setEndorsementShop] = useState("");
   const [endorsementMessage, setEndorsementMessage] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
@@ -237,6 +239,52 @@ export default function ProviderHomePage() {
       setPostLocation("");
       setPostTags([]);
     }, 1500);
+  };
+
+  const handleCreateStory = async () => {
+    setStoryError("");
+
+    if (!storyTitle.trim()) {
+      setStoryError("Please add a story title");
+      return;
+    }
+
+    if (!beforeImage || !afterImage) {
+      setStoryError("Please add both before and after images");
+      return;
+    }
+
+    setIsStorySubmitting(true);
+
+    try {
+      const response = await fetch("/api/stories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: storyType,
+          title: storyTitle.trim(),
+          beforeImage,
+          afterImage,
+          thumbnail: storyType === "timelapse" ? afterImage : undefined,
+        }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to post story");
+      }
+
+      setShowCreateStory(false);
+      setBeforeImage(null);
+      setAfterImage(null);
+      setStoryTitle("");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to post story";
+      setStoryError(message);
+    } finally {
+      setIsStorySubmitting(false);
+    }
   };
 
   const toggleImageSelection = (img: string) => {
@@ -1453,17 +1501,13 @@ export default function ProviderHomePage() {
               Create Project Story
             </h2>
             <Button
-              disabled={!beforeImage || !afterImage || !storyTitle}
+              disabled={
+                !beforeImage || !afterImage || !storyTitle || isStorySubmitting
+              }
               className="bg-purple-600 hover:bg-purple-700"
-              onClick={() => {
-                alert("Story posted to Neighborhood Pulse!");
-                setShowCreateStory(false);
-                setBeforeImage(null);
-                setAfterImage(null);
-                setStoryTitle("");
-              }}
+              onClick={handleCreateStory}
             >
-              Post Story
+              {isStorySubmitting ? "Posting..." : "Post Story"}
             </Button>
           </div>
 
@@ -1501,6 +1545,10 @@ export default function ProviderHomePage() {
               placeholder="e.g., Kitchen Renovation - 2 Week Project"
               className="border-border"
             />
+
+            {storyError && (
+              <p className="text-sm text-red-500">{storyError}</p>
+            )}
 
             {/* Before/After Image Upload */}
             <div className="grid grid-cols-2 gap-3">

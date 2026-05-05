@@ -14,6 +14,7 @@ function normalizeRole(role: string | null | undefined): string {
     .trim()
     .toLowerCase()
     .replace(/_/g, "-")
+    .replace(/^shop-keeper$/, "shopkeeper")
 }
 
 export async function getSessionActor(request: Request): Promise<{

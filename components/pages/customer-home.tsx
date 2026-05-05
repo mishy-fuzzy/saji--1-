@@ -16,30 +16,40 @@ import {
   X,
   Send,
   Gift,
-  MapPin,
   Clock,
   Eye,
   Star,
-  ThumbsUp,
-  ShoppingBag,
   Sparkles,
   Radio,
-  CheckCircle,
   ArrowRight,
-  Filter,
   Camera,
+  Store,
+  Users,
+  MapPin,
   Wrench,
   ShieldCheck,
-  Zap,
   AlertTriangle,
   Truck,
   Package,
-  Phone,
   ChevronRight,
   BriefcaseBusiness,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+
+const CATEGORY_ICON_MAP: Record<string, LucideIcon> = {
+  BriefcaseBusiness,
+  Wrench,
+  Sparkles,
+  Store,
+  Users,
+  MapPin,
+  Camera,
+  Truck,
+  ShieldCheck,
+  Package,
+};
 
 // --- Sub-components ---
 
@@ -121,6 +131,9 @@ type EmergencyAlert = {
 
 function EmergencyBanner({ emergency }: { emergency: EmergencyAlert | null }) {
   if (!emergency) return null;
+  const details = [emergency.category, emergency.message]
+    .filter(Boolean)
+    .join(" - ");
 
   return (
     <div className="mb-5 relative overflow-hidden rounded-2xl border-2 border-red-400/60 dark:border-red-500/40 bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-950/30 dark:to-orange-950/20">
@@ -148,9 +161,11 @@ function EmergencyBanner({ emergency }: { emergency: EmergencyAlert | null }) {
           </svg>
         </div>
       </div>
-      <p className="text-xs text-muted-foreground px-4 pb-2.5 text-right">
-        {emergency.category} • {emergency.message}
-      </p>
+      {details ? (
+        <p className="text-xs text-muted-foreground px-4 pb-2.5 text-right">
+          {details}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -186,7 +201,7 @@ function LiveNowAvatars({
   onJoinLive,
   providers,
 }: {
-  onJoinLive: (provider: any) => void;
+  onJoinLive?: (provider: any) => void;
   providers: any[];
 }) {
   return (
@@ -195,86 +210,104 @@ function LiveNowAvatars({
         LIVE NOW
       </h2>
       <div className="flex gap-4 overflow-x-auto pb-2 scrollbar-hide">
-        {providers.map((provider) => (
-          <button
-            key={provider.id}
-            onClick={() => onJoinLive(provider)}
-            className="flex flex-col items-center flex-shrink-0 group"
-          >
-            <div className="relative">
-              <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full p-[3px] bg-gradient-to-tr from-red-500 via-pink-500 to-orange-400">
-                <div className="w-full h-full rounded-full overflow-hidden border-2 border-card">
-                  <Image
-                    src={provider.avatar}
-                    alt={provider.name}
-                    width={80}
-                    height={80}
-                    className="w-full h-full object-cover"
-                  />
+        {providers.map((provider) => {
+          const canJoin =
+            typeof provider?.joinFee === "number" && typeof onJoinLive === "function";
+          const Container = canJoin ? "button" : "div";
+          return (
+            <Container
+              key={provider.id}
+              onClick={canJoin ? () => onJoinLive?.(provider) : undefined}
+              className="flex flex-col items-center flex-shrink-0 group"
+            >
+              <div className="relative">
+                <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full p-[3px] bg-gradient-to-tr from-red-500 via-pink-500 to-orange-400">
+                  <div className="w-full h-full rounded-full overflow-hidden border-2 border-card">
+                    <Image
+                      src={provider.avatar || "/placeholder.svg"}
+                      alt={provider.name || ""}
+                      width={80}
+                      height={80}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
                 </div>
+                <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-red-500 text-white text-[8px] font-bold rounded-full leading-none">
+                  LIVE
+                </span>
               </div>
-              <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 px-1.5 py-0.5 bg-red-500 text-white text-[8px] font-bold rounded-full leading-none">
-                LIVE
+              <span className="text-[11px] text-muted-foreground mt-2 truncate w-16 lg:w-20 text-center group-hover:text-foreground transition-colors">
+                {provider.name || ""}
               </span>
-            </div>
-            <span className="text-[11px] text-muted-foreground mt-2 truncate w-16 lg:w-20 text-center group-hover:text-foreground transition-colors">
-              {provider.name}
-            </span>
-          </button>
-        ))}
+            </Container>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 function FeaturedShopCard({ shop }: { shop: any }) {
+  const hasRating = typeof shop?.rating === "number";
+  const hasReviews = typeof shop?.reviews === "number";
+  const deliveryPercent =
+    typeof shop?.deliveryPercent === "number"
+      ? `${shop.deliveryPercent}%`
+      : null;
   return (
     <Card className="overflow-hidden border border-border hover:shadow-md transition-shadow">
       <div className="relative h-28 lg:h-36">
-        <Image src={shop.image} alt={shop.name} fill className="object-cover" />
+        <Image
+          src={shop.image || "/placeholder.svg"}
+          alt={shop.name || ""}
+          fill
+          className="object-cover"
+        />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />
-        {shop.isOpen && (
+        {shop.isOpen ? (
           <Badge className="absolute top-2 left-2 bg-emerald-500 hover:bg-emerald-500 text-white text-[10px] px-1.5 py-0.5 border-0">
             OPEN NOW
           </Badge>
-        )}
+        ) : null}
         {shop.hasSale && (
           <Badge className="absolute top-2 right-2 bg-amber-500 hover:bg-amber-500 text-white text-[10px] px-1.5 py-0.5 border-0 flex items-center gap-0.5">
             <Package className="w-3 h-3" /> SALE
           </Badge>
         )}
-        {shop.isLive && (
-          <span className="absolute top-2 left-2 px-2 py-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center gap-1">
-            <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />{" "}
-            LIVE NOW
-          </span>
-        )}
       </div>
       <div className="p-3">
         <h4 className="font-semibold text-foreground text-sm truncate">
-          {shop.name}
+          {shop.name || ""}
         </h4>
-        <div className="flex items-center gap-1.5 mt-1">
-          <div className="flex items-center">
-            {[...Array(5)].map((_, i) => (
-              <Star
-                key={i}
-                className={`w-3 h-3 ${i < Math.floor(shop.rating) ? "fill-amber-400 text-amber-400" : i < shop.rating ? "fill-amber-400/50 text-amber-400" : "text-muted"}`}
-              />
-            ))}
+        {hasRating && hasReviews ? (
+          <div className="flex items-center gap-1.5 mt-1">
+            <div className="flex items-center">
+              {[...Array(5)].map((_, i) => (
+                <Star
+                  key={i}
+                  className={`w-3 h-3 ${i < Math.floor(shop.rating) ? "fill-amber-400 text-amber-400" : i < shop.rating ? "fill-amber-400/50 text-amber-400" : "text-muted"}`}
+                />
+              ))}
+            </div>
+            <span className="text-xs text-muted-foreground">{shop.reviews}</span>
           </div>
-          <span className="text-xs text-muted-foreground">{shop.reviews}</span>
-        </div>
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-xs text-muted-foreground flex items-center gap-1">
-            <Truck className="w-3 h-3" /> {shop.deliveryPercent} Delivers
-          </span>
-          {shop.matchedByAI && (
-            <span className="text-[10px] text-primary flex items-center gap-0.5">
-              <Sparkles className="w-3 h-3" /> Saji AI
-            </span>
-          )}
-        </div>
+        ) : null}
+        {deliveryPercent || shop.matchedByAI ? (
+          <div className="flex items-center justify-between mt-2">
+            {deliveryPercent ? (
+              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                <Truck className="w-3 h-3" /> {deliveryPercent} Delivers
+              </span>
+            ) : (
+              <span />
+            )}
+            {shop.matchedByAI ? (
+              <span className="text-[10px] text-primary flex items-center gap-0.5">
+                <Sparkles className="w-3 h-3" /> Saji AI
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </Card>
   );
@@ -282,6 +315,12 @@ function FeaturedShopCard({ shop }: { shop: any }) {
 
 function FeaturedShopsSection({ shops }: { shops: any[] }) {
   if (!shops.length) return null;
+  const hasHighlightRating =
+    typeof shops[0]?.rating === "number" && typeof shops[0]?.reviews === "number";
+  const highlightDeliveryPercent =
+    typeof shops[0]?.deliveryPercent === "number"
+      ? `${shops[0].deliveryPercent}%`
+      : null;
   return (
     <div className="mb-6">
       <div className="flex items-center justify-between mb-3">
@@ -302,35 +341,39 @@ function FeaturedShopsSection({ shops }: { shops: any[] }) {
         <Card className="overflow-hidden border border-border mb-4 lg:mb-0 lg:row-span-2">
           <div className="relative h-36 lg:h-52">
             <Image
-              src={shops[0].image}
-              alt={shops[0].name}
+              src={shops[0].image || "/placeholder.svg"}
+              alt={shops[0].name || ""}
               fill
               className="object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-            {shops[0].isOpen && (
+            {shops[0].isOpen ? (
               <Badge className="absolute top-3 left-3 bg-emerald-500 hover:bg-emerald-500 text-white text-xs px-2 py-0.5 border-0">
                 OPEN NOW
               </Badge>
-            )}
+            ) : null}
           </div>
           <div className="p-4">
             <div className="flex items-start justify-between">
               <div>
-                <h3 className="font-bold text-foreground">{shops[0].name}</h3>
-                <div className="flex items-center gap-2 mt-1">
-                  <div className="flex items-center">
-                    {[...Array(5)].map((_, i) => (
-                      <Star
-                        key={i}
-                        className={`w-3.5 h-3.5 ${i < Math.floor(shops[0].rating) ? "fill-amber-400 text-amber-400" : "text-muted"}`}
-                      />
-                    ))}
+                <h3 className="font-bold text-foreground">
+                  {shops[0].name || ""}
+                </h3>
+                {hasHighlightRating ? (
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="flex items-center">
+                      {[...Array(5)].map((_, i) => (
+                        <Star
+                          key={i}
+                          className={`w-3.5 h-3.5 ${i < Math.floor(shops[0].rating) ? "fill-amber-400 text-amber-400" : "text-muted"}`}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      {shops[0].reviews}
+                    </span>
                   </div>
-                  <span className="text-sm text-muted-foreground">
-                    {shops[0].reviews}
-                  </span>
-                </div>
+                ) : null}
               </div>
               {shops[0].hasSale && (
                 <Badge className="bg-amber-500 hover:bg-amber-500 text-white text-xs border-0 flex items-center gap-1">
@@ -338,17 +381,22 @@ function FeaturedShopsSection({ shops }: { shops: any[] }) {
                 </Badge>
               )}
             </div>
-            <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
-              <span className="flex items-center gap-1">
-                <Truck className="w-3.5 h-3.5" /> {shops[0].deliveryPercent}{" "}
-                Delivers
-              </span>
-              {shops[0].matchedByAI && (
-                <span className="text-xs text-primary flex items-center gap-1">
-                  <Sparkles className="w-3.5 h-3.5" /> Matched by Saji AI
-                </span>
-              )}
-            </div>
+            {highlightDeliveryPercent || shops[0].matchedByAI ? (
+              <div className="flex items-center gap-3 mt-2 text-sm text-muted-foreground">
+                {highlightDeliveryPercent ? (
+                  <span className="flex items-center gap-1">
+                    <Truck className="w-3.5 h-3.5" /> {highlightDeliveryPercent} Delivers
+                  </span>
+                ) : (
+                  <span />
+                )}
+                {shops[0].matchedByAI ? (
+                  <span className="text-xs text-primary flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" /> Matched by Saji AI
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
             <Button className="w-full mt-3 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-xl h-9 text-sm">
               View Shop
             </Button>
@@ -373,70 +421,40 @@ function LiveProviderBubble() {
   return null;
 }
 
-function CategoryTabs({
-  activeTab,
-  setActiveTab,
-}: {
-  activeTab: string;
-  setActiveTab: (v: string) => void;
-}) {
-  const tabs = ["Professional", "Skilled", "Shops"];
-  return (
-    <div className="mb-5">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                activeTab === tab
-                  ? "bg-teal-600 text-white shadow-sm"
-                  : "bg-muted text-muted-foreground hover:bg-muted/80"
-              }`}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-        <Link
-          href="/customer/services"
-          className="text-sm text-primary font-medium flex items-center gap-0.5"
-        >
-          See All <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
-    </div>
-  );
-}
-
 function ServiceCategoriesGrid({
-  activeTab,
   categories,
 }: {
-  activeTab: string;
   categories: any[];
 }) {
-  const filtered =
-    activeTab === "Shops"
-      ? categories
-      : categories.filter((c) => c.type === activeTab || activeTab === "all");
+  const fallbackColor =
+    "bg-slate-100 dark:bg-slate-900/40 text-slate-700 dark:text-slate-300";
 
   return (
     <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-3 mb-6">
-      {filtered.map((category) => (
-        <Link
-          key={category.id}
-          href={`/customer/services?category=${category.name.toLowerCase()}`}
-          className={`${category.color} rounded-2xl p-3 flex flex-col items-center text-center hover:scale-105 transition-transform`}
-        >
-          <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl bg-white/60 dark:bg-white/10 flex items-center justify-center mb-2">
-            <category.icon className="w-5 h-5 lg:w-6 lg:h-6" />
-          </div>
-          <p className="text-xs font-semibold leading-tight">{category.name}</p>
-          <p className="text-[10px] opacity-70 mt-0.5">({category.type})</p>
-        </Link>
-      ))}
+      {categories.map((category) => {
+        const Icon = category?.iconName
+          ? CATEGORY_ICON_MAP[category.iconName] || BriefcaseBusiness
+          : BriefcaseBusiness;
+        return (
+          <Link
+            key={category.id}
+            href={`/customer/services?category=${category.name.toLowerCase()}`}
+            className={`${category.color || fallbackColor} rounded-2xl p-3 flex flex-col items-center text-center hover:scale-105 transition-transform`}
+          >
+            <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl bg-white/60 dark:bg-white/10 flex items-center justify-center mb-2">
+              <Icon className="w-5 h-5 lg:w-6 lg:h-6" />
+            </div>
+            <p className="text-xs font-semibold leading-tight">
+              {category.name}
+            </p>
+            {category.type ? (
+              <p className="text-[10px] opacity-70 mt-0.5">
+                {category.type}
+              </p>
+            ) : null}
+          </Link>
+        );
+      })}
     </div>
   );
 }
@@ -444,11 +462,10 @@ function ServiceCategoriesGrid({
 // --- Main Component ---
 
 export function CustomerHome() {
-  const { currency } = useLocalization();
+  const { formatCurrency } = useLocalization();
   const { user } = useAuthContext();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeTab, setActiveTab] = useState("Professional");
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   // Story / Live stream modals
@@ -474,6 +491,7 @@ export function CustomerHome() {
   const [emergencyAlertData, setEmergencyAlertData] =
     useState<EmergencyAlert | null>(null);
   const hasShownLoadError = useRef(false);
+  const initialLoadRef = useRef(true);
 
   const fetchWithRetry = async (
     url: string,
@@ -503,10 +521,6 @@ export function CustomerHome() {
   useEffect(() => {
     const loadHome = async () => {
       try {
-        if (isInitialLoading) {
-          setIsInitialLoading(true);
-        }
-
         const [homeRes, walletRes, giftsRes] = await Promise.all([
           fetchWithRetry("/api/customer/home"),
           fetchWithRetry("/api/wallet"),
@@ -529,16 +543,7 @@ export function CustomerHome() {
           Array.isArray(data.featuredShops) ? data.featuredShops : [],
         );
         setServiceCategoriesData(
-          (Array.isArray(data.serviceCategories)
-            ? data.serviceCategories
-            : []
-          ).map((item: any) => ({
-            ...item,
-            type: "Professional",
-            icon: BriefcaseBusiness,
-            color:
-              "bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400",
-          })),
+          Array.isArray(data.serviceCategories) ? data.serviceCategories : [],
         );
         setLiveExpertsData(
           Array.isArray(data.liveExperts) ? data.liveExperts : [],
@@ -571,7 +576,8 @@ export function CustomerHome() {
           });
         }
       } finally {
-        if (isInitialLoading) {
+        if (initialLoadRef.current) {
+          initialLoadRef.current = false;
           setIsInitialLoading(false);
         }
       }
@@ -583,22 +589,31 @@ export function CustomerHome() {
   }, []);
 
   const handleJoinLive = (stream: any) => {
-    if (stream.isFree) {
+    const joinFee =
+      typeof stream?.joinFee === "number" && Number.isFinite(stream.joinFee)
+        ? stream.joinFee
+        : null;
+
+    if (joinFee === null) return;
+    if (joinFee <= 0) {
       setJoinedLive(stream);
       setLiveComments([]);
       setSentGifts([]);
     } else {
-      setShowJoinConfirm(stream);
+      setShowJoinConfirm({ ...stream, joinFee });
     }
   };
 
   const confirmPaidJoin = () => {
     if (!showJoinConfirm) return;
-    const price = parseInt(
-      showJoinConfirm.tipAmount?.replace(/[^0-9]/g, "") || "0",
-    );
-    if (walletBalance >= price) {
-      setWalletBalance((prev) => prev - price);
+    const joinFee =
+      typeof showJoinConfirm.joinFee === "number" &&
+      Number.isFinite(showJoinConfirm.joinFee)
+        ? showJoinConfirm.joinFee
+        : null;
+    if (joinFee === null) return;
+    if (walletBalance >= joinFee) {
+      setWalletBalance((prev) => prev - joinFee);
       setJoinedLive(showJoinConfirm);
       setShowJoinConfirm(null);
       setLiveComments([]);
@@ -659,22 +674,17 @@ export function CustomerHome() {
         </div>
 
         {/* Live Now Avatars Row */}
-        <LiveNowAvatars
-          onJoinLive={handleJoinLive}
-          providers={liveProvidersData}
-        />
+          <LiveNowAvatars
+            onJoinLive={handleJoinLive}
+            providers={liveProvidersData}
+          />
 
         {/* Featured Shops */}
         <FeaturedShopsSection shops={featuredShopsData} />
 
         {/* Category Filter Tabs */}
-        <CategoryTabs activeTab={activeTab} setActiveTab={setActiveTab} />
-
         {/* Service Categories Grid */}
-        <ServiceCategoriesGrid
-          activeTab={activeTab}
-          categories={serviceCategoriesData}
-        />
+        <ServiceCategoriesGrid categories={serviceCategoriesData} />
 
         {/* Desktop 2-column layout for stories + workshops */}
         <div className="lg:grid lg:grid-cols-2 lg:gap-6">
@@ -747,7 +757,14 @@ export function CustomerHome() {
               </h2>
             </div>
             <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-hide lg:flex-col lg:overflow-x-visible">
-              {liveExpertsData.map((stream) => (
+              {liveExpertsData.map((stream) => {
+                const joinFee =
+                  typeof stream?.joinFee === "number" &&
+                  Number.isFinite(stream.joinFee)
+                    ? stream.joinFee
+                    : null;
+                const isFree = joinFee !== null && joinFee <= 0;
+                return (
                 <Card
                   key={stream.id}
                   className="flex-shrink-0 w-64 lg:w-full overflow-hidden hover:shadow-md transition-shadow"
@@ -809,16 +826,19 @@ export function CustomerHome() {
                       <Button
                         onClick={() => handleJoinLive(stream)}
                         size="sm"
-                        className={`w-full h-8 text-xs rounded-lg ${stream.isFree ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-primary hover:bg-primary/90 text-primary-foreground"}`}
+                        disabled={joinFee === null}
+                        className={`w-full h-8 text-xs rounded-lg ${isFree ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-primary hover:bg-primary/90 text-primary-foreground"}`}
                       >
-                        {stream.isFree
-                          ? "Join Free"
-                          : `Join - ${stream.tipAmount}`}
+                        {joinFee === null
+                          ? "Unavailable"
+                          : isFree
+                            ? "Join Free"
+                            : `Join - ${formatCurrency(joinFee)}`}
                       </Button>
                     </div>
                   </div>
                 </Card>
-              ))}
+              )})}
             </div>
           </div>
         </div>
@@ -967,21 +987,21 @@ export function CustomerHome() {
               <div className="bg-muted/50 rounded-xl p-4 my-4">
                 <p className="text-xs text-muted-foreground mb-1">Entry Fee</p>
                 <p className="text-2xl font-bold text-foreground">
-                  {showJoinConfirm.tipAmount}
+                  {typeof showJoinConfirm.joinFee === "number"
+                    ? formatCurrency(showJoinConfirm.joinFee)
+                    : ""}
                 </p>
                 <p className="text-xs text-muted-foreground mt-2">
                   Wallet Balance:{" "}
                   <span
-                    className={`font-semibold ${walletBalance >= parseInt(showJoinConfirm.tipAmount?.replace(/[^0-9]/g, "") || "0") ? "text-emerald-600" : "text-red-500"}`}
+                    className={`font-semibold ${walletBalance >= (typeof showJoinConfirm.joinFee === "number" ? showJoinConfirm.joinFee : Number.POSITIVE_INFINITY) ? "text-emerald-600" : "text-red-500"}`}
                   >
-                    KES {walletBalance.toLocaleString()}
+                    {formatCurrency(walletBalance)}
                   </span>
                 </p>
               </div>
-              {walletBalance >=
-              parseInt(
-                showJoinConfirm.tipAmount?.replace(/[^0-9]/g, "") || "0",
-              ) ? (
+              {typeof showJoinConfirm.joinFee === "number" &&
+              walletBalance >= showJoinConfirm.joinFee ? (
                 <div className="flex gap-2">
                   <Button
                     variant="outline"
@@ -1080,7 +1100,7 @@ export function CustomerHome() {
                 <span className="inline-flex items-center gap-1.5 text-xs bg-black/40 text-white/80 px-3 py-1.5 rounded-full">
                   Wallet:{" "}
                   <span className="font-semibold text-emerald-400">
-                    KES {walletBalance.toLocaleString()}
+                    {formatCurrency(walletBalance)}
                   </span>
                 </span>
               </div>
@@ -1154,7 +1174,7 @@ export function CustomerHome() {
                           {gift.name}
                         </span>
                         <span className="text-amber-400 text-[10px] font-bold">
-                          KES {gift.price}
+                          {formatCurrency(gift.price)}
                         </span>
                       </button>
                     ))}

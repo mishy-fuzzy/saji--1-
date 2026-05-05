@@ -3,6 +3,7 @@
 import { useCallback, useState, useEffect } from "react";
 import { useAuthContext } from "@/lib/auth-context";
 import { useLocalization } from "@/lib/hooks/useLocalization";
+import { parseCoordinateLabel, resolveLocationName } from "@/lib/location";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,9 +64,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
 
-const EMERGENCY_FEE = 2000;
-const DOWNPAYMENT_PERCENT = 0.25;
-
 const serviceIconMap: Record<string, any> = {
   plumbing: Droplets,
   electrical: Zap,
@@ -92,6 +90,45 @@ const emergencyIconMap: Record<string, any> = {
   window: PanelTop,
 };
 
+const DEFAULT_EMERGENCY_CATEGORIES = [
+  {
+    id: "burst-pipe",
+    label: "Burst Pipe",
+    price: 0,
+    description: "Water leak or burst pipe",
+  },
+  {
+    id: "power-outage",
+    label: "Power Outage",
+    price: 0,
+    description: "Electrical outage or sparks",
+  },
+  {
+    id: "gas-leak",
+    label: "Gas Leak",
+    price: 0,
+    description: "Gas smell or leak",
+  },
+  {
+    id: "flooding",
+    label: "Flooding",
+    price: 0,
+    description: "Flood or water damage",
+  },
+  {
+    id: "lockout",
+    label: "Lockout",
+    price: 0,
+    description: "Locked out or broken lock",
+  },
+  {
+    id: "window-damage",
+    label: "Window Damage",
+    price: 0,
+    description: "Broken window or frame",
+  },
+];
+
 export function CustomerServicesPage() {
   const { currency } = useLocalization();
   const { user, isAuthenticated, isLoading, logout } = useAuthContext();
@@ -111,6 +148,8 @@ export function CustomerServicesPage() {
   const [priceRange, setPriceRange] = useState("all");
   const [rating, setRating] = useState("all");
   const [availability, setAvailability] = useState("all");
+  const [downpaymentPercent, setDownpaymentPercent] = useState(0.25);
+  const [emergencyFee, setEmergencyFee] = useState(0);
 
   // Emergency booking state
   const [showEmergencyWizard, setShowEmergencyWizard] = useState(false);
@@ -143,17 +182,6 @@ export function CustomerServicesPage() {
     discount: 0,
   }));
 
-  const timeSlots = [
-    "09:00 AM",
-    "10:00 AM",
-    "11:00 AM",
-    "12:00 PM",
-    "02:00 PM",
-    "03:00 PM",
-    "04:00 PM",
-    "05:00 PM",
-  ];
-
   const detectLocation = useCallback(() => {
     if (isLoading || !isAuthenticated || !user?.id) {
       setCurrentLocation(null);
@@ -167,7 +195,8 @@ export function CustomerServicesPage() {
           const latitude = Number(position.coords.latitude.toFixed(6));
           const longitude = Number(position.coords.longitude.toFixed(6));
           const accuracy = Number(position.coords.accuracy.toFixed(0));
-          const label = `${latitude}, ${longitude}`;
+          const resolvedName = await resolveLocationName(latitude, longitude);
+          const label = resolvedName || `${latitude}, ${longitude}`;
 
           setCurrentLocation(label);
 
@@ -217,9 +246,45 @@ export function CustomerServicesPage() {
       }
 
       const payload = await response.json();
-      const location = String(payload?.data?.location || "").trim();
-      if (location) {
-        setCurrentLocation(location);
+      const rawLocation = String(payload?.data?.location || "").trim();
+      const payloadLatitude = Number(payload?.data?.latitude);
+      const payloadLongitude = Number(payload?.data?.longitude);
+      const payloadAccuracy =
+        typeof payload?.data?.accuracy === "number"
+          ? payload.data.accuracy
+          : null;
+      const parsedCoords = parseCoordinateLabel(rawLocation);
+      const latitude = Number.isFinite(payloadLatitude)
+        ? payloadLatitude
+        : parsedCoords?.latitude;
+      const longitude = Number.isFinite(payloadLongitude)
+        ? payloadLongitude
+        : parsedCoords?.longitude;
+
+      let resolvedLocation = rawLocation;
+      if (
+        (!resolvedLocation || parsedCoords) &&
+        Number.isFinite(latitude) &&
+        Number.isFinite(longitude)
+      ) {
+        const name = await resolveLocationName(latitude, longitude);
+        if (name) {
+          resolvedLocation = name;
+          void fetch("/api/auth/location", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              location: name,
+              latitude,
+              longitude,
+              accuracy: payloadAccuracy,
+            }),
+          });
+        }
+      }
+
+      if (resolvedLocation) {
+        setCurrentLocation(resolvedLocation);
       }
     } catch {
       // Keep existing location when saved location lookup fails.
@@ -249,13 +314,14 @@ export function CustomerServicesPage() {
     const loadMarketplace = async () => {
       try {
         setIsLoadingServices(true);
-        const [servicesRes, walletRes, emergencyRes] = await Promise.all([
-          fetch("/api/services", { cache: "no-store" }),
+        const [servicesRes, walletRes, emergencyRes, configRes] = await Promise.all([
+          fetch("/api/services/list", { cache: "no-store" }),
           fetch("/api/wallet", { cache: "no-store" }),
           fetch("/api/services/emergency", { cache: "no-store" }),
+          fetch("/api/services/config", { cache: "no-store" }),
         ]);
 
-        if (servicesRes.status === 401 || walletRes.status === 401 || emergencyRes.status === 401) {
+        if (servicesRes.status === 401 || walletRes.status === 401 || emergencyRes.status === 401 || configRes.status === 401) {
           await handleUnauthorized();
           return;
         }
@@ -263,6 +329,7 @@ export function CustomerServicesPage() {
         const servicesPayload = await servicesRes.json();
         const walletPayload = await walletRes.json();
         const emergencyPayload = await emergencyRes.json();
+        const configPayload = await configRes.json();
 
         if (!active) return;
 
@@ -273,19 +340,15 @@ export function CustomerServicesPage() {
           serviceRows.map((row: any) => ({
             id: String(row.id),
             title: String(row.name || "Service"),
-            provider: String(row?.provider?.name || "Provider"),
+            provider: String(row?.providerName || row?.provider?.name || ""),
             category: String(row.category || "general").toLowerCase(),
-            rating: 5,
-            reviews: 0,
+            rating:
+              typeof row.rating === "number" ? Number(row.rating) : null,
+            reviews:
+              typeof row.reviews === "number" ? Number(row.reviews) : null,
             price: Number(row.basePrice || 0),
-            image: String(row.image || "/placeholder.svg"),
-            avatar: String(row?.provider?.image || "/placeholder.svg"),
-            location: "Kenya",
-            distance: "-",
-            responseTime: "Live",
-            available: true,
-            verified: true,
-            badges: [],
+            image: row.image ? String(row.image) : null,
+            avatar: row?.providerImage ? String(row.providerImage) : null,
           })),
         );
 
@@ -310,8 +373,26 @@ export function CustomerServicesPage() {
           ? emergencyPayload.data
           : [];
 
+        const fallbackEmergencyFromServices = serviceRows
+          .slice(0, 6)
+          .map((row: any) => ({
+            id: String(row.id || ""),
+            label: String(row.name || "Emergency Service"),
+            price: Number(row.basePrice || 0),
+            description: String(
+              row.description || row.category || "Urgent service",
+            ),
+          }));
+
+        const emergencySource =
+          emergencies.length > 0
+            ? emergencies
+            : fallbackEmergencyFromServices.length > 0
+              ? fallbackEmergencyFromServices
+              : DEFAULT_EMERGENCY_CATEGORIES;
+
         setEmergencyCategories(
-          emergencies.map((row: any) => {
+          emergencySource.map((row: any) => {
             const text = [row.label, row.description, row.id]
               .filter(Boolean)
               .join(" ")
@@ -331,6 +412,13 @@ export function CustomerServicesPage() {
 
         if (walletRes.ok && walletPayload?.ok) {
           setWalletBalance(Number(walletPayload?.data?.balance || 0));
+        }
+
+        if (configRes.ok && configPayload?.ok) {
+          const surcharge = Number(configPayload?.data?.emergencySurcharge || 0);
+          const percent = Number(configPayload?.data?.downpaymentPercent || 0.25);
+          if (Number.isFinite(surcharge)) setEmergencyFee(surcharge);
+          if (Number.isFinite(percent)) setDownpaymentPercent(percent);
         }
       } catch {
         if (!active) return;
@@ -354,7 +442,14 @@ export function CustomerServicesPage() {
       service.provider.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory =
       selectedCategory === "all" || service.category === selectedCategory;
-    return matchesSearch && matchesCategory;
+    const minimumRating = rating === "all" ? null : Number(rating);
+    const matchesRating =
+      minimumRating === null
+        ? true
+        : typeof service.rating === "number"
+          ? service.rating >= minimumRating
+          : false;
+    return matchesSearch && matchesCategory && matchesRating;
   });
 
   const toggleFavorite = (id: string | number) => {
@@ -374,7 +469,7 @@ export function CustomerServicesPage() {
 
   const getBookingTotal = () => selectedService?.price || 0;
   const getDownpayment = () =>
-    Math.ceil(getBookingTotal() * DOWNPAYMENT_PERCENT);
+    Math.ceil(getBookingTotal() * downpaymentPercent);
   const hasEnoughBalance = () => walletBalance >= getDownpayment();
 
   const handleBookingSubmit = () => {
@@ -398,9 +493,9 @@ export function CustomerServicesPage() {
   const getSelectedEmergency = () =>
     emergencyCategories.find((c) => c.id === emergencyCategory);
   const getEmergencyTotal = () =>
-    (getSelectedEmergency()?.price || 0) + EMERGENCY_FEE;
+    (getSelectedEmergency()?.price || 0) + emergencyFee;
   const getEmergencyDownpayment = () =>
-    Math.ceil(getEmergencyTotal() * DOWNPAYMENT_PERCENT);
+    Math.ceil(getEmergencyTotal() * downpaymentPercent);
   const hasEnoughForEmergency = () =>
     walletBalance >= getEmergencyDownpayment();
   const displayLocation = currentLocation || "Anywhere";
@@ -469,8 +564,7 @@ export function CustomerServicesPage() {
               <div>
                 <h3 className="font-bold text-base">Emergency Service</h3>
                 <p className="text-sm text-white/80">
-                  Need urgent help? Book a priority provider now. +KES 2,000
-                  surcharge
+                  Need urgent help? Book a priority provider now.
                 </p>
               </div>
             </div>
@@ -1233,7 +1327,7 @@ export function CustomerServicesPage() {
                     <div className="flex justify-between text-red-600 dark:text-red-400">
                       <span>Emergency Surcharge</span>
                       <span className="font-medium">
-                        + KES {EMERGENCY_FEE.toLocaleString()}
+                        + KES {emergencyFee.toLocaleString()}
                       </span>
                     </div>
                     <div className="flex justify-between border-t border-border pt-2">

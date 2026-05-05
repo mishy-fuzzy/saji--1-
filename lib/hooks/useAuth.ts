@@ -42,10 +42,16 @@ export function useAuth() {
             setUser(serverUser)
             setIsAuthenticated(true)
           }
-        } else if (storedUser && isMounted) {
-          localStorage.removeItem(STORAGE_KEY)
-          setUser(null)
-          setIsAuthenticated(false)
+        } else if (isMounted) {
+          if (response.status === 401 || response.status === 403) {
+            // Clear stale local auth when the session is invalid server-side.
+            localStorage.removeItem(STORAGE_KEY)
+            setUser(null)
+            setIsAuthenticated(false)
+          } else if (!storedUser) {
+            setUser(null)
+            setIsAuthenticated(false)
+          }
         }
       } catch {
         // Preserve local auth fallback when network checks are unavailable.

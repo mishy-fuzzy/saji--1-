@@ -7,6 +7,9 @@ async function main() {
   const seedAdminPassword = process.env.SEED_ADMIN_PASSWORD || 'Admin@12345'
 
   // Clean tables in FK-safe order.
+  await prisma.liveSession.deleteMany()
+  await prisma.shopOperationalStatus.deleteMany()
+  await prisma.serviceCategoryMeta.deleteMany()
   await prisma.paymentTransaction.deleteMany()
   await prisma.booking.deleteMany()
   await prisma.message.deleteMany()

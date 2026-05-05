@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { useAuthContext } from "@/lib/auth-context"
 
 interface Promotion {
-  id: number
+  id: string
   name: string
   code: string
   type: "percentage" | "fixed" | "bogo"
@@ -28,6 +29,7 @@ interface Promotion {
 }
 
 export default function ShopkeeperPromotionsPage() {
+  const { user } = useAuthContext()
   const [promotions, setPromotions] = useState<Promotion[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
@@ -36,6 +38,7 @@ export default function ShopkeeperPromotionsPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [editingPromo, setEditingPromo] = useState<Promotion | null>(null)
   const [copiedCode, setCopiedCode] = useState<string | null>(null)
+  const [productOptions, setProductOptions] = useState<string[]>([])
 
   const [newPromo, setNewPromo] = useState({
     name: "",
@@ -46,19 +49,54 @@ export default function ShopkeeperPromotionsPage() {
     maxUses: "",
     startDate: "",
     endDate: "",
-    products: "All Products",
+    products: "",
+    description: "",
+  })
+
+  const [editPromo, setEditPromo] = useState({
+    name: "",
+    code: "",
+    type: "percentage" as "percentage" | "fixed" | "bogo",
+    value: "",
+    minOrder: "",
+    maxUses: "",
+    startDate: "",
+    endDate: "",
+    products: "",
     description: "",
   })
 
   useEffect(() => {
     const loadPromotions = async () => {
       try {
-        const response = await fetch("/api/shopkeeper/promotions", {
-          cache: "no-store",
-        })
-        const payload = await response.json()
-        if (payload?.ok && Array.isArray(payload?.data)) {
-          setPromotions(payload.data)
+        const [promotionsResponse, productsResponse] = await Promise.all([
+          fetch("/api/shopkeeper/promotions", {
+            cache: "no-store",
+          }),
+          user?.id
+            ? fetch(`/api/shopkeeper/products?providerId=${encodeURIComponent(user.id)}`, {
+                cache: "no-store",
+              })
+            : Promise.resolve(null),
+        ])
+
+        const promotionsPayload = await promotionsResponse.json()
+        if (promotionsPayload?.ok && Array.isArray(promotionsPayload?.data)) {
+          setPromotions(promotionsPayload.data)
+        }
+
+        if (productsResponse) {
+          const productsPayload = await productsResponse.json()
+          if (productsPayload?.ok && Array.isArray(productsPayload?.data)) {
+            const names = Array.from(
+              new Set(
+                productsPayload.data
+                  .map((item: any) => String(item?.name || "").trim())
+                  .filter(Boolean),
+              ),
+            )
+            setProductOptions(names)
+          }
         }
       } catch (err) {
         console.error("Failed to load promotions:", err)
@@ -68,7 +106,7 @@ export default function ShopkeeperPromotionsPage() {
     }
 
     loadPromotions()
-  }, [])
+  }, [user?.id])
 
   const filters = [
     { key: "all", label: "All" },
@@ -87,7 +125,7 @@ export default function ShopkeeperPromotionsPage() {
 
   const appliesToOptions = Array.from(
     new Set([
-      "All Products",
+      ...productOptions,
       ...promotions
         .map((promo) => String(promo.products || "").trim())
         .filter(Boolean),
@@ -126,6 +164,11 @@ export default function ShopkeeperPromotionsPage() {
       return
     }
 
+    if (!newPromo.startDate || !newPromo.endDate) {
+      alert("Please provide both start and end dates")
+      return
+    }
+
     try {
       const response = await fetch("/api/shopkeeper/promotions", {
         method: "POST",
@@ -137,8 +180,8 @@ export default function ShopkeeperPromotionsPage() {
           value: parseFloat(newPromo.value),
           minOrder: parseFloat(newPromo.minOrder) || 0,
           maxUses: parseInt(newPromo.maxUses) || 999,
-          startDate: newPromo.startDate || new Date().toISOString().split("T")[0],
-          endDate: newPromo.endDate || "2026-12-31",
+          startDate: newPromo.startDate,
+          endDate: newPromo.endDate,
           products: newPromo.products,
           description: newPromo.description,
         }),
@@ -154,13 +197,13 @@ export default function ShopkeeperPromotionsPage() {
       }
 
       setShowCreateModal(false)
-      setNewPromo({ name: "", code: "", type: "percentage", value: "", minOrder: "", maxUses: "", startDate: "", endDate: "", products: "All Products", description: "" })
+      setNewPromo({ name: "", code: "", type: "percentage", value: "", minOrder: "", maxUses: "", startDate: "", endDate: "", products: "", description: "" })
     } catch (error) {
       alert(error instanceof Error ? error.message : "Failed to create promotion")
     }
   }
 
-  const handleDeletePromo = async (id: number) => {
+  const handleDeletePromo = async (id: string) => {
     if (confirm("Are you sure you want to delete this promotion?")) {
       try {
         const response = await fetch(`/api/shopkeeper/promotions/${id}`, {
@@ -177,13 +220,84 @@ export default function ShopkeeperPromotionsPage() {
     }
   }
 
-  const handleToggleStatus = (id: number) => {
-    setPromotions(promotions.map(p => {
-      if (p.id !== id) return p
-      if (p.status === "active") return { ...p, status: "paused" as const }
-      if (p.status === "paused") return { ...p, status: "active" as const }
-      return p
-    }))
+  const handleToggleStatus = async (promo: Promotion) => {
+    const nextStatus = promo.status === "active" ? "paused" : "active"
+    try {
+      const response = await fetch(`/api/shopkeeper/promotions/${promo.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        throw new Error(payload?.error || "Failed to update promotion")
+      }
+      setPromotions((current) =>
+        current.map((item) => (item.id === promo.id ? payload.data : item)),
+      )
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to update promotion")
+    }
+  }
+
+  const openEditModal = (promo: Promotion) => {
+    setEditingPromo(promo)
+    setEditPromo({
+      name: promo.name,
+      code: promo.code,
+      type: promo.type,
+      value: String(promo.value),
+      minOrder: String(promo.minOrder),
+      maxUses: String(promo.maxUses),
+      startDate: promo.startDate,
+      endDate: promo.endDate,
+      products: promo.products,
+      description: promo.description,
+    })
+    setShowEditModal(true)
+  }
+
+  const handleUpdatePromo = async () => {
+    if (!editingPromo?.id) {
+      alert("Promotion not selected")
+      return
+    }
+
+    if (!editPromo.name || !editPromo.code || !editPromo.value || !editPromo.startDate || !editPromo.endDate) {
+      alert("Please fill in all required fields")
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/shopkeeper/promotions/${editingPromo.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: editPromo.name,
+          code: editPromo.code.toUpperCase(),
+          type: editPromo.type,
+          value: parseFloat(editPromo.value),
+          minOrder: parseFloat(editPromo.minOrder) || 0,
+          maxUses: parseInt(editPromo.maxUses) || 999,
+          startDate: editPromo.startDate,
+          endDate: editPromo.endDate,
+          products: editPromo.products,
+          description: editPromo.description,
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        throw new Error(payload?.error || "Failed to update promotion")
+      }
+
+      setPromotions((current) =>
+        current.map((item) => (item.id === editingPromo.id ? payload.data : item)),
+      )
+      setShowEditModal(false)
+      setEditingPromo(null)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to update promotion")
+    }
   }
 
   return (
@@ -328,12 +442,20 @@ export default function ShopkeeperPromotionsPage() {
 
                       {/* Actions */}
                       <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-xs h-7 bg-transparent"
+                          onClick={() => openEditModal(promo)}
+                        >
+                          <Edit className="w-3 h-3" />
+                        </Button>
                         {(promo.status === "active" || promo.status === "paused") && (
                           <Button
                             size="sm"
                             variant="outline"
                             className="text-xs h-7 bg-transparent"
-                            onClick={() => handleToggleStatus(promo.id)}
+                            onClick={() => handleToggleStatus(promo)}
                           >
                             {promo.status === "active" ? "Pause" : "Resume"}
                           </Button>
@@ -460,6 +582,7 @@ export default function ShopkeeperPromotionsPage() {
                   onChange={(e) => setNewPromo({ ...newPromo, products: e.target.value })}
                   className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
                 >
+                  <option value="">Entire catalog</option>
                   {appliesToOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
@@ -485,6 +608,135 @@ export default function ShopkeeperPromotionsPage() {
               </Button>
               <Button className="flex-1 bg-amber-600 hover:bg-amber-700" onClick={handleCreatePromo}>
                 Create Promotion
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Promotion Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Promotion</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Promotion Name *</label>
+              <Input
+                value={editPromo.name}
+                onChange={(e) => setEditPromo({ ...editPromo, name: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Coupon Code *</label>
+                <Input
+                  value={editPromo.code}
+                  onChange={(e) => setEditPromo({ ...editPromo, code: e.target.value.toUpperCase() })}
+                  className="font-mono uppercase"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Discount Type *</label>
+                <select
+                  value={editPromo.type}
+                  onChange={(e) => setEditPromo({ ...editPromo, type: e.target.value as "percentage" | "fixed" | "bogo" })}
+                  className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
+                >
+                  <option value="percentage">Percentage Off</option>
+                  <option value="fixed">Fixed Amount Off</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Discount Value *</label>
+                <Input
+                  type="number"
+                  value={editPromo.value}
+                  onChange={(e) => setEditPromo({ ...editPromo, value: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Min. Order (KES)</label>
+                <Input
+                  type="number"
+                  value={editPromo.minOrder}
+                  onChange={(e) => setEditPromo({ ...editPromo, minOrder: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Start Date</label>
+                <Input
+                  type="date"
+                  value={editPromo.startDate}
+                  onChange={(e) => setEditPromo({ ...editPromo, startDate: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">End Date</label>
+                <Input
+                  type="date"
+                  value={editPromo.endDate}
+                  onChange={(e) => setEditPromo({ ...editPromo, endDate: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Max Uses</label>
+                <Input
+                  type="number"
+                  value={editPromo.maxUses}
+                  onChange={(e) => setEditPromo({ ...editPromo, maxUses: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Applies To</label>
+                <select
+                  value={editPromo.products}
+                  onChange={(e) => setEditPromo({ ...editPromo, products: e.target.value })}
+                  className="w-full px-3 py-2 bg-background border border-input rounded-md text-sm"
+                >
+                  <option value="">Entire catalog</option>
+                  {appliesToOptions.map((option) => (
+                    <option key={option} value={option}>
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium mb-1.5">Description</label>
+              <Textarea
+                value={editPromo.description}
+                onChange={(e) => setEditPromo({ ...editPromo, description: e.target.value })}
+                className="min-h-[80px]"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1 bg-transparent"
+                onClick={() => {
+                  setShowEditModal(false)
+                  setEditingPromo(null)
+                }}
+              >
+                Cancel
+              </Button>
+              <Button className="flex-1 bg-amber-600 hover:bg-amber-700" onClick={handleUpdatePromo}>
+                Save Changes
               </Button>
             </div>
           </div>

@@ -44,6 +44,8 @@ type ChatMessage = {
   status: "sent" | "delivered" | "read";
 };
 
+const MESSAGES_ENDPOINT = "/api/messages";
+
 function toTime(value: string | Date): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
@@ -98,8 +100,13 @@ export default function ShopkeeperMessagesPage() {
   useEffect(() => {
     const loadConversations = async () => {
       try {
-        const response = await fetch("/api/messages", { cache: "no-store" });
+        const response = await fetch(`${MESSAGES_ENDPOINT}?limit=300`, {
+          cache: "no-store",
+        });
         const payload = await response.json();
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || "Failed to load conversations");
+        }
         const rows = Array.isArray(payload?.data) ? payload.data : [];
 
         const mapped: Conversation[] = rows.map((row: any) => ({
@@ -136,12 +143,15 @@ export default function ShopkeeperMessagesPage() {
     const loadThread = async () => {
       try {
         const response = await fetch(
-          `/api/messages?withUserId=${encodeURIComponent(activeChat)}`,
+          `${MESSAGES_ENDPOINT}?withUserId=${encodeURIComponent(activeChat)}&limit=500`,
           {
             cache: "no-store",
           },
         );
         const payload = await response.json();
+        if (!response.ok || !payload?.ok) {
+          throw new Error(payload?.error || "Failed to load message thread");
+        }
         const rows = Array.isArray(payload?.data) ? payload.data : [];
 
         const mapped: ChatMessage[] = rows.map((row: any) => ({
@@ -187,7 +197,7 @@ export default function ShopkeeperMessagesPage() {
     setIsSending(true);
 
     try {
-      const response = await fetch("/api/messages", {
+      const response = await fetch(MESSAGES_ENDPOINT, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ receiverId: activeChat, text }),

@@ -8,6 +8,9 @@ export interface User {
   phone: string
   role: UserRole
   avatar?: string
+  emailVerified?: boolean
+  phoneVerified?: boolean
+  shopName?: string
   shopkeeperRegistrationComplete?: boolean
   shopkeeperRegistrationStatus?: "not_submitted" | "pending" | "approved" | "rejected"
   createdAt: string

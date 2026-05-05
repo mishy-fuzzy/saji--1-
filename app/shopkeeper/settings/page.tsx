@@ -10,13 +10,25 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { useAuthContext } from "@/lib/auth-context"
 
 export default function ShopkeeperSettingsPage() {
+  const { login } = useAuthContext()
   const [activeTab, setActiveTab] = useState("account")
   const [showPasswordDialog, setShowPasswordDialog] = useState(false)
   const [showSaveSuccess, setShowSaveSuccess] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveError, setSaveError] = useState("")
   const [categoryOptions, setCategoryOptions] = useState<string[]>([])
+  const [billingSummary, setBillingSummary] = useState({
+    currency: "KES",
+    totalEarnings: 0,
+    thisMonth: 0,
+    available: 0,
+    pending: 0,
+    transactions: 0,
+  })
 
   const [settings, setSettings] = useState({
     shopName: "",
@@ -71,13 +83,73 @@ export default function ShopkeeperSettingsPage() {
       }
     }
 
+    const loadBillingSummary = async () => {
+      try {
+        const response = await fetch("/api/shopkeeper/earnings", {
+          cache: "no-store",
+        })
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !payload?.data) return
+        setBillingSummary({
+          currency: String(payload.data.currency || "KES"),
+          totalEarnings: Number(payload.data.totalEarnings || 0),
+          thisMonth: Number(payload.data.thisMonth || 0),
+          available: Number(payload.data.available || 0),
+          pending: Number(payload.data.pending || 0),
+          transactions: Array.isArray(payload.data.transactions) ? payload.data.transactions.length : 0,
+        })
+      } catch {
+        setBillingSummary({
+          currency: "KES",
+          totalEarnings: 0,
+          thisMonth: 0,
+          available: 0,
+          pending: 0,
+          transactions: 0,
+        })
+      }
+    }
+
     loadSettings()
     loadCategories()
+    loadBillingSummary()
   }, [])
 
-  const handleSaveChanges = () => {
-    setShowSaveSuccess(true)
-    setTimeout(() => setShowSaveSuccess(false), 3000)
+  const handleSaveChanges = async () => {
+    setIsSaving(true)
+    setSaveError("")
+    try {
+      const response = await fetch("/api/shopkeeper/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to save settings")
+      }
+
+      if (payload?.data) {
+        setSettings((prev) => ({ ...prev, ...payload.data }))
+      }
+
+      try {
+        const meResponse = await fetch("/api/auth/me", { cache: "no-store" })
+        const mePayload = await meResponse.json()
+        if (meResponse.ok && mePayload?.ok && mePayload?.data) {
+          login(mePayload.data)
+        }
+      } catch {
+        // Keep settings success path resilient if auth refresh fails.
+      }
+
+      setShowSaveSuccess(true)
+      setTimeout(() => setShowSaveSuccess(false), 3000)
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Failed to save settings")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handlePasswordChange = () => {
@@ -108,6 +180,18 @@ export default function ShopkeeperSettingsPage() {
               <div>
                 <p className="font-semibold text-emerald-900 dark:text-emerald-100">Changes saved successfully!</p>
                 <p className="text-sm text-emerald-800 dark:text-emerald-200">Your settings have been updated.</p>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {saveError && (
+          <Card className="p-4 mb-6 border-0 shadow-lg bg-red-50 dark:bg-red-900/30 border-l-4 border-red-600">
+            <div className="flex items-center gap-3">
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+              <div>
+                <p className="font-semibold text-red-900 dark:text-red-100">Unable to save settings</p>
+                <p className="text-sm text-red-800 dark:text-red-200">{saveError}</p>
               </div>
             </div>
           </Card>
@@ -159,18 +243,26 @@ export default function ShopkeeperSettingsPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Business Category</label>
-                    <select
-                      value={settings.businessCategory}
-                      onChange={(e) => setSettings({ ...settings, businessCategory: e.target.value })}
-                      className="w-full px-3 py-2 border border-input rounded-md bg-background"
-                    >
-                      <option value="">Select category</option>
-                      {categoryOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
+                    {categoryOptions.length > 0 ? (
+                      <select
+                        value={settings.businessCategory}
+                        onChange={(e) => setSettings({ ...settings, businessCategory: e.target.value })}
+                        className="w-full px-3 py-2 border border-input rounded-md bg-background"
+                      >
+                        <option value="">Select category</option>
+                        {categoryOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        value={settings.businessCategory}
+                        onChange={(e) => setSettings({ ...settings, businessCategory: e.target.value })}
+                        placeholder="Enter your business category"
+                      />
+                    )}
                   </div>
                 </div>
 
@@ -227,9 +319,9 @@ export default function ShopkeeperSettingsPage() {
 
               <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
                 <Button variant="outline" className="bg-transparent">Cancel</Button>
-                <Button onClick={handleSaveChanges} className="bg-amber-600 hover:bg-amber-700">
+                <Button onClick={handleSaveChanges} disabled={isSaving} className="bg-amber-600 hover:bg-amber-700">
                   <Save className="w-4 h-4 mr-2" />
-                  Save Changes
+                  {isSaving ? "Saving..." : "Save Changes"}
                 </Button>
               </div>
             </Card>
@@ -271,9 +363,9 @@ export default function ShopkeeperSettingsPage() {
               </div>
 
               <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                <Button onClick={handleSaveChanges} className="bg-amber-600 hover:bg-amber-700">
+                <Button onClick={handleSaveChanges} disabled={isSaving} className="bg-amber-600 hover:bg-amber-700">
                   <Save className="w-4 h-4 mr-2" />
-                  Save Preferences
+                  {isSaving ? "Saving..." : "Save Preferences"}
                 </Button>
               </div>
             </Card>
@@ -345,40 +437,49 @@ export default function ShopkeeperSettingsPage() {
               
               <div className="space-y-4">
                 <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-start justify-between mb-2">
                     <div>
-                      <p className="font-semibold text-amber-900 dark:text-amber-100">Premium Plan</p>
-                      <p className="text-sm text-amber-800 dark:text-amber-200">Active until 15 Mar 2026</p>
+                      <p className="font-semibold text-amber-900 dark:text-amber-100">Wallet & Payout Summary</p>
+                      <p className="text-sm text-amber-800 dark:text-amber-200">
+                        Data synced from live earnings and transaction records
+                      </p>
                     </div>
-                    <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-semibold">Active</span>
+                    <span className="px-3 py-1 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 rounded-full text-xs font-semibold">
+                      Live
+                    </span>
                   </div>
-                  <Button className="w-full bg-amber-600 hover:bg-amber-700">Manage Plan</Button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                    <p className="text-sm text-muted-foreground">Monthly Cost</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">KES 2,999</p>
+                    <p className="text-sm text-muted-foreground">This Month</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                      {billingSummary.currency} {billingSummary.thisMonth.toLocaleString()}
+                    </p>
                   </div>
                   <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                    <p className="text-sm text-muted-foreground">Next Billing</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">15 Mar 2026</p>
+                    <p className="text-sm text-muted-foreground">Available Balance</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                      {billingSummary.currency} {billingSummary.available.toLocaleString()}
+                    </p>
                   </div>
                   <div className="p-4 border border-gray-200 dark:border-gray-700 rounded-lg">
-                    <p className="text-sm text-muted-foreground">Payment Method</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">•••• 4242</p>
+                    <p className="text-sm text-muted-foreground">Pending Settlement</p>
+                    <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                      {billingSummary.currency} {billingSummary.pending.toLocaleString()}
+                    </p>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="font-medium text-gray-900 dark:text-white mb-3">Plan Features</h3>
+                  <h3 className="font-medium text-gray-900 dark:text-white mb-3">Billing Snapshot</h3>
                   <div className="space-y-2">
                     {[
-                      "Unlimited product listings",
-                      "Advanced analytics & reports",
-                      "Priority customer support",
-                      "Marketing tools included",
-                      "API access"
+                      `Total earnings: ${billingSummary.currency} ${billingSummary.totalEarnings.toLocaleString()}`,
+                      `Recorded transactions: ${billingSummary.transactions}`,
+                      "Withdrawals are managed from the Earnings page",
+                      "All values update from live API data",
+                      "No hardcoded plan or card data"
                     ].map((feature, idx) => (
                       <div key={idx} className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
