@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Megaphone, Plus, Send, Users, Clock, Eye, Trash2, Edit3 } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 
 type Announcement = {
-  id: number
+  id: string
   title: string
   message: string
   audience: string
@@ -15,6 +15,7 @@ type Announcement = {
   sentAt: string
   views: number
   type: string
+  deliveryChannels: string[]
 }
 
 const initialAnnouncements: Announcement[] = []
@@ -26,28 +27,128 @@ export default function AdminAnnouncementsPage() {
   const [newMessage, setNewMessage] = useState("")
   const [newAudience, setNewAudience] = useState("All Users")
   const [filter, setFilter] = useState("all")
+  const [isSaving, setIsSaving] = useState(false)
+
+  useEffect(() => {
+    const loadAnnouncements = async () => {
+      try {
+        const response = await fetch("/api/admin/announcements", {
+          cache: "no-store",
+          headers: { "x-user-role": "admin" },
+        })
+
+        const payload = await response.json()
+        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+          return
+        }
+
+        setAnnouncements(
+          payload.data.map((item: any) => ({
+            id: String(item.id),
+            title: String(item.title || "Announcement"),
+            message: String(item.message || ""),
+            audience: String(item.audience || "All Users"),
+            status: item.status === "sent" || item.status === "scheduled" ? item.status : "draft",
+            sentAt: String(item.sentAt || "-"),
+            views: Number(item.views || 0),
+            type: String(item.type || "general"),
+            deliveryChannels: Array.isArray(item.deliveryChannels)
+              ? item.deliveryChannels.map((channel: unknown) => String(channel))
+              : [],
+          })),
+        )
+      } catch {
+        setAnnouncements([])
+      }
+    }
+
+    loadAnnouncements()
+  }, [])
 
   const filtered = announcements.filter(a => {
     if (filter === "all") return true
     return a.status === filter
   })
 
-  const handleCreate = () => {
+  const saveAnnouncement = async (status: Announcement["status"]) => {
     if (!newTitle.trim() || !newMessage.trim()) return
-    setAnnouncements(prev => [
-      { id: Date.now(), title: newTitle, message: newMessage, audience: newAudience, status: "draft", sentAt: "-", views: 0, type: "general" },
-      ...prev,
-    ])
-    setNewTitle("")
-    setNewMessage("")
-    setShowCreate(false)
+    setIsSaving(true)
+
+    try {
+      const response = await fetch("/api/admin/announcements", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": "admin",
+        },
+        body: JSON.stringify({
+          title: newTitle,
+          message: newMessage,
+          audience: newAudience,
+          status,
+          type: "general",
+        }),
+      })
+
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        return
+      }
+
+      const created: Announcement = {
+        id: String(payload.data.id),
+        title: String(payload.data.title || newTitle),
+        message: String(payload.data.message || newMessage),
+        audience: String(payload.data.audience || newAudience),
+        status: payload.data.status === "sent" || payload.data.status === "scheduled" ? payload.data.status : "draft",
+        sentAt: String(payload.data.sentAt || "-"),
+        views: Number(payload.data.views || payload.data.recipientCount || 0),
+        type: String(payload.data.type || "general"),
+        deliveryChannels: Array.isArray(payload.data.deliveryChannels)
+          ? payload.data.deliveryChannels.map((channel: unknown) => String(channel))
+          : [],
+      }
+
+      setAnnouncements(prev => [created, ...prev])
+      setNewTitle("")
+      setNewMessage("")
+      setShowCreate(false)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const handleSend = (id: number) => {
-    setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, status: "sent", sentAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) } : a))
+  const handleSend = async (id: string) => {
+    const response = await fetch("/api/admin/announcements", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-user-role": "admin",
+      },
+      body: JSON.stringify({ id, action: "send" }),
+    })
+
+    const payload = await response.json()
+    if (!response.ok || !payload?.ok) return
+
+    setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, status: "sent", sentAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), views: Number(payload?.data?.recipientCount || a.views), deliveryChannels: Array.isArray(payload?.data?.deliveryChannels) ? payload.data.deliveryChannels.map((channel: unknown) => String(channel)) : a.deliveryChannels } : a))
   }
 
-  const handleDelete = (id: number) => setAnnouncements(prev => prev.filter(a => a.id !== id))
+  const handleDelete = async (id: string) => {
+    const response = await fetch("/api/admin/announcements", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "x-user-role": "admin",
+      },
+      body: JSON.stringify({ id, action: "delete" }),
+    })
+
+    const payload = await response.json()
+    if (!response.ok || !payload?.ok) return
+
+    setAnnouncements(prev => prev.filter(a => a.id !== id))
+  }
 
   const statusBadge = (s: string) => {
     switch (s) {
@@ -94,7 +195,7 @@ export default function AdminAnnouncementsPage() {
                 </select>
               </div>
               <div className="flex gap-2">
-                <Button onClick={handleCreate} className="flex-1 bg-blue-600 hover:bg-blue-700 gap-1.5 text-sm"><Send size={14} />Save as Draft</Button>
+                <Button onClick={() => saveAnnouncement("draft")} disabled={isSaving} className="flex-1 bg-blue-600 hover:bg-blue-700 gap-1.5 text-sm"><Send size={14} />{isSaving ? "Saving..." : "Save as Draft"}</Button>
                 <Button variant="outline" onClick={() => setShowCreate(false)} className="text-sm">Cancel</Button>
               </div>
             </div>
@@ -145,6 +246,21 @@ export default function AdminAnnouncementsPage() {
                   <span className="flex items-center gap-1"><Clock size={11} />{a.sentAt}</span>
                   {a.views > 0 && <span className="flex items-center gap-1"><Eye size={11} />{a.views.toLocaleString()} views</span>}
                 </div>
+                {a.status === "sent" && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {a.deliveryChannels.length > 0 ? (
+                      a.deliveryChannels.map((channel) => (
+                        <span key={channel} className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                          {channel === "sms" ? "SMS" : "In-app"}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                        No delivery metadata
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="flex sm:flex-col gap-2 flex-shrink-0">
                 {a.status === "draft" && <Button size="sm" onClick={() => handleSend(a.id)} className="gap-1 text-xs bg-blue-600 hover:bg-blue-700"><Send size={12} />Send</Button>}

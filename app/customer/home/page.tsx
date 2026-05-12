@@ -11,16 +11,19 @@ export default function CustomerHomePage() {
   const router = useRouter()
 
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      router.push("/")
-    }
-    if (!isLoading && user && user.role !== "customer") {
-      router.push("/")
-    }
-  }, [isAuthenticated, isLoading, user, router])
+    if (isLoading) return // ✅ Wait until loading is done
 
-  if (isLoading || !isAuthenticated) {
+    if (!isAuthenticated || user?.role !== "customer") {
+      router.replace("/")
+    }
+  }, [isAuthenticated, isLoading, user?.role]) // ✅ Removed `router`, use `user?.role` not full `user`
+
+  if (isLoading) {
     return <LoadingScreen />
+  }
+
+  if (!isAuthenticated || user?.role !== "customer") {
+    return null
   }
 
   return <CustomerHome />

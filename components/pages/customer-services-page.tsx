@@ -159,6 +159,9 @@ export function CustomerServicesPage() {
   const [emergencyLocation, setEmergencyLocation] = useState("");
   const [walletBalance, setWalletBalance] = useState(0);
   const [emergencyBooked, setEmergencyBooked] = useState(false);
+  const [isEmergencySubmitting, setIsEmergencySubmitting] = useState(false);
+  const [emergencyError, setEmergencyError] = useState("");
+  const [emergencyBookingId, setEmergencyBookingId] = useState<string | null>(null);
   const [allServices, setAllServices] = useState<any[]>([]);
   const [serviceCategories, setServiceCategories] = useState<any[]>([]);
   const [emergencyCategories, setEmergencyCategories] = useState<any[]>([]);
@@ -167,6 +170,25 @@ export function CustomerServicesPage() {
   const handleUnauthorized = useCallback(async () => {
     await logout();
   }, [logout]);
+
+  const mapEmergencyRows = useCallback((rows: any[]) => {
+    return rows.map((row: any) => {
+      const text = [row.label, row.description, row.id]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      const iconEntry = Object.entries(emergencyIconMap).find(([key]) =>
+        text.includes(key),
+      );
+      return {
+        id: String(row.id),
+        label: String(row.label || "Emergency Service"),
+        price: Number(row.price || 0),
+        description: String(row.description || "Urgent service"),
+        icon: iconEntry ? iconEntry[1] : AlertTriangle,
+      };
+    });
+  }, []);
 
   const categories = [
     { id: "all", name: "All Services", icon: Grid3X3 },
@@ -231,7 +253,41 @@ export function CustomerServicesPage() {
       setCurrentLocation((previous) => previous);
       setIsLocating(false);
     }
-  }, [handleUnauthorized, isAuthenticated, isLoading, user?.id]);
+  }, [handleUnauthorized, isAuthenticated, isLoading, mapEmergencyRows, user?.id]);
+
+  const refreshEmergencyCategories = useCallback(async () => {
+    if (isLoading || !isAuthenticated || !user?.id) return;
+
+    try {
+      const response = await fetch("/api/services/emergency", {
+        cache: "no-store",
+      });
+
+      if (response.status === 401) {
+        await handleUnauthorized();
+        return;
+      }
+
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+        return;
+      }
+
+      if (payload.data.length === 0) {
+        return;
+      }
+
+      setEmergencyCategories(mapEmergencyRows(payload.data));
+    } catch {
+      // Keep current emergency data if refresh fails.
+    }
+  }, [handleUnauthorized, isAuthenticated, isLoading, mapEmergencyRows, user?.id]);
+
+  useEffect(() => {
+    refreshEmergencyCategories();
+    const intervalId = window.setInterval(refreshEmergencyCategories, 60000);
+    return () => window.clearInterval(intervalId);
+  }, [refreshEmergencyCategories]);
 
   const loadSavedLocation = useCallback(async () => {
     if (isLoading || !isAuthenticated || !user?.id) {
@@ -391,24 +447,7 @@ export function CustomerServicesPage() {
               ? fallbackEmergencyFromServices
               : DEFAULT_EMERGENCY_CATEGORIES;
 
-        setEmergencyCategories(
-          emergencySource.map((row: any) => {
-            const text = [row.label, row.description, row.id]
-              .filter(Boolean)
-              .join(" ")
-              .toLowerCase();
-            const iconEntry = Object.entries(emergencyIconMap).find(([key]) =>
-              text.includes(key),
-            );
-            return {
-              id: String(row.id),
-              label: String(row.label || "Emergency Service"),
-              price: Number(row.price || 0),
-              description: String(row.description || "Urgent service"),
-              icon: iconEntry ? iconEntry[1] : AlertTriangle,
-            };
-          }),
-        );
+        setEmergencyCategories(mapEmergencyRows(emergencySource));
 
         if (walletRes.ok && walletPayload?.ok) {
           setWalletBalance(Number(walletPayload?.data?.balance || 0));
@@ -471,6 +510,7 @@ export function CustomerServicesPage() {
   const getDownpayment = () =>
     Math.ceil(getBookingTotal() * downpaymentPercent);
   const hasEnoughBalance = () => walletBalance >= getDownpayment();
+  const downpaymentPercentLabel = Math.round(downpaymentPercent * 100);
 
   const handleBookingSubmit = () => {
     if (bookingStep < 3) {
@@ -480,7 +520,7 @@ export function CustomerServicesPage() {
       if (walletBalance < dp) return;
       setWalletBalance((prev) => prev - dp);
       alert(
-        `Booking confirmed! KES ${dp.toLocaleString()} (25% downpayment) deducted from your wallet.`,
+        `Booking confirmed! KES ${dp.toLocaleString()} (${downpaymentPercentLabel}% downpayment) deducted from your wallet.`,
       );
       setShowBookingModal(false);
       setBookingStep(1);
@@ -500,11 +540,55 @@ export function CustomerServicesPage() {
     walletBalance >= getEmergencyDownpayment();
   const displayLocation = currentLocation || "Anywhere";
 
-  const handleEmergencySubmit = () => {
-    const dp = getEmergencyDownpayment();
-    if (walletBalance < dp) return;
-    setWalletBalance((prev) => prev - dp);
-    setEmergencyBooked(true);
+  const handleEmergencySubmit = async () => {
+    if (isEmergencySubmitting) return;
+
+    const selected = getSelectedEmergency();
+    if (!selected?.id) {
+      setEmergencyError("Select an emergency type first.");
+      return;
+    }
+
+    setIsEmergencySubmitting(true);
+    setEmergencyError("");
+
+    try {
+      const response = await fetch("/api/bookings/emergency", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceId: selected.id,
+          description: emergencyDescription.trim(),
+          location: emergencyLocation.trim() || displayLocation,
+        }),
+      });
+
+      if (response.status === 401) {
+        await handleUnauthorized();
+        return;
+      }
+
+      const payload = await response.json();
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to book emergency");
+      }
+
+      if (typeof payload?.data?.walletBalance === "number") {
+        setWalletBalance(payload.data.walletBalance);
+      }
+
+      if (payload?.data?.bookingId) {
+        setEmergencyBookingId(String(payload.data.bookingId));
+      }
+
+      setEmergencyBooked(true);
+    } catch (error) {
+      setEmergencyError(
+        error instanceof Error ? error.message : "Failed to book emergency",
+      );
+    } finally {
+      setIsEmergencySubmitting(false);
+    }
   };
 
   const resetEmergencyWizard = () => {
@@ -514,6 +598,9 @@ export function CustomerServicesPage() {
     setEmergencyDescription("");
     setEmergencyLocation("");
     setEmergencyBooked(false);
+    setEmergencyError("");
+    setEmergencyBookingId(null);
+    setIsEmergencySubmitting(false);
   };
 
   return (
@@ -1113,7 +1200,9 @@ export function CustomerServicesPage() {
                         </span>
                       </div>
                       <div className="flex justify-between border-t border-border pt-2 mt-2">
-                        <span className="font-semibold">Downpayment (25%)</span>
+                        <span className="font-semibold">
+                          Downpayment ({downpaymentPercentLabel}%)
+                        </span>
                         <span className="text-primary font-bold text-base">
                           KES {getDownpayment().toLocaleString()}
                         </span>
@@ -1226,9 +1315,10 @@ export function CustomerServicesPage() {
               <div className="flex items-start gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/30 mb-4">
                 <Info className="w-4 h-4 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
                 <p className="text-xs text-red-700 dark:text-red-400 leading-relaxed">
-                  Emergency services include a <strong>KES 2,000</strong>{" "}
-                  surcharge. A <strong>25% downpayment</strong> is required from
-                  your wallet.
+                  Emergency services include a{" "}
+                  <strong>KES {emergencyFee.toLocaleString()}</strong> surcharge.
+                  A <strong>{downpaymentPercentLabel}% downpayment</strong> is
+                  required from your wallet.
                 </p>
               </div>
 
@@ -1250,7 +1340,9 @@ export function CustomerServicesPage() {
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
                           KES {cat.price.toLocaleString()}{" "}
-                          <span className="text-red-500">+ 2,000</span>
+                          <span className="text-red-500">
+                            + KES {emergencyFee.toLocaleString()}
+                          </span>
                         </p>
                       </button>
                     );
@@ -1338,7 +1430,7 @@ export function CustomerServicesPage() {
                     </div>
                     <div className="flex justify-between border-t border-border pt-2">
                       <span className="font-semibold text-red-600 dark:text-red-400">
-                        Downpayment (25%)
+                        Downpayment ({downpaymentPercentLabel}%)
                       </span>
                       <span className="text-red-600 dark:text-red-400 font-bold text-base">
                         KES {getEmergencyDownpayment().toLocaleString()}
@@ -1370,6 +1462,9 @@ export function CustomerServicesPage() {
                       </Link>
                     </p>
                   )}
+                  {emergencyError && (
+                    <p className="text-xs text-red-600">{emergencyError}</p>
+                  )}
                 </div>
               )}
 
@@ -1393,12 +1488,15 @@ export function CustomerServicesPage() {
                     (emergencyStep === 1 && !emergencyCategory) ||
                     (emergencyStep === 2 &&
                       (!emergencyDescription || !emergencyLocation)) ||
-                    (emergencyStep === 3 && !hasEnoughForEmergency())
+                    (emergencyStep === 3 &&
+                      (!hasEnoughForEmergency() || isEmergencySubmitting))
                   }
                   className={`flex-1 rounded-xl ${emergencyStep === 3 ? "bg-red-600 hover:bg-red-700" : ""}`}
                 >
                   {emergencyStep === 3
-                    ? `Pay KES ${getEmergencyDownpayment().toLocaleString()}`
+                    ? isEmergencySubmitting
+                      ? "Booking..."
+                      : `Pay KES ${getEmergencyDownpayment().toLocaleString()}`
                     : "Continue"}
                 </Button>
               </div>
@@ -1418,6 +1516,11 @@ export function CustomerServicesPage() {
                 KES {getEmergencyDownpayment().toLocaleString()} has been
                 deducted from your wallet.
               </p>
+              {emergencyBookingId && (
+                <p className="text-xs text-muted-foreground mb-6">
+                  Booking reference: {emergencyBookingId}
+                </p>
+              )}
               <Button onClick={resetEmergencyWizard} className="rounded-xl">
                 Done
               </Button>

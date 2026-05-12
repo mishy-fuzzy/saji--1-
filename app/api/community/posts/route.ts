@@ -180,66 +180,62 @@ async function getCommentCounts(serviceIds: string[]) {
 
 export async function GET() {
   try {
-    const [services, users] = await Promise.all([
-      prismaDb.service.findMany({
-        include: {
-          provider: { select: { id: true, name: true, image: true, email: true, emailVerified: true, role: true } },
-        },
-        take: 30,
-        orderBy: { createdAt: "desc" },
-      }),
+    const [users, postRows] = await Promise.all([
       prismaDb.user.findMany({
         where: { deletedAt: null },
-        select: { id: true, name: true, image: true, role: true },
-        take: 20,
+        select: { id: true, name: true, image: true, role: true, emailVerified: true },
+        take: 50,
         orderBy: { createdAt: "desc" },
+      }),
+      prismaDb.authLog.findMany({
+        where: {
+          provider: "system",
+          mode: "provider_post",
+          status: "SUCCESS",
+        },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        select: { email: true, response: true, createdAt: true },
       }),
     ]);
 
-    const serviceIds = services.map((service: any) => String(service.id || "")).filter(Boolean);
-    const providerEmails = Array.from(
-      new Set(
-        services
-          .map((service: any) => String(service?.provider?.email || "").trim())
-          .filter(Boolean),
-      ),
+    const usersById = new Map(
+      users.map((user: any) => [String(user.id || ""), user]),
     );
 
-    const [commentCounts, locationsByEmail] = await Promise.all([
-      getCommentCounts(serviceIds),
-      getLocationByEmail(providerEmails),
-    ]);
-
-    const posts = services.map((service: any) => {
-      const email = String(service?.provider?.email || "").trim();
-      const location = email
-        ? locationsByEmail.get(normalizeEmail(email)) || ""
-        : "";
-      const comments = commentCounts.get(String(service.id || "")) || 0;
+    const posts = postRows.map((row: any) => {
+      const payload = parseJson(row.response) || {};
+      const authorId = String(row.email || "").trim();
+      const author = usersById.get(authorId);
+      const media = Array.isArray(payload.media)
+        ? payload.media.map((item) => String(item || "")).filter(Boolean)
+        : [];
 
       return {
-        id: String(service.id || ""),
+        id: String(row.createdAt?.getTime?.() || row.email || Math.random()),
         author: {
-          id: String(service.provider?.id || ""),
-          name: service.provider?.name || "Provider",
-          avatar: service.provider?.image || "/placeholder.svg",
-          verified: Boolean(service.provider?.emailVerified),
-          role: String(service.provider?.role || service.category || "Specialist"),
+          id: authorId,
+          name: author?.name || "Provider",
+          avatar: author?.image || "/placeholder.svg",
+          verified: Boolean(author?.emailVerified),
+          role: String(author?.role || "provider"),
           followers: 0,
         },
-        content: service.description || service.name,
-        images: service.image ? [service.image] : [],
-        likes: 0,
-        comments,
-        shares: 0,
-        timestamp: new Date(service.createdAt).toLocaleDateString(),
-        location,
+        content: String(payload.caption || ""),
+        images: media,
+        likes: Number(payload.likes || 0),
+        comments: Number(payload.comments || 0),
+        shares: Number(payload.shares || 0),
+        timestamp: new Date(row.createdAt).toLocaleDateString(),
+        location: "",
       };
     });
 
     const trendingCategories = Array.from(
       new Set(
-        services.map((service: any) => String(service.category || "general")),
+        posts
+          .map((post: any) => String(post.content || "general").split(/\s+/)[0] || "general")
+          .filter(Boolean),
       ),
     ) as string[];
 
@@ -247,14 +243,16 @@ export async function GET() {
       .slice(0, 8)
       .map((category: string) => ({
         tag: `#${category.replace(/\s+/g, "")}`,
-        posts: services.filter(
-          (service: any) => String(service.category) === category,
+        posts: posts.filter((post: any) =>
+          String(post.content || "").toLowerCase().includes(category.toLowerCase()),
         ).length,
       }));
 
     const groupCategories = Array.from(
       new Set(
-        services.map((service: any) => String(service.category || "General")),
+        posts
+          .map((post: any) => String(post.author?.role || "Provider"))
+          .filter(Boolean),
       ),
     ) as string[];
 
@@ -263,13 +261,8 @@ export async function GET() {
       .map((name: string) => ({
         id: String(name || "general").toLowerCase().replace(/\s+/g, "-"),
         name: `${name} Community`,
-        members: services.filter(
-          (service: any) => String(service.category || "General") === name,
-        ).length,
-        image:
-          services.find(
-            (service: any) => String(service.category || "General") === name,
-          )?.image || "/placeholder.svg",
+        members: posts.filter((post: any) => String(post.author?.role || "") === name).length,
+        image: posts.find((post: any) => String(post.author?.role || "") === name)?.images?.[0] || "/placeholder.svg",
         description: `${name} discussions and updates`,
       }));
 

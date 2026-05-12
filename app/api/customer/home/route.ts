@@ -142,7 +142,7 @@ export async function GET() {
           provider: { select: { id: true, name: true, image: true } },
           _count: { select: { bookings: true } },
         },
-        take: 40,
+        take: 100,
         orderBy: { createdAt: "desc" },
       }),
       prismaDb.$queryRawUnsafe(

@@ -7,14 +7,14 @@ const STORAGE_KEY = "saji_user"
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [isLoading, setIsLoading] = useState(true) // ✅ Always start as loading
 
-  // Initialize auth on mount
   useEffect(() => {
     let isMounted = true
 
     const initializeAuth = async () => {
+      // ✅ Read localStorage only inside useEffect (client-side only, no SSR mismatch)
       let storedUser: User | null = null
       const stored = localStorage.getItem(STORAGE_KEY)
 
@@ -27,7 +27,6 @@ export function useAuth() {
           }
         } catch {
           localStorage.removeItem(STORAGE_KEY)
-          storedUser = null
         }
       }
 
@@ -44,7 +43,6 @@ export function useAuth() {
           }
         } else if (isMounted) {
           if (response.status === 401 || response.status === 403) {
-            // Clear stale local auth when the session is invalid server-side.
             localStorage.removeItem(STORAGE_KEY)
             setUser(null)
             setIsAuthenticated(false)
@@ -54,10 +52,14 @@ export function useAuth() {
           }
         }
       } catch {
-        // Preserve local auth fallback when network checks are unavailable.
+        // Network failed — keep localStorage user if available
+        if (!storedUser && isMounted) {
+          setUser(null)
+          setIsAuthenticated(false)
+        }
       } finally {
         if (isMounted) {
-          setIsLoading(false)
+          setIsLoading(false) // ✅ Always resolves
         }
       }
     }
@@ -67,7 +69,7 @@ export function useAuth() {
     return () => {
       isMounted = false
     }
-  }, [])
+  }, []) // ✅ Runs once on mount only
 
   const login = useCallback((userData: User) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(userData))
@@ -91,13 +93,6 @@ export function useAuth() {
     },
     [user],
   )
-
-  return {
-    user,
-    isLoading,
-    isAuthenticated,
-    login,
-    logout,
-    switchRole,
-  }
+    
+  return { user, isLoading, isAuthenticated, login, logout, switchRole }
 }

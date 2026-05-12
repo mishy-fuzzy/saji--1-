@@ -137,9 +137,9 @@ export function CustomerJobsPage() {
               ? "completed"
               : rawStatus === "cancelled"
                 ? "cancelled"
-                : rawStatus === "active" || rawStatus === "accepted" || rawStatus === "in_progress"
-                  ? "active"
-                  : "scheduled";
+                : rawStatus === "scheduled"
+                  ? "scheduled"
+                  : "active";
 
           return {
             id: String(row?.id || ""),
@@ -160,11 +160,11 @@ export function CustomerJobsPage() {
             progress:
               rawStatus === "completed"
                 ? 100
-                : rawStatus === "active" || rawStatus === "accepted" || rawStatus === "in_progress"
+                : rawStatus === "active" || rawStatus === "accepted" || rawStatus === "in_progress" || rawStatus === "pending"
                   ? 60
                   : 0,
             eta: "Live",
-            trackable: rawStatus === "active" || rawStatus === "accepted" || rawStatus === "in_progress",
+            trackable: rawStatus === "active" || rawStatus === "accepted" || rawStatus === "in_progress" || rawStatus === "pending",
             reviewed: false,
           };
         });

@@ -109,7 +109,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
     }
 
     loadNotifications()
-    const intervalId = window.setInterval(loadNotifications, 3000)
+    const intervalId = window.setInterval(loadNotifications, 60000)
     return () => window.clearInterval(intervalId)
   }, [handleUnauthorized, isAuthenticated, isLoading, user?.id])
 

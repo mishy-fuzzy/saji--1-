@@ -559,13 +559,6 @@ export function CustomerHome() {
 
         hasShownLoadError.current = false;
       } catch {
-        setLiveProvidersData([]);
-        setFeaturedShopsData([]);
-        setServiceCategoriesData([]);
-        setProjectStoriesData([]);
-        setLiveExpertsData([]);
-        setEmergencyAlertData(null);
-
         if (!hasShownLoadError.current) {
           hasShownLoadError.current = true;
           toast({
@@ -674,10 +667,12 @@ export function CustomerHome() {
         </div>
 
         {/* Live Now Avatars Row */}
+        {liveProvidersData.length > 0 && (
           <LiveNowAvatars
             onJoinLive={handleJoinLive}
             providers={liveProvidersData}
           />
+        )}
 
         {/* Featured Shops */}
         <FeaturedShopsSection shops={featuredShopsData} />
@@ -749,15 +744,16 @@ export function CustomerHome() {
           </div>
 
           {/* Live Workshops */}
-          <div className="mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-base font-bold text-foreground flex items-center gap-2">
-                <Radio className="w-5 h-5 text-red-500 animate-pulse" />
-                Live Workshops
-              </h2>
-            </div>
-            <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-hide lg:flex-col lg:overflow-x-visible">
-              {liveExpertsData.map((stream) => {
+          {liveExpertsData.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-base font-bold text-foreground flex items-center gap-2">
+                  <Radio className="w-5 h-5 text-red-500 animate-pulse" />
+                  Live Workshops
+                </h2>
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-hide lg:flex-col lg:overflow-x-visible">
+                {liveExpertsData.map((stream) => {
                 const joinFee =
                   typeof stream?.joinFee === "number" &&
                   Number.isFinite(stream.joinFee)
@@ -838,9 +834,10 @@ export function CustomerHome() {
                     </div>
                   </div>
                 </Card>
-              )})}
+                )})}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Find Specialists CTA */}

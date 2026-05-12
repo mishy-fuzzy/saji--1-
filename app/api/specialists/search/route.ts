@@ -99,144 +99,147 @@ export async function GET(request: Request) {
     const availableOnly =
       String(searchParams.get("availableOnly") || "false") === "true";
 
-    // Fetch verified providers with their services
-    const services = await prismaDb.service.findMany({
-      where: {
-        provider: {
-          role: "provider",
-          deletedAt: null,
-          isSuspended: false,
-        },
-      },
-      include: {
-        provider: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-            phone: true,
-            email: true,
-            createdAt: true,
-            role: true,
-            status: true,
-          },
-        },
+    const providers = await prismaDb.user.findMany({
+      where: { role: "provider", deletedAt: null, isSuspended: false },
+      select: {
+        id: true,
+        name: true,
+        image: true,
+        phone: true,
+        email: true,
+        createdAt: true,
+        role: true,
       },
       orderBy: { createdAt: "desc" },
       take: 200,
     });
 
+    const providerIds = providers.map((provider: any) => provider.id);
+
+    const services = providerIds.length
+      ? await prismaDb.service.findMany({
+          where: { providerId: { in: providerIds } },
+          orderBy: { createdAt: "desc" },
+          take: 400,
+        })
+      : [];
+
     const providerEmails = Array.from(
       new Set(
-        services
-          .map((service: any) => String(service?.provider?.email || "").trim())
+        providers
+          .map((provider: any) => String(provider?.email || "").trim())
           .filter(Boolean),
       ),
     );
 
-    const locationsByEmail = await getProviderLocationsByEmail(providerEmails);
+    const [locationsByEmail, verificationRows] = await Promise.all([
+      getProviderLocationsByEmail(providerEmails),
+      providerIds.length
+        ? prismaDb.verification.findMany({
+            where: { userId: { in: providerIds } },
+            select: { userId: true, status: true },
+          })
+        : Promise.resolve([]),
+    ]);
 
-    // Also fetch verification status for each provider
-    const grouped = new Map<string, any[]>();
+    const verificationByUserId = new Map(
+      (verificationRows || []).map((row: any) => [String(row.userId), row]),
+    );
+
+    const servicesByProvider = new Map<string, any[]>();
     services.forEach((service: any) => {
       const providerId = String(service.providerId || "");
       if (!providerId) return;
-      const current = grouped.get(providerId) || [];
+      const current = servicesByProvider.get(providerId) || [];
       current.push(service);
-      grouped.set(providerId, current);
+      servicesByProvider.set(providerId, current);
     });
 
     let specialists = await Promise.all(
-      Array.from(grouped.entries()).map(
-        async ([providerId, providerServices], index) => {
-          const first = providerServices[0];
-          const provider = first?.provider || {};
-          
-          // Fetch verification status
-          const verification = await prismaDb.verification.findFirst({
-            where: { userId: providerId },
-            select: { status: true, createdAt: true },
-          });
+      providers.map(async (provider: any, index: number) => {
+        const providerId = String(provider.id || "");
+        const providerServices = servicesByProvider.get(providerId) || [];
+        const first = providerServices[0];
+        const verification = verificationByUserId.get(providerId);
 
-          const skills = Array.from(
-            new Set(
-              providerServices.map((row: any) =>
-                String(row.category || "Service"),
-              ),
+        const skills = Array.from(
+          new Set(
+            providerServices.map((row: any) =>
+              String(row.category || "Service"),
             ),
-          );
+          ),
+        );
 
-          const providerEmail = safeText(provider.email);
-          const locationSnapshot = providerEmail
-            ? locationsByEmail.get(normalizeEmail(providerEmail))
-            : null;
-          const locationLabel = safeText(locationSnapshot?.location);
-          const coordsFromLabel = parseCoordinateLabel(locationLabel);
-          const latitude =
-            typeof locationSnapshot?.latitude === "number" &&
-            Number.isFinite(locationSnapshot.latitude)
-              ? locationSnapshot.latitude
-              : coordsFromLabel?.latitude;
-          const longitude =
-            typeof locationSnapshot?.longitude === "number" &&
-            Number.isFinite(locationSnapshot.longitude)
-              ? locationSnapshot.longitude
-              : coordsFromLabel?.longitude;
-          let resolvedLocation = locationLabel;
+        const providerEmail = safeText(provider.email);
+        const locationSnapshot = providerEmail
+          ? locationsByEmail.get(normalizeEmail(providerEmail))
+          : null;
+        const locationLabel = safeText(locationSnapshot?.location);
+        const coordsFromLabel = parseCoordinateLabel(locationLabel);
+        const latitude =
+          typeof locationSnapshot?.latitude === "number" &&
+          Number.isFinite(locationSnapshot.latitude)
+            ? locationSnapshot.latitude
+            : coordsFromLabel?.latitude;
+        const longitude =
+          typeof locationSnapshot?.longitude === "number" &&
+          Number.isFinite(locationSnapshot.longitude)
+            ? locationSnapshot.longitude
+            : coordsFromLabel?.longitude;
+        let resolvedLocation = locationLabel;
 
-          if (
-            (!resolvedLocation || coordsFromLabel) &&
-            Number.isFinite(latitude) &&
-            Number.isFinite(longitude)
-          ) {
-            const name = await resolveLocationName(latitude, longitude);
-            if (name) {
-              resolvedLocation = name;
-            }
+        if (
+          (!resolvedLocation || coordsFromLabel) &&
+          Number.isFinite(latitude) &&
+          Number.isFinite(longitude)
+        ) {
+          const name = await resolveLocationName(latitude, longitude);
+          if (name) {
+            resolvedLocation = name;
           }
+        }
 
-          const safeLatitude = Number.isFinite(latitude)
-            ? (latitude as number)
-            : -1.286389;
-          const safeLongitude = Number.isFinite(longitude)
-            ? (longitude as number)
-            : 36.817223;
-          const locationName = resolvedLocation || "Kenya";
+        const safeLatitude = Number.isFinite(latitude)
+          ? (latitude as number)
+          : -1.286389;
+        const safeLongitude = Number.isFinite(longitude)
+          ? (longitude as number)
+          : 36.817223;
+        const locationName = resolvedLocation || "Kenya";
 
-          return {
-            id: index + 1,
-            providerId,
-            name: String(provider.name || "Specialist"),
-            email: String(provider.email || ""),
-            verified: verification?.status === "approved",
-            available: true,
-            rating: 5,
-            reviews: 0,
-            skills,
-            avatar: String(provider.image || "/placeholder.svg"),
-            location: {
-              lat: safeLatitude,
-              lng: safeLongitude,
-              name: locationName,
-            },
-            distance: "-",
-            bio: String(first?.description || "Professional specialist"),
-            phone: String(provider.phone || "Not provided"),
-            hourlyRate: Number(first?.basePrice || 0),
-            hiredByNeighbors: [],
-            badges: verification?.status === "approved" ? ["verified"] : [],
-            endorsements: [],
-            completedJobs: 0,
-            yearsExperience: 0,
-            workSamples: providerServices.slice(0, 3).map((row: any) => ({
-              type: "image",
-              title: String(row.name || "Service"),
-              thumbnail: String(row.image || "/placeholder.svg"),
-            })),
-            videos: [],
-          };
-        },
-      ),
+        return {
+          id: index + 1,
+          providerId,
+          name: String(provider.name || "Specialist"),
+          email: String(provider.email || ""),
+          verified: verification?.status === "approved",
+          available: true,
+          rating: 5,
+          reviews: 0,
+          skills,
+          avatar: String(provider.image || "/placeholder.svg"),
+          location: {
+            lat: safeLatitude,
+            lng: safeLongitude,
+            name: locationName,
+          },
+          distance: "-",
+          bio: String(first?.description || "Professional specialist"),
+          phone: String(provider.phone || "Not provided"),
+          hourlyRate: Number(first?.basePrice || 0),
+          hiredByNeighbors: [],
+          badges: verification?.status === "approved" ? ["verified"] : [],
+          endorsements: [],
+          completedJobs: 0,
+          yearsExperience: 0,
+          workSamples: providerServices.slice(0, 3).map((row: any) => ({
+            type: "image",
+            title: String(row.name || "Service"),
+            thumbnail: String(row.image || "/placeholder.svg"),
+          })),
+          videos: [],
+        };
+      }),
     );
 
     if (skill !== "all") {

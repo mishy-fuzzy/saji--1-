@@ -156,7 +156,7 @@ async function getLocationByEmail(emails: string[]) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(String(searchParams.get("limit") || "10"), 10);
+    const limit = parseInt(String(searchParams.get("limit") || "100"), 10);
     const category = String(searchParams.get("category") || "").trim();
 
     const services = await db.service.findMany({
@@ -174,7 +174,7 @@ export async function GET(request: Request) {
       orderBy: {
         createdAt: "desc",
       },
-      take: limit || 10,
+      take: limit || 100,
     });
 
     // Get booking count as proxy for reviews

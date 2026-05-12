@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/server/db";
 
 const prismaDb: any = db;
+const REFERRAL_DISCOUNT_KES = 300;
+const REFERRAL_REWARD_KES = 500;
 
 async function sendSmsNotification(phone: string, message: string) {
   try {
@@ -56,19 +58,103 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { customerId, providerId, serviceId, amount, currency } = body;
+    const bookingAmount = Math.max(1, Number(amount || 0));
 
-    const booking = await prismaDb.booking.create({
-      data: {
-        customerId,
-        providerId,
-        serviceId,
-        amount,
-        currency,
-        status: "pending",
-      },
+    const result = await prismaDb.$transaction(async (tx: any) => {
+      const pendingReferral = await tx.referral.findFirst({
+        where: {
+          referredId: String(customerId || ""),
+          status: { not: "completed" },
+        },
+        select: {
+          id: true,
+          referrerId: true,
+        },
+      });
+
+      const discountAmount = pendingReferral
+        ? Math.min(REFERRAL_DISCOUNT_KES, bookingAmount - 1)
+        : 0;
+      const finalAmount = Math.max(1, bookingAmount - discountAmount);
+
+      const booking = await tx.booking.create({
+        data: {
+          customerId,
+          providerId,
+          serviceId,
+          amount: finalAmount,
+          currency,
+          status: "pending",
+        },
+      });
+
+      let referralRewarded = false;
+
+      if (pendingReferral) {
+        const updated = await tx.referral.updateMany({
+          where: {
+            id: pendingReferral.id,
+            status: { not: "completed" },
+          },
+          data: {
+            status: "completed",
+            reward: REFERRAL_REWARD_KES,
+          },
+        });
+
+        if (updated.count > 0) {
+          referralRewarded = true;
+
+          await tx.wallet.upsert({
+            where: { userId: pendingReferral.referrerId },
+            update: {
+              balance: {
+                increment: REFERRAL_REWARD_KES,
+              },
+            },
+            create: {
+              userId: pendingReferral.referrerId,
+              balance: REFERRAL_REWARD_KES,
+              currency: String(currency || "KES"),
+            },
+          });
+
+          await tx.authLog.create({
+            data: {
+              provider: "local",
+              mode: "referral-completed",
+              email: undefined,
+              status: "SUCCESS",
+              response: JSON.stringify({
+                referredId: customerId,
+                referrerId: pendingReferral.referrerId,
+                reward: REFERRAL_REWARD_KES,
+                discount: discountAmount,
+                source: "first-booking",
+                bookingId: booking.id,
+              }),
+            },
+          });
+        }
+      }
+
+      return {
+        booking,
+        discountAmount,
+        finalAmount,
+        referralRewarded,
+      };
     });
 
-    return NextResponse.json({ ok: true, data: booking });
+    return NextResponse.json({
+      ok: true,
+      data: {
+        ...result.booking,
+        discountAmount: result.discountAmount,
+        referralRewarded: result.referralRewarded,
+        originalAmount: result.finalAmount + result.discountAmount,
+      },
+    });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to create booking";

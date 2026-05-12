@@ -78,6 +78,7 @@ export default function ProviderHomePage() {
   const [endorsementShop, setEndorsementShop] = useState("");
   const [endorsementMessage, setEndorsementMessage] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [liveSessionId, setLiveSessionId] = useState<string | null>(null);
   const [streamViewers, setStreamViewers] = useState(0);
   const [streamComments, setStreamComments] = useState<
     { user: string; text: string }[]
@@ -221,6 +222,15 @@ export default function ProviderHomePage() {
     if (durationRef.current) clearInterval(durationRef.current);
     if (viewerRef.current) clearInterval(viewerRef.current);
     if (giftRef.current) clearInterval(giftRef.current);
+    if (liveSessionId) {
+      fetch(`/api/live-sessions?id=${encodeURIComponent(liveSessionId)}`, {
+        method: "DELETE",
+        cache: "no-store",
+      }).catch(() => {
+        /* keep local end state even if persistence fails */
+      });
+    }
+    setLiveSessionId(null);
     setIsStreaming(false);
     setShowStreamEnd(true);
   };
@@ -466,6 +476,28 @@ export default function ProviderHomePage() {
         text: `You are now LIVE with ${initialViewers} active viewers based on your current activity.`,
       },
     ]);
+
+    try {
+      const response = await fetch("/api/live-sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kind: streamCategory === "qa" ? "workshop" : "provider",
+          title: streamTitle.trim(),
+          category: streamCategory,
+          description: streamDescription.trim(),
+          joinFee: streamIsPaid ? Number(streamEntryFee || 0) : 0,
+          viewers: initialViewers,
+          thumbnail: user?.image || null,
+        }),
+      });
+      const payload = await response.json();
+      if (response.ok && payload?.ok && payload?.data?.id) {
+        setLiveSessionId(String(payload.data.id));
+      }
+    } catch {
+      // Keep the live UI usable even if persistence is temporarily unavailable.
+    }
 
     // Duration timer
     durationRef.current = setInterval(() => {

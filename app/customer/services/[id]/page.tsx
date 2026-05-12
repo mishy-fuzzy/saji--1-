@@ -52,7 +52,7 @@ export default function ServiceDetailPage() {
         rating: 5,
         reviews: 0,
         price: Number(service.basePrice || 0),
-        responseTime: "Live",
+        responseTime: "Usually responds soon",
         jobs: 0,
         bio: String(service.description || "Professional service provider"),
         image: String(service?.provider?.image || "/placeholder.svg"),

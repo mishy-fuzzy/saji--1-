@@ -1,26 +1,24 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Award, Upload, Check, Clock, X, Plus, FileText, Shield, Star, AlertCircle, ExternalLink } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { useAuthContext } from "@/lib/auth-context"
 
 type Certification = {
-  id: number; name: string; issuer: string; dateIssued: string; expiryDate: string
+  id: string; name: string; issuer: string; dateIssued: string; expiryDate: string
   status: "verified" | "pending" | "expired"; category: string; documentUrl?: string
 }
 
 export default function CertificationsPage() {
-  const [certifications, setCertifications] = useState<Certification[]>([
-    { id: 1, name: "Licensed Plumber", issuer: "National Construction Authority", dateIssued: "2024-03-15", expiryDate: "2027-03-15", status: "verified", category: "Plumbing" },
-    { id: 2, name: "Electrical Wiring Certificate", issuer: "Kenya Power Training Institute", dateIssued: "2023-08-20", expiryDate: "2026-08-20", status: "verified", category: "Electrical" },
-    { id: 3, name: "First Aid & Safety", issuer: "Red Cross Kenya", dateIssued: "2025-01-10", expiryDate: "2026-01-10", status: "expired", category: "Safety" },
-    { id: 4, name: "Building Inspection Certificate", issuer: "Nairobi County Gov", dateIssued: "2026-02-01", expiryDate: "2029-02-01", status: "pending", category: "Building" },
-  ])
+  const { user } = useAuthContext()
+  const [certifications, setCertifications] = useState<Certification[]>([])
   const [showAdd, setShowAdd] = useState(false)
   const [newCert, setNewCert] = useState({ name: "", issuer: "", dateIssued: "", expiryDate: "", category: "Plumbing" })
+  const [isSaving, setIsSaving] = useState(false)
 
   const statusConfig: Record<string, { color: string; label: string; icon: typeof Check }> = {
     verified: { color: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400", label: "Verified", icon: Check },
@@ -28,13 +26,81 @@ export default function CertificationsPage() {
     expired: { color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400", label: "Expired", icon: AlertCircle },
   }
 
-  const addCert = () => {
-    setCertifications(prev => [...prev, { id: Date.now(), ...newCert, status: "pending" }])
-    setShowAdd(false)
-    setNewCert({ name: "", issuer: "", dateIssued: "", expiryDate: "", category: "Plumbing" })
+  useEffect(() => {
+    if (!user?.id) return
+
+    let cancelled = false
+
+    const loadCertifications = async () => {
+      try {
+        const response = await fetch("/api/provider/certifications", { cache: "no-store" })
+        const payload = await response.json()
+        if (cancelled) return
+
+        if (response.ok && payload?.ok && Array.isArray(payload?.data)) {
+          setCertifications(payload.data as Certification[])
+          return
+        }
+
+        setCertifications([])
+      } catch {
+        if (!cancelled) {
+          setCertifications([])
+        }
+      }
+    }
+
+    loadCertifications()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?.id])
+
+  const addCert = async () => {
+    if (!newCert.name.trim() || !newCert.issuer.trim() || isSaving) return
+
+    setIsSaving(true)
+    try {
+      const response = await fetch("/api/provider/certifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newCert.name.trim(),
+          issuer: newCert.issuer.trim(),
+          dateIssued: newCert.dateIssued,
+          expiryDate: newCert.expiryDate,
+          category: newCert.category,
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok || !payload?.data) {
+        throw new Error(payload?.error || "Failed to add certification")
+      }
+
+      setCertifications((prev) => [payload.data as Certification, ...prev])
+      setShowAdd(false)
+      setNewCert({ name: "", issuer: "", dateIssued: "", expiryDate: "", category: "Plumbing" })
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to add certification")
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const removeCert = (id: number) => setCertifications(prev => prev.filter(c => c.id !== id))
+  const removeCert = async (id: string) => {
+    try {
+      const response = await fetch(`/api/provider/certifications/${encodeURIComponent(id)}`, { method: "DELETE" })
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok) {
+        throw new Error(payload?.error || "Failed to remove certification")
+      }
+
+      setCertifications(prev => prev.filter(c => c.id !== id))
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to remove certification")
+    }
+  }
 
   const verifiedCount = certifications.filter(c => c.status === "verified").length
 
@@ -86,34 +152,40 @@ export default function CertificationsPage() {
 
       {/* Certifications List */}
       <div className="space-y-2">
-        {certifications.map(cert => {
-          const config = statusConfig[cert.status]
-          const StatusIcon = config.icon
-          return (
-            <Card key={cert.id} className="p-4 border border-border rounded-xl">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0"><Award className="w-5 h-5 text-primary" /></div>
-                  <div>
-                    <h4 className="font-semibold text-foreground text-sm">{cert.name}</h4>
-                    <p className="text-xs text-muted-foreground">{cert.issuer}</p>
-                    <div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted-foreground">
-                      <span>Issued: {cert.dateIssued}</span>
-                      <span>Expires: {cert.expiryDate}</span>
-                      <span className="bg-muted px-1.5 py-0.5 rounded-full">{cert.category}</span>
+        {certifications.length === 0 ? (
+          <Card className="p-4 border border-border rounded-xl">
+            <p className="text-sm text-muted-foreground">No certifications submitted yet.</p>
+          </Card>
+        ) : (
+          certifications.map(cert => {
+            const config = statusConfig[cert.status]
+            const StatusIcon = config.icon
+            return (
+              <Card key={cert.id} className="p-4 border border-border rounded-xl">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0"><Award className="w-5 h-5 text-primary" /></div>
+                    <div>
+                      <h4 className="font-semibold text-foreground text-sm">{cert.name}</h4>
+                      <p className="text-xs text-muted-foreground">{cert.issuer}</p>
+                      <div className="flex items-center gap-3 mt-1.5 text-[10px] text-muted-foreground">
+                        <span>Issued: {cert.dateIssued}</span>
+                        <span>Expires: {cert.expiryDate}</span>
+                        <span className="bg-muted px-1.5 py-0.5 rounded-full">{cert.category}</span>
+                      </div>
                     </div>
                   </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${config.color}`}>
+                      <StatusIcon className="w-3 h-3" />{config.label}
+                    </span>
+                    <button onClick={() => removeCert(cert.id)} className="p-1 rounded hover:bg-destructive/10 transition-colors"><X className="w-3.5 h-3.5 text-destructive" /></button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex items-center gap-1 ${config.color}`}>
-                    <StatusIcon className="w-3 h-3" />{config.label}
-                  </span>
-                  <button onClick={() => removeCert(cert.id)} className="p-1 rounded hover:bg-destructive/10 transition-colors"><X className="w-3.5 h-3.5 text-destructive" /></button>
-                </div>
-              </div>
-            </Card>
-          )
-        })}
+              </Card>
+            )
+          })
+        )}
       </div>
 
       {/* Add Dialog */}
@@ -136,7 +208,7 @@ export default function CertificationsPage() {
             </div>
             <div className="flex gap-2 pt-2">
               <Button variant="outline" onClick={() => setShowAdd(false)} className="flex-1 rounded-xl">Cancel</Button>
-              <Button onClick={addCert} disabled={!newCert.name.trim()} className="flex-1 rounded-xl">Submit for Review</Button>
+              <Button onClick={addCert} disabled={!newCert.name.trim() || !newCert.issuer.trim() || isSaving} className="flex-1 rounded-xl">Submit for Review</Button>
             </div>
           </div>
         </DialogContent>

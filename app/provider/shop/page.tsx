@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Store, Package, Plus, Upload, Camera, Search, Edit2, Trash2, Eye, EyeOff, Tag, TrendingUp, ShoppingBag, X, Check, AlertCircle, Barcode, Truck, CreditCard, Shield, ChevronDown } from "lucide-react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -47,6 +47,7 @@ export default function ShopPage() {
   const [activeTab, setActiveTab] = useState<"products" | "orders" | "settings">("products")
   const [postType, setPostType] = useState<"product" | "service" | "bulk">("product")
   const [searchQuery, setSearchQuery] = useState("")
+  const [isLoadingShop, setIsLoadingShop] = useState(true)
 
   const [products, setProducts] = useState<Product[]>([
     { id: 1, name: "Farm-Fresh Sukuma", description: "Fresh organically grown sukuma wiki from local farms", category: "Fresh Produce", price: 30, maxRetailPrice: 35, costPrice: 17, quantity: 75, unit: "Bundles", sellingMode: "retail", sourceStock: "saji", isActive: true, sales: 234, margin: 27, demand: "high" },
@@ -61,9 +62,73 @@ export default function ShopPage() {
     sourceStock: "saji" as "saji" | "local",
   })
 
-  const handleRegister = () => {
-    setShopDetails(prev => ({ ...prev, registered: true }))
-    setShowRegister(false)
+  useEffect(() => {
+    const loadShop = async () => {
+      try {
+        const response = await fetch("/api/provider/shop", { cache: "no-store" })
+        const payload = await response.json()
+
+        if (!response.ok || !payload?.ok || !payload?.data) {
+          return
+        }
+
+        setShopDetails((prev) => ({
+          ...prev,
+          registered: Boolean(payload.data.registered),
+          name: String(payload.data.name || prev.name),
+          description: String(payload.data.description || prev.description),
+          category: String(payload.data.category || prev.category),
+          location: String(payload.data.location || prev.location),
+          phone: String(payload.data.phone || prev.phone),
+          permitNumber: String(payload.data.permitNumber || prev.permitNumber),
+          kraPin: String(payload.data.kraPin || prev.kraPin),
+        }))
+      } catch {
+        // Keep the registration CTA visible when the shop record cannot be loaded.
+      } finally {
+        setIsLoadingShop(false)
+      }
+    }
+
+    loadShop()
+  }, [])
+
+  const handleRegister = async () => {
+    try {
+      const response = await fetch("/api/provider/shop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: shopDetails.name,
+          description: shopDetails.description,
+          category: shopDetails.category,
+          location: shopDetails.location,
+          phone: shopDetails.phone,
+          permitNumber: shopDetails.permitNumber,
+          kraPin: shopDetails.kraPin,
+        }),
+      })
+
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok || !payload?.data?.registered) {
+        throw new Error(payload?.error || "Failed to register shop")
+      }
+
+      setShopDetails((prev) => ({
+        ...prev,
+        registered: true,
+        name: String(payload.data.name || prev.name),
+        description: String(payload.data.description || prev.description),
+        category: String(payload.data.category || prev.category),
+        location: String(payload.data.location || prev.location),
+        phone: String(payload.data.phone || prev.phone),
+        permitNumber: String(payload.data.permitNumber || prev.permitNumber),
+        kraPin: String(payload.data.kraPin || prev.kraPin),
+      }))
+      setShowRegister(false)
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Failed to register shop")
+    }
   }
 
   const addProduct = () => {
@@ -91,6 +156,16 @@ export default function ShopPage() {
   const demandColors = { high: "text-emerald-600 bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-400", medium: "text-amber-600 bg-amber-100 dark:bg-amber-900/30 dark:text-amber-400", low: "text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400" }
 
   // Not registered - show upgrade CTA
+  if (isLoadingShop) {
+    return (
+      <div className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
+        <Card className="p-8 border border-border rounded-xl text-center">
+          <p className="text-sm text-muted-foreground">Loading shop details...</p>
+        </Card>
+      </div>
+    )
+  }
+
   if (!shopDetails.registered) {
     return (
       <div className="p-4 lg:p-6 max-w-3xl mx-auto space-y-6">
@@ -165,7 +240,7 @@ export default function ShopPage() {
               </div>
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" onClick={() => setShowRegister(false)} className="flex-1 rounded-xl">Cancel</Button>
-                <Button onClick={handleRegister} disabled={!shopDetails.name.trim() || !shopDetails.location.trim()} className="flex-1 rounded-xl">Register Shop</Button>
+                <Button onClick={handleRegister} disabled={!shopDetails.name.trim() || !shopDetails.location.trim() || !shopDetails.phone.trim() || !shopDetails.description.trim()} className="flex-1 rounded-xl">Register Shop</Button>
               </div>
             </div>
           </DialogContent>
@@ -304,7 +379,7 @@ export default function ShopPage() {
               <Input value={shopDetails.category} readOnly className="rounded-lg bg-card border-border" />
             </div>
           </div>
-          <Button className="rounded-xl"><Check className="w-4 h-4 mr-1" />Save Changes</Button>
+          <Button onClick={handleRegister} className="rounded-xl"><Check className="w-4 h-4 mr-1" />Save Changes</Button>
         </Card>
       )}
 
