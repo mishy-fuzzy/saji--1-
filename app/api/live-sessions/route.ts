@@ -4,145 +4,26 @@ import { getSessionActor, hasAnyRole } from "@/lib/server/api-auth";
 
 const prismaDb: any = db;
 
-function toText(value: unknown): string {
+function safeText(value: unknown): string {
   return String(value || "").trim();
 }
 
-function toInt(value: unknown, fallback = 0): number {
+function toOptionalNumber(value: unknown): number | null {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.round(parsed);
+}
+
+function toPositiveInt(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.max(0, Math.round(parsed));
 }
 
-export async function GET(request: Request) {
-  try {
-    const { actor, error } = await getSessionActor(request);
-    if (error || !actor) return error;
-
-    const sessions = await prismaDb.liveSession.findMany({
-      where: { deletedAt: null, status: "live" },
-      orderBy: { updatedAt: "desc" },
-      take: 50,
-      include: {
-        host: {
-          select: { id: true, name: true, image: true, role: true },
-        },
-      },
-    });
-
-    return NextResponse.json({ ok: true, data: sessions });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to load live sessions";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const { actor, error } = await getSessionActor(request);
-    if (error || !actor) return error;
-
-    if (!hasAnyRole(actor, ["provider", "shopkeeper", "admin", "sub-admin", "subadmin"])) {
-      return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
-    }
-
-    const body = await request.json().catch(() => ({}));
-    const kind = toText(body?.kind) === "workshop" ? "workshop" : "provider";
-    const title = toText(body?.title) || "Live Session";
-    const category = toText(body?.category) || null;
-    const description = toText(body?.description) || null;
-    const thumbnail = toText(body?.thumbnail) || null;
-    const joinFee = toInt(body?.joinFee, 0);
-    const viewers = toInt(body?.viewers, 0);
-
-    const existing = await prismaDb.liveSession.findFirst({
-      where: {
-        hostUserId: actor.id,
-        deletedAt: null,
-        status: "live",
-      },
-      select: { id: true },
-    });
-
-    const payload = {
-      hostUserId: actor.id,
-      kind,
-      title,
-      category,
-      description,
-      thumbnail,
-      joinFee,
-      viewers,
-      status: "live",
-      startsAt: new Date(),
-      endsAt: null,
-      deletedAt: null,
-    };
-
-    const session = existing
-      ? await prismaDb.liveSession.update({
-          where: { id: existing.id },
-          data: payload,
-        })
-      : await prismaDb.liveSession.create({
-          data: payload,
-        });
-
-    return NextResponse.json({ ok: true, data: session });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to start live session";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: Request) {
-  try {
-    const { actor, error } = await getSessionActor(request);
-    if (error || !actor) return error;
-
-    if (!hasAnyRole(actor, ["provider", "shopkeeper", "admin", "sub-admin", "subadmin"])) {
-      return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const id = toText(searchParams.get("id"));
-
-    const session = id
-      ? await prismaDb.liveSession.findFirst({
-          where: { id, hostUserId: actor.id, deletedAt: null },
-          select: { id: true },
-        })
-      : await prismaDb.liveSession.findFirst({
-          where: { hostUserId: actor.id, deletedAt: null, status: "live" },
-          orderBy: { updatedAt: "desc" },
-          select: { id: true },
-        });
-
-    if (!session) {
-      return NextResponse.json({ ok: true, data: null });
-    }
-
-    await prismaDb.liveSession.update({
-      where: { id: session.id },
-      data: {
-        status: "ended",
-        endsAt: new Date(),
-      },
-    });
-
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to stop live session";
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
-  }
-}import { NextResponse } from "next/server";
-import { db } from "@/lib/server/db";
-import { getSessionActor, hasAnyRole } from "@/lib/server/api-auth";
-
-const prismaDb: any = db;
-
-function safeText(value: unknown): string {
-  return String(value || "").trim();
+function parseDate(value: unknown): Date | null {
+  if (!value) return null;
+  const date = new Date(String(value));
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 async function ensureLiveSessionTable() {
@@ -172,12 +53,6 @@ async function ensureLiveSessionTable() {
   for (const statement of statements) {
     await prismaDb.$executeRawUnsafe(statement);
   }
-}
-
-function parseDate(value: unknown): Date | null {
-  if (!value) return null;
-  const date = new Date(String(value));
-  return Number.isNaN(date.getTime()) ? null : date;
 }
 
 export async function GET(request: Request) {
@@ -239,44 +114,49 @@ export async function POST(request: Request) {
     await ensureLiveSessionTable();
 
     const body = await request.json().catch(() => ({}));
-    const kind = safeText(body?.kind) || "provider";
-    if (!(["provider", "workshop"] as const).includes(kind as "provider" | "workshop")) {
-      return NextResponse.json(
-        { ok: false, error: "kind must be provider or workshop" },
-        { status: 400 },
-      );
-    }
-
-    const status = safeText(body?.status) || "live";
-    const title = safeText(body?.title) || null;
+    const kind = safeText(body?.kind) === "workshop" ? "workshop" : "provider";
+    const title = safeText(body?.title) || "Live Session";
     const category = safeText(body?.category) || null;
     const description = safeText(body?.description) || null;
     const thumbnail = safeText(body?.thumbnail) || null;
-    const joinFee = Number.isFinite(body?.joinFee) ? Number(body.joinFee) : null;
-    const viewers = Number.isFinite(body?.viewers) ? Number(body.viewers) : 0;
-    const startsAt = parseDate(body?.startsAt);
-    const endsAt = parseDate(body?.endsAt);
+    const joinFee = toOptionalNumber(body?.joinFee);
+    const viewers = toPositiveInt(body?.viewers, 0);
 
-    const session = await prismaDb.liveSession.create({
-      data: {
+    const existing = await prismaDb.liveSession.findFirst({
+      where: {
         hostUserId: actor.id,
-        kind,
-        status,
-        title,
-        category,
-        description,
-        thumbnail,
-        joinFee,
-        viewers,
-        startsAt,
-        endsAt,
+        deletedAt: null,
+        status: "live",
       },
+      select: { id: true, startsAt: true },
     });
+
+    const payload = {
+      hostUserId: actor.id,
+      kind,
+      title,
+      category,
+      description,
+      thumbnail,
+      joinFee,
+      viewers,
+      status: "live",
+      startsAt: existing?.startsAt || new Date(),
+      endsAt: null,
+      deletedAt: null,
+    };
+
+    const session = existing
+      ? await prismaDb.liveSession.update({
+          where: { id: existing.id },
+          data: payload,
+        })
+      : await prismaDb.liveSession.create({ data: payload });
 
     return NextResponse.json({ ok: true, data: session });
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Failed to create live session";
+      error instanceof Error ? error.message : "Failed to start live session";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
@@ -333,6 +213,51 @@ export async function PATCH(request: Request) {
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to update live session";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { actor, error } = await getSessionActor(request);
+    if (error || !actor) return error;
+
+    if (!hasAnyRole(actor, ["provider", "shopkeeper", "admin", "sub-admin", "subadmin"])) {
+      return NextResponse.json({ ok: false, error: "Forbidden" }, { status: 403 });
+    }
+
+    await ensureLiveSessionTable();
+
+    const { searchParams } = new URL(request.url);
+    const id = safeText(searchParams.get("id"));
+
+    const session = id
+      ? await prismaDb.liveSession.findFirst({
+          where: { id, hostUserId: actor.id, deletedAt: null },
+          select: { id: true },
+        })
+      : await prismaDb.liveSession.findFirst({
+          where: { hostUserId: actor.id, deletedAt: null, status: "live" },
+          orderBy: { updatedAt: "desc" },
+          select: { id: true },
+        });
+
+    if (!session) {
+      return NextResponse.json({ ok: true, data: null });
+    }
+
+    await prismaDb.liveSession.update({
+      where: { id: session.id },
+      data: {
+        status: "ended",
+        endsAt: new Date(),
+      },
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Failed to stop live session";
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

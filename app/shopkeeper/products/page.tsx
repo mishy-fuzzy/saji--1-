@@ -182,17 +182,43 @@ export default function ShopkeeperProductsPage() {
   ) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const result = reader.result as string;
-        setImagePreview(result);
-        if (isNew) {
-          setNewProductForm({ ...newProductForm, image: result });
-        } else {
-          setEditForm({ ...editForm, image: result });
+      // Upload file to R2 via presign API and store returned public URL
+      (async () => {
+        try {
+          const presignResp = await fetch('/api/r2/presign', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filename: file.name, contentType: file.type }),
+          });
+
+          const presignJson = await presignResp.json();
+          if (!presignResp.ok || !presignJson?.uploadUrl) {
+            throw new Error(presignJson?.message || 'Failed to get presigned url');
+          }
+
+          // PUT to R2 upload URL
+          const putResp = await fetch(presignJson.uploadUrl, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file,
+          });
+
+          if (!putResp.ok) {
+            throw new Error('Failed to upload image to R2');
+          }
+
+          const publicUrl = presignJson.publicUrl || '';
+          setImagePreview(publicUrl);
+          if (isNew) {
+            setNewProductForm({ ...newProductForm, image: publicUrl });
+          } else {
+            setEditForm({ ...editForm, image: publicUrl });
+          }
+        } catch (err) {
+          console.error('image_upload_error', err);
+          alert(err instanceof Error ? err.message : 'Image upload failed');
         }
-      };
-      reader.readAsDataURL(file);
+      })();
     }
   };
 
@@ -695,12 +721,11 @@ export default function ShopkeeperProductsPage() {
                 />
                 <label htmlFor="new-image-input" className="cursor-pointer">
                   {imagePreview ? (
-                    <div className="relative w-full h-48 mb-3">
-                      <Image
-                        src={imagePreview || "/placeholder.svg"}
+                    <div className="w-full h-48 mb-3 flex items-center justify-center bg-white/30 rounded-md overflow-hidden">
+                      <img
+                        src={imagePreview}
                         alt="Preview"
-                        fill
-                        className="object-contain"
+                        className="w-full h-full object-contain"
                       />
                     </div>
                   ) : (
@@ -839,12 +864,11 @@ export default function ShopkeeperProductsPage() {
                 />
                 <label htmlFor="edit-image-input" className="cursor-pointer">
                   {imagePreview ? (
-                    <div className="relative w-full h-48 mb-3">
-                      <Image
-                        src={imagePreview || "/placeholder.svg"}
+                    <div className="w-full h-48 mb-3 flex items-center justify-center bg-white/30 rounded-md overflow-hidden">
+                      <img
+                        src={imagePreview}
                         alt="Preview"
-                        fill
-                        className="object-contain"
+                        className="w-full h-full object-contain"
                       />
                     </div>
                   ) : (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Megaphone, Plus, Send, Users, Clock, Eye, Trash2, Edit3 } from "lucide-react"
@@ -13,8 +13,10 @@ type Announcement = {
   audience: string
   status: "sent" | "scheduled" | "draft"
   sentAt: string
+  scheduledFor?: string | null
   views: number
   type: string
+  requestedChannels?: string[]
   deliveryChannels: string[]
 }
 
@@ -28,51 +30,118 @@ export default function AdminAnnouncementsPage() {
   const [newAudience, setNewAudience] = useState("All Users")
   const [filter, setFilter] = useState("all")
   const [isSaving, setIsSaving] = useState(false)
+  const [formError, setFormError] = useState("")
+  const [channelState, setChannelState] = useState({ inApp: true, email: true, sms: false })
+  const [sendMode, setSendMode] = useState<"now" | "schedule">("now")
+  const [scheduledFor, setScheduledFor] = useState("")
+
+  const loadAnnouncements = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/announcements", {
+        cache: "no-store",
+        headers: { "x-user-role": "admin" },
+      })
+
+      const payload = await response.json()
+      if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
+        return
+      }
+
+      setAnnouncements(
+        payload.data.map((item: any) => ({
+          id: String(item.id),
+          title: String(item.title || "Announcement"),
+          message: String(item.message || ""),
+          audience: String(item.audience || "All Users"),
+          status: item.status === "sent" || item.status === "scheduled" ? item.status : "draft",
+          sentAt: String(item.sentAt || "-"),
+          scheduledFor: item.scheduledFor ? String(item.scheduledFor) : null,
+          views: Number(item.views || 0),
+          type: String(item.type || "general"),
+          requestedChannels: Array.isArray(item.requestedChannels)
+            ? item.requestedChannels.map((channel: unknown) => String(channel))
+            : [],
+          deliveryChannels: Array.isArray(item.deliveryChannels)
+            ? item.deliveryChannels.map((channel: unknown) => String(channel))
+            : [],
+        })),
+      )
+    } catch {
+      setAnnouncements([])
+    }
+  }, [])
+
+  const dispatchScheduled = useCallback(async () => {
+    try {
+      const response = await fetch("/api/admin/announcements", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-role": "admin",
+        },
+        body: JSON.stringify({ action: "dispatch-scheduled" }),
+      })
+
+      const payload = await response.json()
+      if (response.ok && payload?.ok && payload?.data?.processed > 0) {
+        await loadAnnouncements()
+      }
+    } catch {
+    }
+  }, [loadAnnouncements])
 
   useEffect(() => {
-    const loadAnnouncements = async () => {
-      try {
-        const response = await fetch("/api/admin/announcements", {
-          cache: "no-store",
-          headers: { "x-user-role": "admin" },
-        })
-
-        const payload = await response.json()
-        if (!response.ok || !payload?.ok || !Array.isArray(payload?.data)) {
-          return
-        }
-
-        setAnnouncements(
-          payload.data.map((item: any) => ({
-            id: String(item.id),
-            title: String(item.title || "Announcement"),
-            message: String(item.message || ""),
-            audience: String(item.audience || "All Users"),
-            status: item.status === "sent" || item.status === "scheduled" ? item.status : "draft",
-            sentAt: String(item.sentAt || "-"),
-            views: Number(item.views || 0),
-            type: String(item.type || "general"),
-            deliveryChannels: Array.isArray(item.deliveryChannels)
-              ? item.deliveryChannels.map((channel: unknown) => String(channel))
-              : [],
-          })),
-        )
-      } catch {
-        setAnnouncements([])
-      }
-    }
-
     loadAnnouncements()
-  }, [])
+    dispatchScheduled()
+    const intervalId = window.setInterval(dispatchScheduled, 60000)
+    return () => window.clearInterval(intervalId)
+  }, [dispatchScheduled, loadAnnouncements])
 
   const filtered = announcements.filter(a => {
     if (filter === "all") return true
     return a.status === filter
   })
 
-  const saveAnnouncement = async (status: Announcement["status"]) => {
-    if (!newTitle.trim() || !newMessage.trim()) return
+  const submitAnnouncement = async (status: Announcement["status"]) => {
+    if (!newTitle.trim() || !newMessage.trim()) {
+      setFormError("Title and message are required.")
+      return
+    }
+
+    const selectedChannels = [
+      ...(channelState.inApp ? ["in-app"] : []),
+      ...(channelState.email ? ["email"] : []),
+      ...(channelState.sms ? ["sms"] : []),
+    ]
+
+    if (selectedChannels.length === 0) {
+      setFormError("Select at least one delivery channel.")
+      return
+    }
+
+    let scheduledForValue: string | undefined
+    if (status === "scheduled") {
+      if (!scheduledFor) {
+        setFormError("Pick a schedule time.")
+        return
+      }
+
+      const parsed = new Date(scheduledFor)
+      if (Number.isNaN(parsed.getTime())) {
+        setFormError("Schedule time is invalid.")
+        return
+      }
+
+      if (parsed.getTime() <= Date.now()) {
+        setFormError("Schedule time must be in the future.")
+        return
+      }
+
+      scheduledForValue = parsed.toISOString()
+    }
+
     setIsSaving(true)
+    setFormError("")
 
     try {
       const response = await fetch("/api/admin/announcements", {
@@ -87,11 +156,14 @@ export default function AdminAnnouncementsPage() {
           audience: newAudience,
           status,
           type: "general",
+          channels: selectedChannels,
+          scheduledFor: scheduledForValue,
         }),
       })
 
       const payload = await response.json()
       if (!response.ok || !payload?.ok || !payload?.data) {
+        setFormError(String(payload?.error || "Failed to save announcement"))
         return
       }
 
@@ -102,8 +174,12 @@ export default function AdminAnnouncementsPage() {
         audience: String(payload.data.audience || newAudience),
         status: payload.data.status === "sent" || payload.data.status === "scheduled" ? payload.data.status : "draft",
         sentAt: String(payload.data.sentAt || "-"),
+        scheduledFor: payload.data.scheduledFor ? String(payload.data.scheduledFor) : null,
         views: Number(payload.data.views || payload.data.recipientCount || 0),
         type: String(payload.data.type || "general"),
+        requestedChannels: Array.isArray(payload.data.requestedChannels)
+          ? payload.data.requestedChannels.map((channel: unknown) => String(channel))
+          : selectedChannels,
         deliveryChannels: Array.isArray(payload.data.deliveryChannels)
           ? payload.data.deliveryChannels.map((channel: unknown) => String(channel))
           : [],
@@ -112,6 +188,9 @@ export default function AdminAnnouncementsPage() {
       setAnnouncements(prev => [created, ...prev])
       setNewTitle("")
       setNewMessage("")
+      setScheduledFor("")
+      setSendMode("now")
+      setChannelState({ inApp: true, email: true, sms: false })
       setShowCreate(false)
     } finally {
       setIsSaving(false)
@@ -131,7 +210,7 @@ export default function AdminAnnouncementsPage() {
     const payload = await response.json()
     if (!response.ok || !payload?.ok) return
 
-    setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, status: "sent", sentAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), views: Number(payload?.data?.recipientCount || a.views), deliveryChannels: Array.isArray(payload?.data?.deliveryChannels) ? payload.data.deliveryChannels.map((channel: unknown) => String(channel)) : a.deliveryChannels } : a))
+    setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, status: "sent", sentAt: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), scheduledFor: null, views: Number(payload?.data?.recipientCount || a.views), deliveryChannels: Array.isArray(payload?.data?.deliveryChannels) ? payload.data.deliveryChannels.map((channel: unknown) => String(channel)) : a.deliveryChannels } : a))
   }
 
   const handleDelete = async (id: string) => {
@@ -194,10 +273,81 @@ export default function AdminAnnouncementsPage() {
                   <option>Internal Team</option>
                 </select>
               </div>
-              <div className="flex gap-2">
-                <Button onClick={() => saveAnnouncement("draft")} disabled={isSaving} className="flex-1 bg-blue-600 hover:bg-blue-700 gap-1.5 text-sm"><Send size={14} />{isSaving ? "Saving..." : "Save as Draft"}</Button>
-                <Button variant="outline" onClick={() => setShowCreate(false)} className="text-sm">Cancel</Button>
+              <div>
+                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">Delivery Channels</label>
+                <div className="flex flex-wrap gap-2">
+                  <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={channelState.inApp}
+                      onChange={() => setChannelState(prev => ({ ...prev, inApp: !prev.inApp }))}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    In-app
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={channelState.email}
+                      onChange={() => setChannelState(prev => ({ ...prev, email: !prev.email }))}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    Email
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={channelState.sms}
+                      onChange={() => setChannelState(prev => ({ ...prev, sms: !prev.sms }))}
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    SMS
+                  </label>
+                </div>
               </div>
+              <div>
+                <label className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1 block">Timing</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSendMode("now")}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${sendMode === "now" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"}`}
+                  >
+                    Send now
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSendMode("schedule")}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${sendMode === "schedule" ? "bg-blue-600 text-white" : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"}`}
+                  >
+                    Schedule
+                  </button>
+                </div>
+                {sendMode === "schedule" && (
+                  <input
+                    type="datetime-local"
+                    value={scheduledFor}
+                    onChange={(event) => setScheduledFor(event.target.value)}
+                    className="mt-2 w-full bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2 text-sm outline-none text-gray-900 dark:text-white"
+                  />
+                )}
+              </div>
+              {formError && (
+                <p className="text-xs text-red-600 dark:text-red-400">{formError}</p>
+              )}
+              <div className="flex gap-2">
+                <Button onClick={() => submitAnnouncement("draft")} disabled={isSaving} className="flex-1 bg-blue-600 hover:bg-blue-700 gap-1.5 text-sm">
+                  <Send size={14} />{isSaving ? "Saving..." : "Save as Draft"}
+                </Button>
+                <Button
+                  onClick={() => submitAnnouncement(sendMode === "schedule" ? "scheduled" : "sent")}
+                  disabled={isSaving}
+                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 gap-1.5 text-sm"
+                >
+                  <Send size={14} />{isSaving ? "Saving..." : sendMode === "schedule" ? "Schedule" : "Send Now"}
+                </Button>
+              </div>
+              <Button variant="outline" onClick={() => setShowCreate(false)} className="text-sm">Cancel</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -243,7 +393,7 @@ export default function AdminAnnouncementsPage() {
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-2 leading-relaxed line-clamp-2">{a.message}</p>
                 <div className="flex flex-wrap items-center gap-3 text-[11px] text-gray-400">
                   <span className="flex items-center gap-1"><Users size={11} />{a.audience}</span>
-                  <span className="flex items-center gap-1"><Clock size={11} />{a.sentAt}</span>
+                  <span className="flex items-center gap-1"><Clock size={11} />{a.status === "scheduled" && a.scheduledFor ? `Scheduled: ${new Date(a.scheduledFor).toLocaleString()}` : a.sentAt}</span>
                   {a.views > 0 && <span className="flex items-center gap-1"><Eye size={11} />{a.views.toLocaleString()} views</span>}
                 </div>
                 {a.status === "sent" && (
@@ -251,7 +401,7 @@ export default function AdminAnnouncementsPage() {
                     {a.deliveryChannels.length > 0 ? (
                       a.deliveryChannels.map((channel) => (
                         <span key={channel} className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
-                          {channel === "sms" ? "SMS" : "In-app"}
+                          {channel === "sms" ? "SMS" : channel === "email" ? "Email" : "In-app"}
                         </span>
                       ))
                     ) : (

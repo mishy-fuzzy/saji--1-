@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Slider } from "@/components/ui/slider"
-import { Star, Search, MapPin, Filter, Loader2 } from "lucide-react"
+import { Star, Search, MapPin, Filter } from "lucide-react"
+import SkeletonCard from '@/components/ui/skeleton-card'
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 
 import { useRouter } from "next/navigation"
@@ -244,9 +245,25 @@ export function ServiceBrowser() {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        <p className="text-muted-foreground font-medium text-lg">Loading services...</p>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-4xl font-bold text-foreground mb-2">Browse Services</h1>
+          <p className="text-muted-foreground">Find and book verified service providers</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+          <div className="hidden lg:block space-y-6">
+            <SkeletonCard />
+          </div>
+
+          <div className="lg:col-span-3 space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     )
   }

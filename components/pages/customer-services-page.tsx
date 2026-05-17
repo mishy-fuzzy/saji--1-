@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/lib/auth-context";
 import { useLocalization } from "@/lib/hooks/useLocalization";
 import { parseCoordinateLabel, resolveLocationName } from "@/lib/location";
@@ -31,7 +32,6 @@ import {
   Search,
   Star,
   MapPin,
-  Clock,
   CheckCircle,
   Heart,
   Navigation,
@@ -41,17 +41,12 @@ import {
   ShoppingBag,
   Zap,
   CalendarIcon,
-  Phone,
-  MessageCircle,
   Loader2,
   SlidersHorizontal,
   ChevronRight,
-  Eye,
+  ArrowRight,
   AlertTriangle,
   Wallet,
-  ShieldCheck,
-  ArrowRight,
-  Check,
   Info,
   Wrench,
   Droplets,
@@ -59,10 +54,12 @@ import {
   CloudRain,
   Key,
   PanelTop,
+  BriefcaseBusiness,
 } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { format } from "date-fns";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const serviceIconMap: Record<string, any> = {
   plumbing: Droplets,
@@ -90,47 +87,9 @@ const emergencyIconMap: Record<string, any> = {
   window: PanelTop,
 };
 
-const DEFAULT_EMERGENCY_CATEGORIES = [
-  {
-    id: "burst-pipe",
-    label: "Burst Pipe",
-    price: 0,
-    description: "Water leak or burst pipe",
-  },
-  {
-    id: "power-outage",
-    label: "Power Outage",
-    price: 0,
-    description: "Electrical outage or sparks",
-  },
-  {
-    id: "gas-leak",
-    label: "Gas Leak",
-    price: 0,
-    description: "Gas smell or leak",
-  },
-  {
-    id: "flooding",
-    label: "Flooding",
-    price: 0,
-    description: "Flood or water damage",
-  },
-  {
-    id: "lockout",
-    label: "Lockout",
-    price: 0,
-    description: "Locked out or broken lock",
-  },
-  {
-    id: "window-damage",
-    label: "Window Damage",
-    price: 0,
-    description: "Broken window or frame",
-  },
-];
-
 export function CustomerServicesPage() {
-  const { currency } = useLocalization();
+  const router = useRouter();
+  const { t } = useLocalization();
   const { user, isAuthenticated, isLoading, logout } = useAuthContext();
   const [searchQuery, setSearchQuery] = useState("");
   const [favorites, setFavorites] = useState<string[]>([]);
@@ -144,6 +103,8 @@ export function CustomerServicesPage() {
   const [bookingDate, setBookingDate] = useState<Date | undefined>(undefined);
   const [bookingTime, setBookingTime] = useState("");
   const [bookingNotes, setBookingNotes] = useState("");
+  const [bookingLocation, setBookingLocation] = useState("");
+  const [bookingError, setBookingError] = useState("");
   const [bookingStep, setBookingStep] = useState(1);
   const [priceRange, setPriceRange] = useState("all");
   const [rating, setRating] = useState("all");
@@ -274,6 +235,7 @@ export function CustomerServicesPage() {
       }
 
       if (payload.data.length === 0) {
+        setEmergencyCategories([]);
         return;
       }
 
@@ -397,6 +359,7 @@ export function CustomerServicesPage() {
             id: String(row.id),
             title: String(row.name || "Service"),
             provider: String(row?.providerName || row?.provider?.name || ""),
+            providerId: String(row?.providerId || row?.provider?.id || ""),
             category: String(row.category || "general").toLowerCase(),
             rating:
               typeof row.rating === "number" ? Number(row.rating) : null,
@@ -405,6 +368,8 @@ export function CustomerServicesPage() {
             price: Number(row.basePrice || 0),
             image: row.image ? String(row.image) : null,
             avatar: row?.providerImage ? String(row.providerImage) : null,
+            location: String(row.location || ""),
+            description: String(row.description || ""),
           })),
         );
 
@@ -429,25 +394,9 @@ export function CustomerServicesPage() {
           ? emergencyPayload.data
           : [];
 
-        const fallbackEmergencyFromServices = serviceRows
-          .slice(0, 6)
-          .map((row: any) => ({
-            id: String(row.id || ""),
-            label: String(row.name || "Emergency Service"),
-            price: Number(row.basePrice || 0),
-            description: String(
-              row.description || row.category || "Urgent service",
-            ),
-          }));
-
-        const emergencySource =
-          emergencies.length > 0
-            ? emergencies
-            : fallbackEmergencyFromServices.length > 0
-              ? fallbackEmergencyFromServices
-              : DEFAULT_EMERGENCY_CATEGORIES;
-
-        setEmergencyCategories(mapEmergencyRows(emergencySource));
+        setEmergencyCategories(
+          emergencies.length > 0 ? mapEmergencyRows(emergencies) : [],
+        );
 
         if (walletRes.ok && walletPayload?.ok) {
           setWalletBalance(Number(walletPayload?.data?.balance || 0));
@@ -504,30 +453,52 @@ export function CustomerServicesPage() {
     setSelectedService(service);
     setShowBookingModal(true);
     setBookingStep(1);
+    setBookingDate(undefined);
+    setBookingTime("");
+    setBookingNotes("");
+    setBookingLocation(currentLocation || "");
+    setBookingError("");
   };
 
   const getBookingTotal = () => selectedService?.price || 0;
-  const getDownpayment = () =>
-    Math.ceil(getBookingTotal() * downpaymentPercent);
-  const hasEnoughBalance = () => walletBalance >= getDownpayment();
   const downpaymentPercentLabel = Math.round(downpaymentPercent * 100);
 
   const handleBookingSubmit = () => {
     if (bookingStep < 3) {
       setBookingStep(bookingStep + 1);
-    } else {
-      const dp = getDownpayment();
-      if (walletBalance < dp) return;
-      setWalletBalance((prev) => prev - dp);
-      alert(
-        `Booking confirmed! KES ${dp.toLocaleString()} (${downpaymentPercentLabel}% downpayment) deducted from your wallet.`,
-      );
-      setShowBookingModal(false);
-      setBookingStep(1);
-      setBookingDate(undefined);
-      setBookingTime("");
-      setBookingNotes("");
+      return;
     }
+
+    setBookingError("");
+
+    if (isLoading || !isAuthenticated || !user?.id) {
+      setBookingError("Please log in to continue.");
+      return;
+    }
+
+    if (!selectedService?.id || !selectedService?.providerId) {
+      setBookingError(
+        "Service details are unavailable. Please refresh and try again.",
+      );
+      return;
+    }
+
+    const price = Number(selectedService.price || 0);
+    const params = new URLSearchParams({
+      serviceId: String(selectedService.id),
+      providerId: String(selectedService.providerId),
+    });
+    if (Number.isFinite(price) && price > 0) {
+      params.set("price", String(Math.round(price)));
+    }
+
+    router.push(`/payment?${params.toString()}`);
+    setShowBookingModal(false);
+    setBookingStep(1);
+    setBookingDate(undefined);
+    setBookingTime("");
+    setBookingNotes("");
+    setBookingLocation("");
   };
 
   const getSelectedEmergency = () =>
@@ -617,7 +588,7 @@ export function CustomerServicesPage() {
                 <MapPin className="w-3.5 h-3.5" />
                 {isLocating ? (
                   <span className="flex items-center gap-1">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Detecting...
+                    <Skeleton className="w-20 h-4 rounded-md" />
                   </span>
                 ) : (
                   <span>{displayLocation}</span>
@@ -746,37 +717,55 @@ export function CustomerServicesPage() {
             </Link>
           </div>
           <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4">
-            {trendingProducts.map((product) => (
-              <Card
-                key={product.id}
-                className="flex-shrink-0 w-40 sm:w-44 overflow-hidden border-0 shadow-sm hover:shadow-md transition-all group"
-              >
-                <div className="relative aspect-square bg-muted/30">
-                  <Image
-                    src={product.image || "/placeholder.svg"}
-                    alt={product.name}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  {product.discount > 0 && (
-                    <span className="absolute top-2 left-2 px-2 py-0.5 bg-red-500 text-white text-[11px] font-bold rounded-md">
-                      -{product.discount}%
-                    </span>
-                  )}
-                </div>
-                <div className="p-3">
-                  <p className="font-medium text-sm text-foreground truncate">
-                    {product.name}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {product.shop}
-                  </p>
-                  <p className="text-primary font-bold text-sm mt-1.5">
-                    KES {product.price.toLocaleString()}
-                  </p>
-                </div>
-              </Card>
-            ))}
+            {isLoadingServices ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <Card
+                  key={i}
+                  className="flex-shrink-0 w-40 sm:w-44 overflow-hidden border-0 shadow-sm"
+                >
+                  <div className="relative aspect-square bg-muted/30">
+                    <Skeleton className="absolute inset-0" />
+                  </div>
+                  <div className="p-3">
+                    <Skeleton className="h-4 w-24 mb-2" />
+                    <Skeleton className="h-3 w-16 mb-2" />
+                    <Skeleton className="h-4 w-12" />
+                  </div>
+                </Card>
+              ))
+            ) : (
+              trendingProducts.map((product) => (
+                <Card
+                  key={product.id}
+                  className="flex-shrink-0 w-40 sm:w-44 overflow-hidden border-0 shadow-sm hover:shadow-md transition-all group"
+                >
+                  <div className="relative aspect-square bg-muted/30">
+                    <Image
+                      src={product.image || "/placeholder.svg"}
+                      alt={product.name}
+                      fill
+                      className="object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    {product.discount > 0 && (
+                      <span className="absolute top-2 left-2 px-2 py-0.5 bg-red-500 text-white text-[11px] font-bold rounded-md">
+                        -{product.discount}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="p-3">
+                    <p className="font-medium text-sm text-foreground truncate">
+                      {product.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {product.shop}
+                    </p>
+                    <p className="text-primary font-bold text-sm mt-1.5">
+                      KES {product.price.toLocaleString()}
+                    </p>
+                  </div>
+                </Card>
+              ))
+            )}
           </div>
         </div>
 
@@ -796,132 +785,139 @@ export function CustomerServicesPage() {
             </p>
           </div>
 
-          <div
-            className={
-              viewMode === "grid"
-                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
-                : "space-y-3"
-            }
-          >
-            {filteredServices.map((service) => (
-              <Card
-                key={service.id}
-                className={`overflow-hidden border-0 shadow-sm hover:shadow-lg transition-all group ${viewMode === "list" ? "flex flex-row" : ""}`}
-              >
-                <div
-                  className={`relative ${viewMode === "list" ? "w-28 sm:w-36 flex-shrink-0" : "aspect-[16/10]"}`}
-                >
-                  <Image
-                    src={service.image || "/placeholder.svg"}
-                    alt={service.title}
-                    fill
-                    className="object-cover group-hover:scale-105 transition-transform duration-300"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
-                  <button
-                    onClick={() => toggleFavorite(service.id)}
-                    className="absolute top-2.5 right-2.5 p-1.5 bg-white/90 dark:bg-black/50 rounded-full shadow-sm backdrop-blur-sm hover:scale-110 transition-transform"
+          {viewMode === "grid" ? (
+            isLoadingServices ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Card key={i} className="overflow-hidden border-0 shadow-sm">
+                    <div className="relative aspect-[16/10]">
+                      <Skeleton className="absolute inset-0" />
+                    </div>
+                    <div className="p-6 flex-1 flex flex-col">
+                      <Skeleton className="h-6 w-3/4 mb-2" />
+                      <Skeleton className="h-3 w-1/2 mb-4" />
+                      <div className="mt-auto">
+                        <Skeleton className="h-9 w-full rounded-md" />
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {filteredServices.map((service) => (
+                  <Card
+                    key={service.id}
+                    className={`overflow-hidden border-0 shadow-sm hover:shadow-lg transition-all group`}
                   >
-                    <Heart
-                      className={`w-3.5 h-3.5 ${favorites.includes(String(service.id)) ? "fill-red-500 text-red-500" : "text-muted-foreground"}`}
-                    />
-                  </button>
-                  <span
-                    className={`absolute bottom-2.5 left-2.5 px-2 py-0.5 text-[11px] font-semibold rounded-md backdrop-blur-sm ${
-                      service.available
-                        ? "bg-emerald-500/90 text-white"
-                        : "bg-muted-foreground/80 text-white"
-                    }`}
-                  >
-                    {service.available ? "Available" : "Busy"}
-                  </span>
-                </div>
-
-                <div
-                  className={`p-4 ${viewMode === "list" ? "flex-1 flex flex-col justify-between" : ""}`}
-                >
-                  <div>
-                    <div className="flex items-start gap-2.5 mb-2.5">
-                      <div className="relative w-9 h-9 rounded-full overflow-hidden flex-shrink-0 ring-2 ring-background">
-                        <Image
-                          src={service.avatar || "/placeholder.svg"}
-                          alt={service.provider}
-                          fill
-                          className="object-cover"
-                        />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className="font-semibold text-sm text-foreground truncate">
-                            {service.provider}
-                          </p>
-                          {service.verified && (
-                            <CheckCircle className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {service.title}
-                        </p>
-                      </div>
+                    <div className="relative aspect-[16/10]">
+                      <Image
+                        src={service.image || "/placeholder.svg"}
+                        alt={service.title}
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
                     </div>
 
-                    <div className="flex items-center gap-3 mb-2.5 text-xs text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
-                        <span className="font-semibold text-foreground">
-                          {service.rating}
-                        </span>
-                        <span>({service.reviews})</span>
-                      </div>
-                      <span className="w-px h-3 bg-border" />
-                      <div className="flex items-center gap-1">
-                        <MapPin className="w-3 h-3" />
-                        {service.distance}
-                      </div>
-                      <span className="w-px h-3 bg-border" />
-                      <div className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {service.responseTime}
-                      </div>
-                    </div>
+                    <div className="p-6 flex-1 flex flex-col">
+                      <h3 className="text-xl font-semibold text-foreground mb-1">{service.title}</h3>
+                      <p className="text-sm text-muted-foreground mb-4">{service.provider}</p>
 
-                    {service.badges.length > 0 && (
-                      <div className="flex flex-wrap gap-1.5 mb-3">
-                        {service.badges.map((badge, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-0.5 bg-primary/8 text-primary text-[11px] font-medium rounded-md"
-                          >
-                            {badge}
-                          </span>
-                        ))}
+                      <div className="flex items-center gap-1 mb-4">
+                        <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                        <span className="font-semibold text-foreground">{typeof service.rating === "number" ? service.rating.toFixed(1) : "N/A"}</span>
+                        <span className="text-sm text-muted-foreground">({service.reviews ?? 0} reviews)</span>
                       </div>
-                    )}
-                  </div>
 
-                  <div className="flex items-center justify-between pt-3 border-t border-border/50">
-                    <div>
-                      <p className="text-[11px] text-muted-foreground">From</p>
-                      <p className="text-base font-bold text-foreground">
-                        KES {service.price.toLocaleString()}
-                        <span className="text-xs font-normal text-muted-foreground">
-                          /hr
-                        </span>
-                      </p>
+                      <div className="flex items-baseline gap-2 mt-auto mb-4">
+                        <span className="text-2xl font-bold text-primary">KES {(service?.price || 0).toLocaleString()}</span>
+                        <span className="text-sm text-muted-foreground">Base price</span>
+                      </div>
+
+                      <button className="w-full py-3 px-4 rounded-lg bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary text-primary-foreground font-semibold flex items-center justify-center gap-2 transition-all duration-300">
+                        {t("service.viewDetails")}
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
                     </div>
-                    <Button
-                      onClick={() => openBooking(service)}
-                      disabled={!service.available}
-                      size="sm"
-                      className="rounded-lg h-9 px-4 text-sm font-medium"
-                    >
-                      Book Now
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+                  </Card>
+                ))}
+              </div>
+            )
+          ) : (
+            <div className="overflow-auto">
+              <table className="w-full text-sm table-fixed">
+                <thead>
+                  <tr className="text-left text-xs text-muted-foreground">
+                    <th className="py-3 px-3">Service</th>
+                    <th className="py-3 px-3">Provider</th>
+                    <th className="py-3 px-3">Rating</th>
+                    <th className="py-3 px-3">Location</th>
+                    <th className="py-3 px-3 text-right">Price</th>
+                    <th className="py-3 px-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {isLoadingServices ? (
+                    Array.from({ length: 6 }).map((_, i) => (
+                      <tr key={i} className="border-t last:border-b">
+                        <td className="py-3 px-3 align-top">
+                          <div className="flex items-center gap-3">
+                            <div className="relative w-16 h-12 bg-muted rounded overflow-hidden flex-shrink-0">
+                              <Skeleton className="absolute inset-0" />
+                            </div>
+                            <div>
+                              <Skeleton className="h-4 w-48 mb-2" />
+                              <Skeleton className="h-3 w-64" />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 align-top"><Skeleton className="h-4 w-24" /></td>
+                        <td className="py-3 px-3 align-top">
+                          <div className="flex items-center gap-2">
+                            <Skeleton className="h-4 w-8" />
+                            <Skeleton className="h-4 w-12" />
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 align-top max-w-[200px]"><Skeleton className="h-4 w-32" /></td>
+                        <td className="py-3 px-3 align-top text-right font-bold"><Skeleton className="h-4 w-20" /></td>
+                        <td className="py-3 px-3 align-top text-right"><Skeleton className="h-8 w-24" /></td>
+                      </tr>
+                    ))
+                  ) : (
+                    filteredServices.map((service) => (
+                      <tr key={service.id} className="border-t last:border-b">
+                        <td className="py-3 px-3 align-top">
+                          <div className="flex items-center gap-3">
+                            <div className="relative w-16 h-12 bg-muted rounded overflow-hidden flex-shrink-0">
+                              <Image src={service.image || "/placeholder.svg"} alt={service.title} fill className="object-cover" />
+                            </div>
+                            <div>
+                              <p className="font-semibold text-foreground">{service.title}</p>
+                              <p className="text-xs text-muted-foreground truncate max-w-[300px]">{service.description}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 align-top">{service.provider}</td>
+                        <td className="py-3 px-3 align-top">
+                          <div className="flex items-center gap-2">
+                            <Star className="w-4 h-4 fill-amber-400 text-amber-400" />
+                            <span className="font-semibold">{typeof service.rating === "number" ? service.rating.toFixed(1) : "N/A"}</span>
+                            <span className="text-xs text-muted-foreground">({service.reviews ?? 0})</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 align-top max-w-[200px] truncate">{service.location || ""}</td>
+                        <td className="py-3 px-3 align-top text-right font-bold">KES {service.price.toLocaleString()}/hr</td>
+                        <td className="py-3 px-3 align-top text-right">
+                          <Button onClick={() => openBooking(service)} disabled={!service.providerId} size="sm">Book Now</Button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {filteredServices.length === 0 && (
             <div className="text-center py-16">
@@ -1107,21 +1103,12 @@ export function CustomerServicesPage() {
                     <label className="text-sm font-medium text-foreground mb-2 block">
                       Time
                     </label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {timeSlots.map((time) => (
-                        <button
-                          key={time}
-                          onClick={() => setBookingTime(time)}
-                          className={`p-2 text-xs font-medium rounded-lg border transition-all ${
-                            bookingTime === time
-                              ? "bg-primary text-primary-foreground border-primary shadow-sm"
-                              : "border-border hover:border-primary/50"
-                          }`}
-                        >
-                          {time}
-                        </button>
-                      ))}
-                    </div>
+                    <Input
+                      type="time"
+                      value={bookingTime}
+                      onChange={(e) => setBookingTime(e.target.value)}
+                      className="rounded-xl"
+                    />
                   </div>
                 </div>
               )}
@@ -1135,13 +1122,19 @@ export function CustomerServicesPage() {
                     <div className="flex items-center gap-2">
                       <Input
                         placeholder="Enter your address"
-                        defaultValue={currentLocation || ""}
+                        value={bookingLocation}
+                        onChange={(e) => setBookingLocation(e.target.value)}
                         className="flex-1 rounded-xl"
                       />
                       <Button
                         variant="outline"
                         size="icon"
-                        onClick={detectLocation}
+                        onClick={() => {
+                          detectLocation();
+                          if (displayLocation && displayLocation !== "Anywhere") {
+                            setBookingLocation(displayLocation);
+                          }
+                        }}
                         className="bg-transparent rounded-xl"
                       >
                         <Navigation className="w-4 h-4" />
@@ -1180,72 +1173,36 @@ export function CustomerServicesPage() {
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Location</span>
                       <span className="text-foreground font-medium">
-                        {displayLocation}
+                        {bookingLocation || displayLocation}
                       </span>
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl border-2 border-primary/20 space-y-3">
-                    <h4 className="font-semibold text-foreground flex items-center gap-2 text-sm">
-                      <Wallet className="w-4 h-4 text-primary" />
-                      Payment Breakdown
+                  <div className="p-4 rounded-xl border border-border/60 space-y-2">
+                    <h4 className="font-semibold text-foreground text-sm">
+                      Price Summary
                     </h4>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">
-                          Service Price
-                        </span>
-                        <span className="font-medium">
-                          KES {getBookingTotal().toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between border-t border-border pt-2 mt-2">
-                        <span className="font-semibold">
-                          Downpayment ({downpaymentPercentLabel}%)
-                        </span>
-                        <span className="text-primary font-bold text-base">
-                          KES {getDownpayment().toLocaleString()}
-                        </span>
-                      </div>
-                      <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">
-                          Due on completion
-                        </span>
-                        <span className="text-muted-foreground">
-                          KES{" "}
-                          {(
-                            getBookingTotal() - getDownpayment()
-                          ).toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-                    <div
-                      className={`p-2.5 rounded-lg flex items-center gap-2 text-sm ${hasEnoughBalance() ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400" : "bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400"}`}
-                    >
-                      <Wallet className="w-4 h-4 flex-shrink-0" />
-                      <span>
-                        Wallet:{" "}
-                        <strong>KES {walletBalance.toLocaleString()}</strong>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        Estimated total
                       </span>
-                      {hasEnoughBalance() ? (
-                        <CheckCircle className="w-4 h-4 ml-auto" />
-                      ) : (
-                        <AlertTriangle className="w-4 h-4 ml-auto" />
-                      )}
+                      <span className="font-semibold">
+                        {getBookingTotal() > 0
+                          ? `KES ${getBookingTotal().toLocaleString()}`
+                          : "Price unavailable"}
+                      </span>
                     </div>
-                    {!hasEnoughBalance() && (
-                      <p className="text-xs text-red-600 dark:text-red-400">
-                        Insufficient balance.{" "}
-                        <Link
-                          href="/customer/wallet"
-                          className="underline font-medium"
-                        >
-                          Top up wallet
-                        </Link>
-                      </p>
-                    )}
+                    <p className="text-xs text-muted-foreground">
+                      You will confirm payment details on the next step.
+                    </p>
                   </div>
                 </div>
+              )}
+
+              {bookingError && (
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  {bookingError}
+                </p>
               )}
 
               <div className="flex gap-3 mt-5">
@@ -1261,13 +1218,12 @@ export function CustomerServicesPage() {
                 <Button
                   onClick={handleBookingSubmit}
                   disabled={
-                    (bookingStep === 1 && (!bookingDate || !bookingTime)) ||
-                    (bookingStep === 3 && !hasEnoughBalance())
+                    bookingStep === 1 && (!bookingDate || !bookingTime)
                   }
                   className="flex-1 rounded-xl"
                 >
                   {bookingStep === 3
-                    ? `Pay KES ${getDownpayment().toLocaleString()}`
+                    ? "Proceed to Payment"
                     : "Continue"}
                 </Button>
               </div>
@@ -1323,31 +1279,39 @@ export function CustomerServicesPage() {
               </div>
 
               {emergencyStep === 1 && (
-                <div className="grid grid-cols-2 gap-3">
-                  {emergencyCategories.map((cat) => {
-                    const Icon = cat.icon;
-                    return (
-                      <button
-                        key={cat.id}
-                        onClick={() => setEmergencyCategory(cat.id)}
-                        className={`p-4 rounded-xl border-2 text-left transition-all ${emergencyCategory === cat.id ? "border-red-500 bg-red-50 dark:bg-red-950/20 shadow-sm" : "border-border hover:border-red-300 dark:hover:border-red-700"}`}
-                      >
-                        <Icon
-                          className={`w-5 h-5 mb-2 ${emergencyCategory === cat.id ? "text-red-600" : "text-muted-foreground"}`}
-                        />
-                        <p className="font-semibold text-foreground text-sm">
-                          {cat.label}
-                        </p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          KES {cat.price.toLocaleString()}{" "}
-                          <span className="text-red-500">
-                            + KES {emergencyFee.toLocaleString()}
-                          </span>
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
+                <>
+                  {emergencyCategories.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
+                      No emergency services are available right now.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3">
+                      {emergencyCategories.map((cat) => {
+                        const Icon = cat.icon;
+                        return (
+                          <button
+                            key={cat.id}
+                            onClick={() => setEmergencyCategory(cat.id)}
+                            className={`p-4 rounded-xl border-2 text-left transition-all ${emergencyCategory === cat.id ? "border-red-500 bg-red-50 dark:bg-red-950/20 shadow-sm" : "border-border hover:border-red-300 dark:hover:border-red-700"}`}
+                          >
+                            <Icon
+                              className={`w-5 h-5 mb-2 ${emergencyCategory === cat.id ? "text-red-600" : "text-muted-foreground"}`}
+                            />
+                            <p className="font-semibold text-foreground text-sm">
+                              {cat.label}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              KES {cat.price.toLocaleString()}{" "}
+                              <span className="text-red-500">
+                                + KES {emergencyFee.toLocaleString()}
+                              </span>
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </>
               )}
 
               {emergencyStep === 2 && (
@@ -1485,7 +1449,8 @@ export function CustomerServicesPage() {
                       : handleEmergencySubmit()
                   }
                   disabled={
-                    (emergencyStep === 1 && !emergencyCategory) ||
+                    (emergencyStep === 1 &&
+                      (!emergencyCategory || emergencyCategories.length === 0)) ||
                     (emergencyStep === 2 &&
                       (!emergencyDescription || !emergencyLocation)) ||
                     (emergencyStep === 3 &&

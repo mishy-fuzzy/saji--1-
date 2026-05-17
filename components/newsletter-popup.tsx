@@ -5,7 +5,8 @@ import { useAuthContext } from "@/lib/auth-context";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Mail, X, Loader2, CheckCircle2 } from "lucide-react";
+import { Mail, X, CheckCircle2 } from "lucide-react";
+import { Skeleton } from '@/components/ui/skeleton'
 
 const STORAGE_KEY = "saji-newsletter-popup-dismissed-at";
 const RESHOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -156,7 +157,7 @@ export function NewsletterPopup() {
             disabled={!canSubmit || loading || subscribed}
             className="w-full rounded-xl"
           >
-            {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+            {loading ? <Skeleton className="w-4 h-4 mr-2 inline-block rounded" /> : null}
             {subscribed ? <CheckCircle2 className="w-4 h-4 mr-2" /> : null}
             {subscribed ? "Subscribed" : "Subscribe"}
           </Button>

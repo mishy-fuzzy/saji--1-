@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useLocalization } from "@/lib/hooks/useLocalization";
 import { useAuthContext } from "@/lib/auth-context";
 import { Card } from "@/components/ui/card";
+import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -292,10 +293,43 @@ export function CustomerSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      <div className="min-h-screen bg-background">
+        <div className="max-w-5xl mx-auto px-4 py-6 lg:py-8">
+          <div className="flex items-center gap-2 mb-6">
+            <Skeleton className="h-6 w-6 rounded" />
+            <Skeleton className="h-8 w-56" />
+          </div>
+
+          <div className="flex flex-col lg:flex-row gap-6">
+            <div className="lg:w-56 shrink-0">
+              <Card className="border-0 shadow-sm overflow-hidden">
+                <div className="p-4 space-y-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-1/2" />
+                </div>
+              </Card>
+            </div>
+
+            <div className="flex-1 space-y-4">
+              <Card className="p-5 border-0 shadow-sm space-y-4">
+                <Skeleton className="h-6 w-40" />
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+                <Skeleton className="h-10 w-32" />
+              </Card>
+
+              <Card className="p-5 border-0 shadow-sm space-y-4">
+                <Skeleton className="h-6 w-24" />
+                <Skeleton className="h-6 w-full" />
+              </Card>
+            </div>
+          </div>
+        </div>
       </div>
-    );
+    )
   }
 
   return (

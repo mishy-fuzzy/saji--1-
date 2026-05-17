@@ -9,7 +9,7 @@ import { useAuthContext } from "@/lib/auth-context"
 import { 
   Home, Store, Briefcase, Users, MessageCircle, UserSearch, Settings,
   Bell, User, Menu, X, LogOut, ChevronRight, Wallet, Heart, MapPin,
-  HelpCircle, Gift
+  HelpCircle, Gift, Radio
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet"
@@ -48,6 +48,7 @@ export default function CustomerLayout({ children }: { children: React.ReactNode
 
   const navItems = [
     { icon: Home, label: "Home", href: "/customer/home" },
+    { icon: Radio, label: "Live Now", href: "/customer/live" },
     { icon: Store, label: "Marketplace", href: "/customer/services" },
     { icon: Briefcase, label: "My Jobs", href: "/customer/jobs" },
     { icon: Users, label: "Community", href: "/customer/community" },

@@ -63,6 +63,8 @@ model User {
   verifications          Verification[]   @relation("UserVerifications")
   createdDisputes        Dispute[]        @relation("DisputeCreatedBy")
   assignedDisputes       Dispute[]        @relation("DisputeAssignedTo")
+  liveSessions           LiveSession[]
+  shopOperationalStatus  ShopOperationalStatus?
 
   @@index([role, isSuspended])
 }
@@ -120,6 +122,11 @@ model Service {
   bookings    Booking[]
   jobs        Job[]
 
+  provider    User      @relation("ProviderServices", fields: [providerId], references: [id])
+
+  @@index([category])
+}
+
 model ServiceCategoryMeta {
   id         String   @id @default(cuid())
   name       String   @unique
@@ -170,10 +177,7 @@ model ShopOperationalStatus {
 
   @@index([isOpen])
 }
-  provider    User      @relation("ProviderServices", fields: [providerId], references: [id])
 
-  @@index([category])
-}
 
 model Job {
   id         String   @id @default(cuid())

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useAuthContext } from "@/lib/auth-context";
 import ProviderSidebar from "@/components/provider-sidebar";
 import { Bell, X } from "lucide-react";
+import { Skeleton } from '@/components/ui/skeleton'
 
 type ProviderNotification = {
   id: string;
@@ -101,8 +102,28 @@ export default function ProviderLayout({
 
   if (isLoading || !isAuthenticated || user?.role !== "provider") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+        <div className="max-w-7xl mx-auto px-4 py-6 lg:py-8">
+          <div className="lg:hidden fixed top-0 right-0 left-0 bg-white dark:bg-gray-800 border-b dark:border-gray-700 z-40 flex items-center justify-between px-4 py-3">
+            <Skeleton className="h-6 w-24" />
+            <div>
+              <Skeleton className="h-6 w-6 rounded-full" />
+            </div>
+          </div>
+
+          <div className="lg:flex lg:gap-8">
+            <div className="hidden lg:block lg:w-64">
+              <Skeleton className="h-64 w-full rounded" />
+            </div>
+            <div className="flex-1 space-y-4">
+              <Skeleton className="h-8 w-1/2" />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <Skeleton className="h-40 w-full rounded" />
+                <Skeleton className="h-40 w-full rounded" />
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }

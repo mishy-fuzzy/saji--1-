@@ -6,7 +6,9 @@ function normalizeRole(role: string | null | undefined): string {
     .trim()
     .toLowerCase()
     .replace(/_/g, "-")
+    .replace(/\s+/g, "-")
     .replace(/^shop-keeper$/, "shopkeeper")
+    .replace(/^subadmin$/, "sub-admin")
 }
 
 function getRequestRole(request: Request): string {

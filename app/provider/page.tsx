@@ -112,6 +112,7 @@ export default function ProviderHomePage() {
   const [streamDuration, setStreamDuration] = useState(0);
   const [streamEarnings, setStreamEarnings] = useState(0);
   const [peakViewers, setPeakViewers] = useState(0);
+  const [streamStartError, setStreamStartError] = useState<string | null>(null);
   const [receivedGifts, setReceivedGifts] = useState<
     { icon: string; name: string; from: string; amount: number }[]
   >([]);
@@ -448,11 +449,7 @@ export default function ProviderHomePage() {
     if (!cameraStream) {
       await startCamera();
     }
-    setIsStreaming(true);
-    setShowStreamEnd(false);
-    setStreamDuration(0);
-    setStreamEarnings(0);
-    setReceivedGifts([]);
+    setStreamStartError(null);
 
     let initialViewers = Math.max(1, recentJobs.length);
     try {
@@ -468,19 +465,11 @@ export default function ProviderHomePage() {
       // Keep fallback from recent job activity.
     }
 
-    setStreamViewers(initialViewers);
-    setPeakViewers(initialViewers);
-    setStreamComments([
-      {
-        user: "System",
-        text: `You are now LIVE with ${initialViewers} active viewers based on your current activity.`,
-      },
-    ]);
-
     try {
       const response = await fetch("/api/live-sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({
           kind: streamCategory === "qa" ? "workshop" : "provider",
           title: streamTitle.trim(),
@@ -492,12 +481,33 @@ export default function ProviderHomePage() {
         }),
       });
       const payload = await response.json();
-      if (response.ok && payload?.ok && payload?.data?.id) {
-        setLiveSessionId(String(payload.data.id));
+      if (!response.ok || !payload?.ok || !payload?.data?.id) {
+        throw new Error(payload?.error || "Unable to start live session");
       }
-    } catch {
-      // Keep the live UI usable even if persistence is temporarily unavailable.
+
+      setLiveSessionId(String(payload.data.id));
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "We could not start your live session. Please try again.";
+      setStreamStartError(message);
+      return;
     }
+
+    setIsStreaming(true);
+    setShowStreamEnd(false);
+    setStreamDuration(0);
+    setStreamEarnings(0);
+    setReceivedGifts([]);
+    setStreamViewers(initialViewers);
+    setPeakViewers(initialViewers);
+    setStreamComments([
+      {
+        user: "System",
+        text: `You are now LIVE with ${initialViewers} active viewers based on your current activity.`,
+      },
+    ]);
 
     // Duration timer
     durationRef.current = setInterval(() => {
@@ -892,6 +902,11 @@ export default function ProviderHomePage() {
 
                 {/* Setup Form */}
                 <div className="relative z-10 p-4 space-y-3">
+                  {streamStartError ? (
+                    <div className="rounded-xl bg-red-500/20 px-3 py-2 text-xs text-red-100">
+                      {streamStartError}
+                    </div>
+                  ) : null}
                   <Input
                     value={streamTitle}
                     onChange={(e) => setStreamTitle(e.target.value)}

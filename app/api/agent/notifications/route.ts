@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/server/db"
 import { getSessionCookieName, verifySessionToken } from "@/lib/server/session"
+import { mapAuthLogToNotification } from "@/lib/server/in-app-notifications"
 
 function relativeTime(when: Date): string {
   const diffMs = Date.now() - when.getTime()
@@ -29,7 +30,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: false, error: "Agent account not found" }, { status: 404 })
   }
 
-  const [assignedDisputes, recentPayments] = await Promise.all([
+  const [assignedDisputes, recentPayments, authRows] = await Promise.all([
     db.dispute.findMany({
       where: { assignedToId: user.id },
       orderBy: { createdAt: "desc" },
@@ -42,22 +43,48 @@ export async function GET(request: NextRequest) {
       take: 3,
       select: { amount: true, currency: true, createdAt: true },
     }),
+    db.authLog.findMany({
+      where: {
+        provider: "system",
+        mode: "notification",
+        status: "SUCCESS",
+        email: user.id,
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: { id: true, response: true, createdAt: true },
+    }),
   ])
+
+  const authNotifications = authRows.map((row: any) => {
+    const item = mapAuthLogToNotification(row)
+    return {
+      id: row.id,
+      text: item.title || item.message || "Notification",
+      createdAt: row.createdAt,
+    }
+  })
 
   const disputeNotifications = assignedDisputes.map((item: any) => ({
     id: `d-${item.id}`,
     text: `New dispute ${item.id.slice(0, 8)} assigned to you`,
-    time: relativeTime(item.createdAt),
+    createdAt: item.createdAt,
   }))
 
   const paymentNotifications = recentPayments.map((p: any, idx: number) => ({
     id: `p-${idx}-${p.createdAt.getTime()}`,
     text: `Commission-related payment update: ${(p.currency || "KES")} ${(p.amount || 0).toLocaleString()}`,
-    time: relativeTime(p.createdAt),
+    createdAt: p.createdAt,
   }))
 
-  const notifications = [...disputeNotifications, ...paymentNotifications]
+  const notifications = [...authNotifications, ...disputeNotifications, ...paymentNotifications]
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .slice(0, 6)
+    .map((item) => ({
+      id: item.id,
+      text: item.text,
+      time: relativeTime(item.createdAt),
+    }))
 
   return NextResponse.json({ ok: true, notifications })
 }
