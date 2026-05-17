@@ -41,6 +41,8 @@ const nextConfig = {
   turbopack: {
     root: __dirname,
   },
+  // Enable source maps in production builds to get readable stack traces
+  productionBrowserSourceMaps: true,
 }
 
 export default nextConfig
