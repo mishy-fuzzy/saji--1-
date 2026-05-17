@@ -25,7 +25,9 @@ function base64UrlDecode(value: string): string {
 }
 
 function getSessionSecret(): string {
-  return process.env.AUTH_SECRET || "dev-only-insecure-session-secret"
+  // Support both `AUTH_SECRET` (used by our server code) and `NEXTAUTH_SECRET`
+  // (commonly set in deployments). Fall back to an insecure dev secret.
+  return process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || "dev-only-insecure-session-secret"
 }
 
 function sign(value: string): string {
@@ -59,11 +61,13 @@ export function createSessionCookie(payload: { userId: string; role: string; ema
   const signature = sign(encoded)
   const token = `${encoded}.${signature}`
 
-  return `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${MAX_AGE_SECONDS}`
+  const secureSegment = process.env.NODE_ENV === "production" ? "; Secure" : ""
+  return `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax${secureSegment}; Max-Age=${MAX_AGE_SECONDS}`
 }
 
 export function clearSessionCookie(): string {
-  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`
+  const secureSegment = process.env.NODE_ENV === "production" ? "; Secure" : ""
+  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Lax${secureSegment}; Max-Age=0`
 }
 
 export function getSessionCookieName(): string {
